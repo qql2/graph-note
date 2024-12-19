@@ -1,0 +1,7 @@
+{
+  "name": "graph-note",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react-vite"
+}
