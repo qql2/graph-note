@@ -17,6 +17,7 @@
     "make": "npm run build && cross-env NODE_ENV=production electron-forge make"
   },
   "dependencies": {
+    "@antv/x6": "^2.18.1",
     "@capacitor/android": "6.2.0",
     "@capacitor/app": "6.0.2",
     "@capacitor/core": "6.2.0",

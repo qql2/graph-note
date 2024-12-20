@@ -33,6 +33,8 @@ import '@ionic/react/css/palettes/dark.system.css';
 
 /* Theme variables */
 import './theme/variables.css';
+import GraphView from './pages/GraphView/GraphView';
+import GraphEditor from './components/GraphEditor/GraphEditor';
 
 setupIonicReact();
 
@@ -48,6 +50,9 @@ const App: React.FC = () => {
             </Route>
             <Route path="/folder/:name" exact={true}>
               <Page />
+            </Route>
+            <Route path="/graph-view" exact={true}>
+              <GraphView />
             </Route>
           </IonRouterOutlet>
         </IonSplitPane>

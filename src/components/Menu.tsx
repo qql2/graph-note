@@ -57,6 +57,12 @@ const appPages: AppPage[] = [
     url: '/folder/Spam',
     iosIcon: warningOutline,
     mdIcon: warningSharp
+  },
+  {
+    title: 'Graph View',
+    url: '/graph-view',
+    iosIcon: trashOutline,
+    mdIcon: trashSharp
   }
 ];
 
