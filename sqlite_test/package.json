@@ -1,0 +1,41 @@
+{
+	"name": "sqlite-graph-db",
+	"version": "1.0.0",
+	"description": "A lightweight graph database implementation using SQLite for mobile applications",
+	"main": "src/core/GraphDB.js",
+	"scripts": {
+		"test": "jest --testPathIgnorePatterns=test/performance.test.js --testPathIgnorePatterns=test/performance-comparison.test.js",
+		"test:debug": "cross-env DEBUG=graphdb jest --testPathIgnorePatterns=test/performance.test.js --testPathIgnorePatterns=test/performance-comparison.test.js",
+		"test:log": "cross-env DEBUG=graphdb jest test/complex-queries.test.js > debug.log 2>&1",
+		"test:perf": "jest test/performance.test.js",
+		"test:perf:neo4j": "jest test/performance-comparison.test.js",
+		"test:all": "jest",
+		"start": "node examples/index.js",
+		"format": "prettier --write \"src/**/*.js\"",
+		"docs": "jsdoc -c jsdoc.json"
+	},
+	"keywords": [
+		"sqlite",
+		"graph-database",
+		"mobile",
+		"javascript",
+		"node"
+	],
+	"author": "",
+	"license": "MIT",
+	"dependencies": {
+		"better-sqlite3": "^8.7.0",
+		"debug": "^4.4.0",
+		"lodash": "^4.17.21",
+		"neo4j-driver": "^5.15.0"
+	},
+	"devDependencies": {
+		"cross-env": "^7.0.3",
+		"jest": "^29.7.0",
+		"jsdoc": "^4.0.4",
+		"prettier": "^3.4.2"
+	},
+	"engines": {
+		"node": ">=14.0.0"
+	}
+}

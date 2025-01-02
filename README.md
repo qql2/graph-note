@@ -7,17 +7,49 @@
 Graph Note 旨在创建一个现代化的知识管理工具，通过图形化的方式展示和管理知识结构，实现以下目标：
 
 1. 提供直观的知识图谱可视化界面
-2. 支持跨平台使用（桌面端、Web端）
+2. 支持跨平台使用（桌面端、Web端、移动端）
 3. 实现本地优先的数据存储策略
 4. 支持多设备数据同步
 5. 提供灵活的知识组织方式
+6. 确保离线可用性
 
 ## 实现原理
+
+### 数据库选型分析
+
+#### SQLite 方案（当前采用）
+优势：
+- 完全嵌入式，无需独立服务器
+- 文件型数据库，易于部署和迁移
+- 在移动端有成熟的实现
+- 跨平台支持完善
+- 零配置，即开即用
+- 完全支持离线操作
+- 数据库文件可直接用于备份和同步
+
+局限性：
+- 需要通过关系型模型模拟图结构
+- 复杂图查询性能可能不如专业图数据库
+- 不支持原生图算法
+
+#### Neo4j 方案（已放弃）
+优势：
+- 原生图数据库，更适合知识图谱场景
+- 强大的图查询语言 Cypher
+- 内置图分析算法
+- 可视化支持更好
+
+局限性：
+- 移动端部署复杂
+- 资源占用较大
+- 离线支持不完善
+- 嵌入式版本限制较多
 
 ### 核心技术架构
 
 1. **数据管理层**：
-   - 使用 Neo4j 嵌入式数据库进行本地存储
+   - 使用 SQLite 数据库进行本地存储
+   - 采用关系模型存储图结构数据
    - 通过变更记录实现增量同步
    - 支持跨端数据一致性
 
@@ -39,7 +71,8 @@ Graph Note 旨在创建一个现代化的知识管理工具，通过图形化的
 ### 实现过程
 
 1. **数据存储与同步**：
-   - 使用 Neo4j 嵌入式模式存储本地数据
+   - 使用 SQLite 存储本地数据
+   - 设计高效的关系型数据模型
    - 实现基于 JSON 格式的变更记录
    - 通过 WebDAV 协议进行跨端同步
 
@@ -83,7 +116,7 @@ Graph Note 旨在创建一个现代化的知识管理工具，通过图形化的
 ### 已完成功能
 
 - [x] 基础项目架构搭建
-- [x] Neo4j 嵌入式数据库集成
+- [x] SQLite 数据库集成
 - [x] AntV X6 图形编辑器实现
 - [x] 基础节点和边的操作功能
 - [x] 触摸屏交互支持
@@ -91,6 +124,8 @@ Graph Note 旨在创建一个现代化的知识管理工具，通过图形化的
 
 ### 进行中功能
 
+- [ ] 数据库模型优化
+- [ ] 图数据查询性能优化
 - [ ] 数据同步机制实现
 - [ ] 冲突解决策略优化
 - [ ] Web 端部署支持
@@ -158,5 +193,98 @@ npm run test.unit
 - TypeScript - 开发语言
 - Vite - 构建工具
 - Electron - 桌面应用框架
-- Neo4j - 图数据库
+- SQLite - 本地数据库
 - AntV X6 - 图形编辑器
+
+## 图数据库实现
+
+本项目使用SQLite实现了一个轻量级的图数据库，支持以下功能：
+
+### 数据模型
+
+- **节点（Nodes）**
+  - 唯一标识符（ID）
+  - 类型（Type）
+  - 自定义属性（Properties）
+  - 创建和更新时间戳
+
+- **关系（Relationships）**
+  - 唯一标识符（ID）
+  - 源节点（Source Node）
+  - 目标节点（Target Node）
+  - 类型（Type）
+  - 自定义属性（Properties）
+  - 创建时间戳
+
+### 核心功能
+
+1. **基础操作**
+   - 创建节点和关系
+   - 查询节点和关系
+   - 更新节点和关系属性
+   - 删除节点和关系
+
+2. **图查询**
+   - 最短路径查找
+   - 模式匹配
+   - 属性过滤
+   - 类型过滤
+
+3. **数据持久化**
+   - 基于SQLite的本地存储
+   - 事务支持
+   - 数据完整性约束
+   - 索引优化
+
+### 技术特点
+
+- 纯TypeScript实现
+- 完全离线运行
+- 跨平台支持
+- 轻量级设计
+- 类型安全
+- 异步API
+
+### 使用示例
+
+```typescript
+// 获取数据库服务实例
+const db = DatabaseService.getInstance();
+
+// 创建节点
+const node1 = await db.createNode({
+  type: 'Person',
+  name: 'Alice',
+  age: 30
+});
+
+const node2 = await db.createNode({
+  type: 'Person',
+  name: 'Bob',
+  age: 25
+});
+
+// 创建关系
+const relationship = await db.createRelationship(
+  node1.id,
+  node2.id,
+  'KNOWS',
+  { since: '2023' }
+);
+
+// 查找最短路径
+const path = await db.findShortestPath(node1.id, node2.id);
+
+// 模式匹配查询
+const results = await db.matchPattern({
+  nodeType: 'Person',
+  relationshipType: 'KNOWS',
+  targetType: 'Person'
+});
+
+// 按类型查找节点
+const persons = await db.findNodes({
+  type: 'Person',
+  properties: { age: 30 }
+});
+```
