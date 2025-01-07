@@ -62,7 +62,10 @@
    - 纯 TypeScript 实现
    - 基于 Web API 和浏览器能力
    - 使用 Web Worker 处理计算密集任务
-   - IndexedDB/SQLite 作为存储引擎
+   - 平台特定的存储引擎：
+     - Web端：sql.js + localStorage
+     - 移动端：SQLite
+     - 桌面端：better-sqlite3
    - 模块化设计，支持按需加载
 
 2. **在线服务层**
@@ -81,27 +84,29 @@
 1. **数据持久层**
    - 功能：负责图数据的本地存储与管理
    - 技术选型：
-     - SQLite实现策略（平台特定）：
-       - 桌面端：better-sqlite3（Node.js环境）
-         - 原生性能
-         - 完整SQLite功能支持
-         - 可靠的事务处理
-       - 移动端：Capacitor SQLite插件
-         - 原生SQLite实现
-         - 平台优化
-         - 系统级性能
-       - Web端：服务端SQLite
-         - 集中式数据管理
-         - 实时同步支持
-         - 多用户并发处理
+     - Web端存储策略：
+       - sql.js：WebAssembly版SQLite实现
+       - localStorage持久化
+       - IndexedDB备份支持
+       - 完整SQL功能支持
+       - 支持复杂查询和事务
+     - 移动端：Capacitor SQLite插件
+       - 原生SQLite实现
+       - 平台优化
+       - 系统级性能
+     - 桌面端：better-sqlite3
+       - 原生性能
+       - 完整SQLite功能支持
+       - 可靠的事务处理
      - 统一抽象层：
        - 跨平台通用接口
        - 统一的数据操作API
        - 平台无关的业务逻辑
    - 数据模型：
      - 节点表：存储知识点信息
+     - 节点属性表：存储节点属性
      - 关系表：存储节点间连接
-     - 属性表：存储扩展字段
+     - 关系属性表：存储关系属性
      - 变更记录表：追踪数据修改
 
 #### **2.2 图数据库实现**
@@ -111,20 +116,24 @@
 1. **节点表设计**
    ```sql
    CREATE TABLE nodes (
-     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     id TEXT PRIMARY KEY,
      type TEXT NOT NULL,
-     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+     label TEXT NOT NULL,
+     x REAL NOT NULL,
+     y REAL NOT NULL,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL
    )
    ```
-   - 使用自增ID作为主键
-   - 必须指定节点类型
+   - 使用UUID作为主键
+   - 必须指定节点类型和标签
+   - 存储节点位置信息
    - 自动记录创建和更新时间
 
 2. **节点属性表设计**
    ```sql
    CREATE TABLE node_properties (
-     node_id INTEGER NOT NULL,
+     node_id TEXT NOT NULL,
      key TEXT NOT NULL,
      value TEXT,
      FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE,
@@ -138,11 +147,11 @@
 3. **关系表设计**
    ```sql
    CREATE TABLE relationships (
-     id INTEGER PRIMARY KEY AUTOINCREMENT,
-     source_id INTEGER NOT NULL,
-     target_id INTEGER NOT NULL,
+     id TEXT PRIMARY KEY,
+     source_id TEXT NOT NULL,
+     target_id TEXT NOT NULL,
      type TEXT NOT NULL,
-     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+     created_at TEXT NOT NULL,
      FOREIGN KEY (source_id) REFERENCES nodes(id) ON DELETE CASCADE,
      FOREIGN KEY (target_id) REFERENCES nodes(id) ON DELETE CASCADE
    )
@@ -154,7 +163,7 @@
 4. **关系属性表设计**
    ```sql
    CREATE TABLE relationship_properties (
-     relationship_id INTEGER NOT NULL,
+     relationship_id TEXT NOT NULL,
      key TEXT NOT NULL,
      value TEXT,
      FOREIGN KEY (relationship_id) REFERENCES relationships(id) ON DELETE CASCADE,
@@ -184,68 +193,145 @@
    - 支持高效的图遍历
    - 加速路径查找算法
 
-##### **2.2.3 查询优化**
+##### **2.2.3 Web端存储实现**
 
-1. **属性查询优化**
-   - 使用JOIN语句组合属性条件
-   - 动态SQL生成以支持灵活查询
-   - 参数化查询防止SQL注入
+1. **初始化流程**
+   ```typescript
+   async initialize(): Promise<void> {
+     // 1. 加载sql.js的WebAssembly模块
+     const SQL = await initSqlJs({
+       locateFile: file => `/sql-wasm.wasm`
+     });
 
-2. **路径查询优化**
-   - 使用递归CTE实现最短路径查找
-   - 深度限制防止无限递归
-   - 路径去环保证结果有效性
+     // 2. 创建数据库实例
+     this.db = new SQL.Database();
 
-3. **模式匹配优化**
-   - 支持多类型关系匹配
-   - 使用JOIN优化多节点查询
-   - 结果集去重确保唯一性
+     // 3. 创建表结构
+     await this.createTables();
 
-##### **2.2.4 事务处理**
+     // 4. 从localStorage恢复数据
+     const savedData = localStorage.getItem("graphDb");
+     if (savedData) {
+       const binaryArray = new Uint8Array(savedData.split(",").map(Number));
+       this.db = new SQL.Database(binaryArray);
+     }
+   }
+   ```
 
-1. **原子性保证**
-   - 节点创建和属性设置在同一事务中
-   - 关系创建和属性设置事务化
-   - 错误发生时自动回滚
+2. **数据持久化**
+   ```typescript
+   private saveToLocalStorage(): void {
+     if (!this.db) return;
+     // 导出数据库为二进制数组
+     const binaryArray = this.db.export();
+     // 保存到localStorage
+     localStorage.setItem("graphDb", binaryArray.toString());
+   }
+   ```
 
-2. **一致性维护**
-   - 外键约束确保引用完整性
-   - 级联删除保持数据一致性
-   - 事务隔离防止并发问题
-
-##### **2.2.5 性能考虑**
-
-1. **查询性能**
-   - 合理的索引设计
-   - 预编译SQL语句
+3. **查询优化**
+   - 使用预编译语句
    - 批量操作优化
+   - 事务处理
+   - 异步操作处理
 
-2. **内存使用**
-   - 流式处理大结果集
-   - 合理的查询限制
-   - 资源及时释放
+4. **错误处理**
+   - 数据库初始化错误处理
+   - 存储空间不足处理
+   - 数据完整性检查
+   - 自动备份机制
 
-3. **并发处理**
-   - SQLite WAL模式
-   - 适当的锁粒度
-   - 连接池管理
+##### **2.2.4 高级查询功能**
 
-##### **2.2.6 扩展性设计**
+1. **路径查找**
+   ```sql
+   WITH RECURSIVE
+   path(source, target, path, depth) AS (
+     -- Base case
+     SELECT source_id, target_id, 
+            json_array(json_object('id', id, 'source', source_id, 'target', target_id)), 
+            1
+     FROM relationships
+     WHERE source_id = ?
+     
+     UNION ALL
+     
+     -- Recursive case
+     SELECT p.source, r.target_id, 
+            json_array_extend(p.path, json_object('id', r.id, 'source', r.source_id, 'target', r.target_id)),
+            p.depth + 1
+     FROM path p
+     JOIN relationships r ON p.target = r.source_id
+     WHERE p.depth < ?
+   )
+   SELECT path
+   FROM path
+   WHERE target = ?
+   ORDER BY depth
+   LIMIT 1
+   ```
 
-1. **接口抽象**
-   - 统一的数据库接口
-   - 可替换的实现方案
-   - 类型安全的API
+2. **连接节点查找**
+   ```sql
+   WITH RECURSIVE
+   connected(id, depth) AS (
+     -- Base case
+     SELECT id, 0
+     FROM nodes
+     WHERE id = ?
+     
+     UNION
+     
+     -- Recursive case
+     SELECT n.id, c.depth + 1
+     FROM connected c
+     JOIN relationships r ON c.id = r.source_id OR c.id = r.target_id
+     JOIN nodes n ON (r.source_id = n.id OR r.target_id = n.id) AND n.id != c.id
+     WHERE c.depth < ?
+   )
+   SELECT DISTINCT n.*
+   FROM connected c
+   JOIN nodes n ON c.id = n.id
+   ```
 
-2. **功能扩展**
-   - 支持添加新的查询类型
-   - 可扩展的属性系统
-   - 插件化的功能增强
+##### **2.2.5 性能优化**
 
-3. **跨平台兼容**
-   - 平台无关的存储路径
-   - 统一的文件操作
-   - 环境适配层
+1. **数据库性能**
+   - 使用适当的索引
+   - 优化查询语句
+   - 批量操作
+   - 使用事务
+
+2. **存储优化**
+   - 定期清理无用数据
+   - 压缩存储数据
+   - 分块存储大数据
+   - 增量更新
+
+3. **内存管理**
+   - 控制数据库大小
+   - 分页加载数据
+   - 及时释放资源
+   - 内存使用监控
+
+##### **2.2.6 数据同步**
+
+1. **变更跟踪**
+   - 记录所有修改操作
+   - 生成变更日志
+   - 支持增量同步
+
+2. **冲突处理**
+   - 使用时间戳
+   - 版本控制
+   - 冲突解决策略
+   - 手动合并支持
+
+3. **备份恢复**
+   - 自动备份
+   - 导入导出
+   - 版本回滚
+   - 数据迁移
 
 #### **3. 核心功能模块**
 

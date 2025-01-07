@@ -97,6 +97,68 @@ try {
 }
 ```
 
+## 5. 节点数据丢失问题
+
+### 问题描述
+在页面刷新时，节点数据会逐渐减少，直到完全消失：
+```
+Loaded nodes: (7) [{...}, {...}, {...}, {...}, {...}, {...}, {...}]
+Loaded edges: []
+Database saved to localStorage
+Saved Nodes: (6) [{...}, {...}, {...}, {...}, {...}, {...}]
+Saved Edges: []
+Saved Nodes: (5) [{...}, {...}, {...}, {...}, {...}]
+...
+Saved Nodes: []
+```
+
+### 问题原因
+1. 在`GraphEditor`组件中，`loadGraph`函数会调用`clearCells()`来清除现有图形
+2. 每次调用`clearCells()`都会触发`cell:removed`事件
+3. `cell:removed`事件处理器会调用`deleteNode`或`deleteEdge`方法，导致数据库中的节点被删除
+4. 由于这个过程是在加载数据时发生的，导致每次刷新页面都会意外删除节点
+
+### 解决方案
+1. 使用`isLoadingRef`引用来跟踪数据加载状态：
+```typescript
+const isLoadingRef = useRef(false);
+
+const loadGraph = async () => {
+  setIsLoading(true);
+  isLoadingRef.current = true;  // 设置加载状态
+  try {
+    // 加载数据...
+  } finally {
+    setIsLoading(false);
+    isLoadingRef.current = false;  // 重置加载状态
+  }
+};
+```
+
+2. 在`cell:removed`事件处理器中检查加载状态：
+```typescript
+graph.on('cell:removed', async (args) => {
+  // 如果正在加载数据，不处理删除事件
+  if (isLoadingRef.current) {
+    return;
+  }
+
+  const cell = args.cell;
+  if (cell instanceof Node) {
+    await databaseService.deleteNode(cell.id);
+  } else if (cell instanceof Edge) {
+    await databaseService.deleteEdge(cell.id);
+  }
+  onGraphChanged?.();
+});
+```
+
+### 经验总结
+1. 在处理图形组件的事件时，需要考虑事件触发的上下文
+2. 对于可能影响数据库的操作，应该添加适当的状态检查
+3. 使用引用（useRef）来跟踪异步操作的状态，避免状态更新导致的重渲染问题
+4. 在组件的生命周期中，要注意区分用户操作和程序自动操作的区别
+
 ## 经验教训
 
 1. **数据验证**：在存储和读取数据时都需要进行严格的验证和错误处理

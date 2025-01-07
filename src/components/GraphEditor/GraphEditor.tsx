@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import { Graph, Node, Shape } from '@antv/x6';
+import { Graph, Node, Shape, Edge } from '@antv/x6';
+import { v4 as uuidv4 } from 'uuid';
+import { databaseService, GraphNode, GraphEdge } from '../../services/DatabaseService';
 import './GraphEditor.css';
 
 // 类型定义
@@ -10,11 +12,16 @@ interface NodeData {
   width?: number;
   height?: number;
   label: string;
+  type?: string;
+  properties?: Record<string, any>;
 }
 
 interface EdgeData {
+  id?: string;
   source: string;
   target: string;
+  type?: string;
+  properties?: Record<string, any>;
 }
 
 interface TouchState {
@@ -30,18 +37,24 @@ interface TouchState {
 
 interface GraphEditorProps {
   onNodeMoved?: (data: { id: string; position: { x: number; y: number } }) => void;
+  onGraphChanged?: () => void;
 }
 
 export interface GraphEditorRef {
-  addNode: (nodeData: NodeData) => any;
-  addEdge: (edgeData: EdgeData) => any;
+  addNode: (nodeData: NodeData) => Promise<string>;
+  addEdge: (edgeData: EdgeData) => Promise<string>;
+  loadGraph: () => Promise<void>;
 }
 
-const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved }, ref) => {
+const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved, onGraphChanged }, ref) => {
   console.log('GraphEditor component rendering');
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph | null>(null);
   const [isGraphReady, setIsGraphReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const isLoadingRef = useRef(false);
+  const clearFn = useRef<Array<() => void>>([]);
   const touchStateRef = useRef<TouchState>({
     canvasBlank: false,
     fingers: 0,
@@ -68,6 +81,152 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved 
     };
   };
 
+  // 加载图数据
+  const loadGraph = async () => {
+    if (!graphRef.current) return;
+    setIsLoading(true);
+    isLoadingRef.current = true;
+    setDbError(null);
+
+    try {
+      const nodes = await databaseService.getNodes();
+      console.log('Loaded nodes:', nodes);
+      const edges = await databaseService.getEdges();
+      console.log('Loaded edges:', edges);
+
+      // 清除现有图形
+      graphRef.current.clearCells();
+
+      // 添加节点
+      nodes.forEach(node => {
+        graphRef.current?.addNode({
+          id: node.id,
+          x: node.x,
+          y: node.y,
+          width: 120,
+          height: 40,
+          label: node.label,
+          attrs: {
+            body: {
+              fill: 'var(--ion-color-light)',
+              stroke: 'var(--ion-color-medium)',
+              rx: 6,
+              ry: 6,
+            },
+            label: {
+              fill: 'var(--ion-color-dark)',
+              fontSize: 12,
+            },
+          },
+        });
+      });
+
+      // 添加边
+      edges.forEach(edge => {
+        graphRef.current?.addEdge({
+          id: edge.id,
+          source: edge.source_id,
+          target: edge.target_id,
+          attrs: {
+            line: {
+              stroke: 'var(--ion-color-medium)',
+              strokeWidth: 1,
+              targetMarker: {
+                name: 'classic',
+                size: 8,
+              },
+            },
+          },
+        });
+      });
+    } catch (error) {
+      console.error('Error loading graph:', error);
+      setDbError(error instanceof Error ? error.message : 'Failed to load graph data');
+    } finally {
+      setIsLoading(false);
+      isLoadingRef.current = false;
+    }
+  };
+
+  // 添加节点
+  const addNode = async (nodeData: NodeData): Promise<string> => {
+    if (!graphRef.current) throw new Error('Graph not initialized');
+
+    const id = nodeData.id || uuidv4();
+    const node: GraphNode = {
+      id,
+      type: nodeData.type || 'default',
+      label: nodeData.label,
+      x: nodeData.x,
+      y: nodeData.y,
+      properties: nodeData.properties || {},
+      created_at: '',  // 由数据库服务填充
+      updated_at: '',  // 由数据库服务填充
+    };
+
+    await databaseService.addNode(node);
+    
+    graphRef.current.addNode({
+      id: node.id,
+      x: node.x,
+      y: node.y,
+      width: nodeData.width || 120,
+      height: nodeData.height || 40,
+      label: node.label,
+      attrs: {
+        body: {
+          fill: 'var(--ion-color-light)',
+          stroke: 'var(--ion-color-medium)',
+          rx: 6,
+          ry: 6,
+        },
+        label: {
+          fill: 'var(--ion-color-dark)',
+          fontSize: 12,
+        },
+      },
+    });
+
+    onGraphChanged?.();
+    return id;
+  };
+
+  // 添加边
+  const addEdge = async (edgeData: EdgeData): Promise<string> => {
+    if (!graphRef.current) throw new Error('Graph not initialized');
+
+    const id = edgeData.id || uuidv4();
+    const edge: GraphEdge = {
+      id,
+      source_id: edgeData.source,
+      target_id: edgeData.target,
+      type: edgeData.type || 'default',
+      properties: edgeData.properties || {},
+      created_at: '',  // 由数据库服务填充
+    };
+
+    await databaseService.addEdge(edge);
+
+    graphRef.current.addEdge({
+      id: edge.id,
+      source: edge.source_id,
+      target: edge.target_id,
+      attrs: {
+        line: {
+          stroke: 'var(--ion-color-medium)',
+          strokeWidth: 1,
+          targetMarker: {
+            name: 'classic',
+            size: 8,
+          },
+        },
+      },
+    });
+
+    onGraphChanged?.();
+    return id;
+  };
+
   // 初始化图形实例
   useEffect(() => {
     console.log('GraphEditor init effect running');
@@ -90,7 +249,8 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved 
 
       if (width === 0 || height === 0) {
         console.log('Container dimensions not ready, retrying...');
-        requestAnimationFrame(initGraph);
+        const id = requestAnimationFrame(initGraph);
+        clearFn.current.push(() => cancelAnimationFrame(id));
         return;
       }
 
@@ -190,11 +350,14 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved 
       });
 
       // 监听节点移动
-      graph.on('node:moved', ({ node, x, y }) => {
+      graph.on('node:moved', async ({ node }) => {
+        const { x, y } = node.getPosition();
+        await databaseService.updateNode(node.id, { x, y });
         onNodeMoved?.({
           id: node.id,
           position: { x, y },
         });
+        onGraphChanged?.();
       });
 
       // 触摸事件处理
@@ -278,148 +441,66 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved 
           passive: true,
         });
       }
+
+      // 添加边连接事件处理
+      graph.on('edge:connected', async ({ edge }) => {
+        const edgeData = {
+          id: edge.id,
+          source: edge.getSourceCellId(),
+          target: edge.getTargetCellId(),
+        };
+        await addEdge(edgeData);
+      });
+
+      // 删除事件处理
+      graph.on('cell:removed', async (args) => {
+        // 如果正在加载数据，不处理删除事件
+        if (isLoadingRef.current) {
+          return;
+        }
+
+        const cell = args.cell;
+        if (cell instanceof Node) {
+          await databaseService.deleteNode(cell.id);
+        } else if (cell instanceof Edge) {
+          await databaseService.deleteEdge(cell.id);
+        }
+        onGraphChanged?.();
+      });
+
+      // 初始化完成后加载图数据
+      loadGraph();
     };
 
     // 开始初始化
-    requestAnimationFrame(initGraph);
+    initGraph()
 
     return () => {
       console.log('Cleaning up graph');
+      clearFn.current.forEach(fn => fn());
+      clearFn.current = [];
       if (graphRef.current) {
         graphRef.current.dispose();
+        graphRef.current = null;
       }
       setIsGraphReady(false);
     };
-  }, [onNodeMoved]);
+  }, [onNodeMoved, onGraphChanged]);
 
   // 在图形准备就绪后渲染示例数据
   useEffect(() => {
     console.log('isGraphReady effect running, ready:', isGraphReady);
     if (isGraphReady && graphRef.current) {
       console.log('Graph is ready for data');
+      loadGraph();
     }
   }, [isGraphReady]);
 
-  // 添加节点方法
-  const addNode = (nodeData: NodeData) => {
-    console.log('Adding node:', nodeData);
-    if (!graphRef.current) {
-      console.log('Cannot add node - graph not initialized');
-      return null;
-    }
-
-    const node = graphRef.current.addNode({
-      id: nodeData.id,
-      x: nodeData.x,
-      y: nodeData.y,
-      width: nodeData.width || 100,
-      height: nodeData.height || 40,
-      label: nodeData.label,
-      shape: 'rect',
-      attrs: {
-        body: {
-          fill: '#ffffff',
-          stroke: '#8f8f8f',
-          strokeWidth: 1,
-          rx: 6,
-          ry: 6,
-        },
-        label: {
-          text: nodeData.label,
-          fill: '#333333',
-          fontSize: 14,
-          fontFamily: 'Arial, helvetica, sans-serif',
-        },
-      },
-      ports: {
-        groups: {
-          in: {
-            position: 'left',
-            attrs: {
-              circle: {
-                r: 4,
-                magnet: true,
-                stroke: '#8f8f8f',
-                fill: '#ffffff',
-              },
-            },
-          },
-          out: {
-            position: 'right',
-            attrs: {
-              circle: {
-                r: 4,
-                magnet: true,
-                stroke: '#8f8f8f',
-                fill: '#ffffff',
-              },
-            },
-          },
-        },
-        items: [{ group: 'in' }, { group: 'out' }],
-      },
-    });
-
-    console.log('Node added successfully:', node.id);
-    return {
-      id: node.id,
-      position: node.getPosition(),
-    };
-  };
-
-  // 添加边方法
-  const addEdge = (edgeData: EdgeData) => {
-    console.log('Adding edge:', edgeData);
-    if (!graphRef.current) {
-      console.log('Cannot add edge - graph not initialized');
-      return null;
-    }
-
-    const edge = graphRef.current.addEdge({
-      source: edgeData.source,
-      target: edgeData.target,
-      attrs: {
-        line: {
-          stroke: '#8f8f8f',
-          strokeWidth: 1,
-          targetMarker: {
-            name: 'classic',
-            size: 8,
-          },
-        },
-      },
-      router: {
-        name: 'er',
-        args: {
-          padding: 20,
-        },
-      },
-      connector: {
-        name: 'rounded',
-        args: {
-          radius: 8,
-        },
-      },
-    });
-
-    console.log('Edge added successfully:', edge.id);
-    return {
-      id: edge.id,
-      source: edge.getSource(),
-      target: edge.getTarget(),
-    };
-  };
-
   // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
-    addNode: (nodeData: NodeData) => {
-      if (!graphRef.current) return null;
-      return addNode(nodeData);
-    },
-    addEdge: (edgeData: EdgeData) => {
-      if (!graphRef.current) return null;
-      return addEdge(edgeData);
-    },
+    addNode,
+    addEdge,
+    loadGraph,
   }));
 
   console.log('Rendering graph editor container');
@@ -427,8 +508,39 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved 
     <div 
       ref={containerRef} 
       className="graph-editor-container" 
-      style={{ border: '1px solid red' }} // 添加边框以便于调试
-    />
+      style={{ border: '1px solid red' }}
+    >
+      {isLoading && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(0, 0, 0, 0.7)',
+          color: 'white',
+          padding: '10px',
+          borderRadius: '5px',
+          zIndex: 1000,
+        }}>
+          Loading graph data...
+        </div>
+      )}
+      {dbError && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(255, 0, 0, 0.7)',
+          color: 'white',
+          padding: '10px',
+          borderRadius: '5px',
+          zIndex: 1000,
+        }}>
+          Error: {dbError}
+        </div>
+      )}
+    </div>
   );
 });
 
