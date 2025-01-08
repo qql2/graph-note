@@ -443,3 +443,104 @@
    - 主题定制
    - API 开放
    - 社区工具集成
+
+##### **2.1 数据库架构**
+
+1. **分层设计**
+   ```
+   src/services/database/
+   ├── core/                 # 核心抽象层
+   │   ├── types.ts         # 接口定义
+   │   ├── schema.ts        # 数据库模式
+   │   └── BaseGraphDB.ts   # 基础实现
+   ├── platforms/           # 平台适配层
+   │   ├── WebGraphDB.ts    # Web平台实现
+   │   ├── DesktopGraphDB.ts  # 桌面平台实现（计划）
+   │   └── MobileGraphDB.ts   # 移动平台实现（计划）
+   └── DatabaseService.ts   # 服务封装
+   ```
+
+2. **核心抽象层**
+   - `types.ts`: 定义统一的接口和类型
+     - `GraphNode`: 节点数据结构
+     - `GraphEdge`: 边数据结构
+     - `GraphDatabaseInterface`: 数据库操作接口
+     - `SQLiteEngine`: 存储引擎接口
+   - `schema.ts`: 定义数据库表结构和索引
+   - `BaseGraphDB.ts`: 提供通用的数据库操作实现
+
+3. **平台适配层**
+   - Web平台：使用sql.js + localStorage
+   - 桌面平台：计划使用better-sqlite3
+   - 移动平台：计划使用Capacitor SQLite
+
+4. **统一接口**
+   ```typescript
+   interface GraphDatabaseInterface {
+     // 初始化和配置
+     initialize(config: DatabaseConfig): Promise<void>;
+     close(): Promise<void>;
+     
+     // 数据操作
+     addNode(node: GraphNode): Promise<string>;
+     updateNode(id: string, updates: Partial<GraphNode>): Promise<void>;
+     deleteNode(id: string): Promise<void>;
+     getNodes(): Promise<GraphNode[]>;
+     
+     addEdge(edge: GraphEdge): Promise<string>;
+     updateEdge(id: string, updates: Partial<GraphEdge>): Promise<void>;
+     deleteEdge(id: string): Promise<void>;
+     getEdges(): Promise<GraphEdge[]>;
+     
+     // 高级查询
+     findPath(startId: string, endId: string, maxDepth?: number): Promise<GraphEdge[]>;
+     findConnectedNodes(nodeId: string, depth?: number): Promise<GraphNode[]>;
+     
+     // 数据导入导出
+     exportData(): Promise<Uint8Array>;
+     importData(data: Uint8Array): Promise<void>;
+     
+     // 备份管理
+     createBackup(): Promise<string>;
+     restoreFromBackup(backupId: string): Promise<void>;
+     listBackups(): Promise<string[]>;
+   }
+   ```
+
+5. **数据模型**
+   ```typescript
+   interface GraphNode {
+     id: string;
+     type: string;
+     label: string;
+     x: number;
+     y: number;
+     properties: Record<string, any>;
+     created_at: string;
+     updated_at: string;
+   }
+
+   interface GraphEdge {
+     id: string;
+     source_id: string;
+     target_id: string;
+     type: string;
+     properties: Record<string, any>;
+     created_at: string;
+   }
+   ```
+
+6. **存储引擎抽象**
+   ```typescript
+   interface SQLiteEngine {
+     exec(sql: string, params?: any[]): any;
+     prepare(sql: string): any;
+     run(sql: string, params?: any[]): void;
+     isOpen(): boolean;
+     close(): void;
+     export(): Uint8Array;
+     begin(): void;
+     commit(): void;
+     rollback(): void;
+   }
+   ```

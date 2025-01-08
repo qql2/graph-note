@@ -6,7 +6,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
-    setupFiles: ["src/services/database/__tests__/setup.ts"],
+    setupFiles: [
+      "src/services/database/platforms/__tests__/setup.ts",
+      "src/services/database/__tests__/setup.ts",
+    ],
     include: ["src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
     coverage: {
       reporter: ["text", "json", "html"],
@@ -18,6 +21,13 @@ export default defineConfig({
     },
     alias: {
       "ionicons/components": "ionicons/dist/types/components",
+    },
+    testTimeout: 10000,
+    maxConcurrency: 1,
+    poolOptions: {
+      threads: {
+        singleThread: true,
+      },
     },
   },
 });

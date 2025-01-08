@@ -515,9 +515,9 @@ export class DatabaseService {
       [startId, maxDepth, endId]
     )[0];
 
-    if (!result) return [];
+    if (!result || !result.values[0][0]) return [];
 
-    const path = JSON.parse(result.values[0][0]);
+    const path = JSON.parse(result.values[0][0] as string);
     return path.map((edge: any) => ({
       id: edge.id,
       source_id: edge.source,
