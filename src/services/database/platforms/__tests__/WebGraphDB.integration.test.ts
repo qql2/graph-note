@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { vi } from "vitest";
 import { WebGraphDB } from "../WebGraphDB";
-import { GraphNode, GraphEdge } from "../../core/types";
+import { GraphNode, GraphEdge, DeleteMode } from "../../core/types";
 
 // 禁用sql.js的mock
 vi.unmock("sql.js");
@@ -235,13 +235,36 @@ describe("WebGraphDB Integration Tests", () => {
       const connected = await db.findConnectedNodes("A", 2);
       expect(connected).toHaveLength(4); // 应该找到所有节点，因为它们都在距离2步以内
 
-      // 测试删除节点及其关联边
+      // 测试默认删除模式（保留连接）
       await db.deleteNode("A");
-      const remainingNodes = await db.getNodes();
+      let remainingNodes = await db.getNodes();
       expect(remainingNodes).toHaveLength(3);
 
-      const remainingEdges = await db.getEdges();
-      expect(remainingEdges).toHaveLength(2); // 只剩下B-C和C-D的边
+      let remainingEdges = await db.getEdges();
+      expect(remainingEdges).toHaveLength(4);
+      // 检查与A相关的边是否正确更新为null
+      expect(remainingEdges.filter((e) => e.source_id === null)).toHaveLength(
+        1
+      );
+      expect(remainingEdges.filter((e) => e.target_id === null)).toHaveLength(
+        1
+      );
+
+      // 测试级联删除模式
+      await db.deleteNode("B", DeleteMode.CASCADE);
+      remainingNodes = await db.getNodes();
+      expect(remainingNodes).toHaveLength(2); // 只剩下C和D
+
+      remainingEdges = await db.getEdges();
+      expect(remainingEdges).toHaveLength(2); // C-D的边和D-null的边
+      // 检查C-D的边
+      expect(
+        remainingEdges.find((e) => e.source_id === "C" && e.target_id === "D")
+      ).toBeTruthy();
+      // 检查D-null的边（原来的D-A边）
+      expect(
+        remainingEdges.find((e) => e.source_id === "D" && e.target_id === null)
+      ).toBeTruthy();
     });
   });
 });

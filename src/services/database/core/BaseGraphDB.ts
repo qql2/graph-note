@@ -5,6 +5,7 @@ import {
   GraphDatabaseInterface,
   DatabaseConfig,
   SQLiteEngine,
+  DeleteMode,
 } from "./types";
 import { DATABASE_SCHEMA } from "./schema";
 
@@ -173,9 +174,56 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     });
   }
 
-  async deleteNode(id: string): Promise<void> {
+  async deleteNode(
+    id: string,
+    mode: DeleteMode = DeleteMode.KEEP_CONNECTED
+  ): Promise<void> {
     return this.withTransaction(async () => {
-      this.db!.run("DELETE FROM nodes WHERE id = ?", [id]);
+      if (mode === DeleteMode.CASCADE) {
+        // 级联删除模式：删除所有相关数据
+        // 1. 删除与节点相关的所有边的属性
+        this.db!.run(
+          `DELETE FROM relationship_properties 
+           WHERE relationship_id IN (
+             SELECT id FROM relationships 
+             WHERE source_id = ? OR target_id = ?
+           )`,
+          [id, id]
+        );
+
+        // 2. 删除与节点相关的所有边
+        this.db!.run(
+          "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
+          [id, id]
+        );
+
+        // 3. 删除节点的属性
+        this.db!.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+
+        // 4. 删除节点本身
+        this.db!.run("DELETE FROM nodes WHERE id = ?", [id]);
+      } else {
+        // 保留关联数据模式：只删除节点本身和它的属性
+        // 1. 删除节点的属性
+        this.db!.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+
+        // 2. 将相关边的源节点或目标节点设为 NULL
+        this.db!.run(
+          `UPDATE relationships 
+           SET source_id = NULL 
+           WHERE source_id = ?`,
+          [id]
+        );
+        this.db!.run(
+          `UPDATE relationships 
+           SET target_id = NULL 
+           WHERE target_id = ?`,
+          [id]
+        );
+
+        // 3. 删除节点本身
+        this.db!.run("DELETE FROM nodes WHERE id = ?", [id]);
+      }
     });
   }
 

@@ -16,19 +16,19 @@ export const DATABASE_SCHEMA = {
       node_id TEXT NOT NULL,
       key TEXT NOT NULL,
       value TEXT,
-      FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (node_id) REFERENCES nodes(id),
       PRIMARY KEY (node_id, key)
     )`,
 
     // 关系表
     `CREATE TABLE IF NOT EXISTS relationships (
       id TEXT PRIMARY KEY,
-      source_id TEXT NOT NULL,
-      target_id TEXT NOT NULL,
+      source_id TEXT,
+      target_id TEXT,
       type TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (source_id) REFERENCES nodes(id) ON DELETE CASCADE,
-      FOREIGN KEY (target_id) REFERENCES nodes(id) ON DELETE CASCADE
+      FOREIGN KEY (source_id) REFERENCES nodes(id),
+      FOREIGN KEY (target_id) REFERENCES nodes(id)
     )`,
 
     // 关系属性表
@@ -36,7 +36,7 @@ export const DATABASE_SCHEMA = {
       relationship_id TEXT NOT NULL,
       key TEXT NOT NULL,
       value TEXT,
-      FOREIGN KEY (relationship_id) REFERENCES relationships(id) ON DELETE CASCADE,
+      FOREIGN KEY (relationship_id) REFERENCES relationships(id),
       PRIMARY KEY (relationship_id, key)
     )`,
   ],

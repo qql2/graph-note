@@ -19,9 +19,6 @@ export default defineConfig({
     deps: {
       inline: [/@ionic\/react/],
     },
-    alias: {
-      "ionicons/components": "ionicons/dist/types/components",
-    },
     testTimeout: 10000,
     maxConcurrency: 1,
     poolOptions: {

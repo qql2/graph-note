@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { WebGraphDB } from "../WebGraphDB";
-import { GraphNode, GraphEdge } from "../../core/types";
+import { GraphNode, GraphEdge, DeleteMode } from "../../core/types";
 
 describe("WebGraphDB", () => {
   let db: WebGraphDB;
@@ -75,23 +75,86 @@ describe("WebGraphDB", () => {
       });
     });
 
-    it("should delete a node", async () => {
-      const node = {
-        id: "test-node",
-        type: "test",
-        label: "Test Node",
-        x: 100,
-        y: 100,
-        properties: {},
-      };
+    describe("Node Deletion", () => {
+      let sourceNode: string;
+      let targetNode: string;
 
-      await db.addNode(node);
-      let nodes = await db.getNodes();
-      expect(nodes).toHaveLength(1);
+      beforeEach(async () => {
+        // 创建两个节点和一条连接它们的边
+        sourceNode = await db.addNode({
+          id: "source",
+          type: "test",
+          label: "Source Node",
+          x: 0,
+          y: 0,
+          properties: {},
+        });
 
-      await db.deleteNode("test-node");
-      nodes = await db.getNodes();
-      expect(nodes).toHaveLength(0);
+        targetNode = await db.addNode({
+          id: "target",
+          type: "test",
+          label: "Target Node",
+          x: 100,
+          y: 100,
+          properties: {},
+        });
+
+        await db.addEdge({
+          id: "test-edge",
+          source_id: sourceNode,
+          target_id: targetNode,
+          type: "test",
+          properties: { weight: 1 },
+        });
+      });
+
+      it("should delete node and keep connected edges (default mode)", async () => {
+        await db.deleteNode(sourceNode);
+
+        // 检查节点是否被删除
+        const nodes = await db.getNodes();
+        expect(nodes).toHaveLength(1);
+        expect(nodes[0].id).toBe(targetNode);
+
+        // 检查边是否保留但source_id为null
+        const edges = await db.getEdges();
+        expect(edges).toHaveLength(1);
+        expect(edges[0].source_id).toBeNull();
+        expect(edges[0].target_id).toBe(targetNode);
+      });
+
+      it("should cascade delete node and related edges", async () => {
+        await db.deleteNode(sourceNode, DeleteMode.CASCADE);
+
+        // 检查节点是否被删除
+        const nodes = await db.getNodes();
+        expect(nodes).toHaveLength(1);
+        expect(nodes[0].id).toBe(targetNode);
+
+        // 检查相关的边是否也被删除
+        const edges = await db.getEdges();
+        expect(edges).toHaveLength(0);
+      });
+
+      it("should handle deletion of node with multiple connected edges", async () => {
+        // 添加另一个连接到源节点的边
+        await db.addEdge({
+          id: "test-edge-2",
+          source_id: targetNode,
+          target_id: sourceNode,
+          type: "test",
+          properties: {},
+        });
+
+        // 使用默认模式删除节点
+        await db.deleteNode(sourceNode);
+
+        // 检查边是否正确更新
+        const edges = await db.getEdges();
+        expect(edges).toHaveLength(2);
+        expect(edges.filter((e) => e.target_id === null)).toHaveLength(1);
+        expect(edges.filter((e) => e.source_id === null)).toHaveLength(1);
+      });
     });
   });
 

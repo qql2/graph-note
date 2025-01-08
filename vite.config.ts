@@ -11,6 +11,9 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: "./src/setupTests.ts",
+    deps: {
+      inline: [/lodash-es/],
+    },
   },
   base: process.env.NODE_ENV === "development" ? "/" : "./",
   build: {

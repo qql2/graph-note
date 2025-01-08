@@ -25,6 +25,14 @@ export interface DatabaseConfig {
   wasm_path?: string; // web平台需要
 }
 
+// 删除模式
+export enum DeleteMode {
+  // 保留关联数据，只删除节点本身
+  KEEP_CONNECTED = "keep_connected",
+  // 级联删除所有关联数据
+  CASCADE = "cascade",
+}
+
 export interface GraphDatabaseInterface {
   // 初始化和配置
   initialize(config: DatabaseConfig): Promise<void>;
@@ -33,7 +41,7 @@ export interface GraphDatabaseInterface {
   // 数据操作
   addNode(node: Omit<GraphNode, "created_at" | "updated_at">): Promise<string>;
   updateNode(id: string, updates: Partial<GraphNode>): Promise<void>;
-  deleteNode(id: string): Promise<void>;
+  deleteNode(id: string, mode?: DeleteMode): Promise<void>;
   getNodes(): Promise<GraphNode[]>;
 
   addEdge(edge: Omit<GraphEdge, "created_at">): Promise<string>;
