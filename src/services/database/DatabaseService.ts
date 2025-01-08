@@ -19,7 +19,7 @@ export class DatabaseService {
   async initialize(): Promise<void> {
     await this.db.initialize({
       platform: "web",
-      wasm_path: "/sql-wasm.wasm",
+      wasm_path: "./sql-wasm.wasm",
     });
   }
 

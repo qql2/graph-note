@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Graph, Node, Shape, Edge } from '@antv/x6';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseService, GraphNode, GraphEdge } from '../../services/DatabaseService';
+import { databaseService } from '../../services/database';
+import { GraphNode, GraphEdge } from '../../services/database/core/types';
 import './GraphEditor.css';
 
 // 类型定义
@@ -89,9 +90,10 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved,
     setDbError(null);
 
     try {
-      const nodes = await databaseService.getNodes();
+      const db = databaseService.getDatabase();
+      const nodes = await db.getNodes();
       console.log('Loaded nodes:', nodes);
-      const edges = await databaseService.getEdges();
+      const edges = await db.getEdges();
       console.log('Loaded edges:', edges);
 
       // 清除现有图形
@@ -164,7 +166,8 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved,
       updated_at: '',  // 由数据库服务填充
     };
 
-    await databaseService.addNode(node);
+    const db = databaseService.getDatabase();
+    await db.addNode(node);
     
     graphRef.current.addNode({
       id: node.id,
@@ -205,7 +208,8 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved,
       created_at: '',  // 由数据库服务填充
     };
 
-    await databaseService.addEdge(edge);
+    const db = databaseService.getDatabase();
+    await db.addEdge(edge);
 
     graphRef.current.addEdge({
       id: edge.id,
@@ -352,7 +356,11 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved,
       // 监听节点移动
       graph.on('node:moved', async ({ node }) => {
         const { x, y } = node.getPosition();
-        await databaseService.updateNode(node.id, { x, y });
+        const db = databaseService.getDatabase();
+        await db.updateNode(node.id, {
+          x: x,
+          y: y,
+        });
         onNodeMoved?.({
           id: node.id,
           position: { x, y },
@@ -461,9 +469,11 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved,
 
         const cell = args.cell;
         if (cell instanceof Node) {
-          await databaseService.deleteNode(cell.id);
+          const db = databaseService.getDatabase();
+          await db.deleteNode(cell.id);
         } else if (cell instanceof Edge) {
-          await databaseService.deleteEdge(cell.id);
+          const db = databaseService.getDatabase();
+          await db.deleteEdge(cell.id);
         }
         onGraphChanged?.();
       });
