@@ -333,6 +333,69 @@
    - 版本回滚
    - 数据迁移
 
+##### **2.2.7 桌面端存储实现**
+
+1. **架构设计**
+   - 主进程：
+     - 负责SQLite数据库操作（使用`better-sqlite3`）
+     - 管理数据库连接和事务
+     - 处理文件系统操作
+     - 提供IPC接口
+   - 渲染进程：
+     - 通过IPC调用数据库操作
+     - 处理数据展示和用户交互
+     - 管理本地缓存
+
+2. **IPC通信设计**
+   ```typescript
+   // 主进程IPC处理
+   ipcMain.handle('db:query', async (event, sql, params) => {
+     return await db.query(sql, params);
+   });
+
+   ipcMain.handle('db:transaction', async (event, operations) => {
+     return await db.transaction(operations);
+   });
+
+   // 渲染进程调用
+   class DesktopGraphDB extends BaseGraphDB {
+     async query(sql: string, params: any[]) {
+       return await ipcRenderer.invoke('db:query', sql, params);
+     }
+
+     async transaction(operations: Operation[]) {
+       return await ipcRenderer.invoke('db:transaction', operations);
+     }
+   }
+   ```
+
+3. **数据存储位置**
+   ```typescript
+   // 主进程中的数据库初始化
+   const userDataPath = app.getPath("userData");
+   const dbPath = path.join(userDataPath, "graph-note.db");
+   const db = new Database(dbPath, { /* options */ });
+   ```
+
+4. **性能优化**
+   - IPC批处理优化
+   - 预编译SQL语句缓存
+   - 主进程数据库连接池
+   - 渲染进程结果缓存
+   - 大数据传输优化
+
+5. **错误处理**
+   - IPC通信错误处理
+   - 数据库操作异常处理
+   - 主进程崩溃恢复
+   - 渲染进程重连机制
+
+6. **安全考虑**
+   - IPC通道权限控制
+   - SQL注入防护
+   - 文件系统访问限制
+   - 数据加密支持
+
 #### **3. 核心功能模块**
 
 ##### **3.1 数据存储与同步**

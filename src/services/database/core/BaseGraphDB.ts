@@ -119,7 +119,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       );
 
       // 插入节点属性，确保所有值都被序列化为字符串
-      for (const [key, value] of Object.entries(node.properties)) {
+      const properties = node.properties || {};
+      for (const [key, value] of Object.entries(properties)) {
         this.db!.run(
           `INSERT INTO node_properties (node_id, key, value)
            VALUES (?, ?, ?)`,
@@ -284,7 +285,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         [id, edge.source_id, edge.target_id, edge.type, now]
       );
 
-      for (const [key, value] of Object.entries(edge.properties)) {
+      const properties = edge.properties || {};
+      for (const [key, value] of Object.entries(properties)) {
         this.db!.run(
           `INSERT INTO relationship_properties (relationship_id, key, value)
            VALUES (?, ?, ?)`,

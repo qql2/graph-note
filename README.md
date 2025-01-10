@@ -179,11 +179,77 @@ npm run test.e2e
 npm run test.unit
 ```
 
+### 构建系统设计
+
+项目采用双构建系统设计，分别针对主进程和渲染进程：
+
+1. **主进程构建（esbuild）**
+   - 使用 esbuild 构建 Electron 主进程代码
+   - 原因选择：
+     - 主进程运行在 Node.js 环境，不需要浏览器特性
+     - esbuild 构建速度快（Go语言实现）
+     - 配置简单，专注于 Node.js 环境
+     - 对原生模块支持好（如 better-sqlite3）
+     - 可精确控制输出格式（CommonJS）
+   - 构建配置：
+     ```javascript
+     // scripts/build-main.js
+     await esbuild.build({
+       entryPoints: ['src/main/main.ts'],
+       outdir: 'electron',
+       platform: 'node',
+       format: 'cjs',
+       target: 'node14',
+       bundle: true,
+       external: ['electron', 'better-sqlite3']
+     });
+     ```
+
+2. **渲染进程构建（Vite）**
+   - 使用 Vite 构建前端（渲染进程）代码
+   - 选择原因：
+     - 优秀的 HMR 支持
+     - 对 React、TypeScript 支持完善
+     - 丰富的插件生态
+     - 适合前端开发体验
+
+3. **构建命令**
+   ```bash
+   # 完整构建
+   npm run build
+
+   # 仅构建主进程
+   npm run build:main
+
+   # 仅构建渲染进程
+   npm run build:renderer
+   ```
+
 ## 项目结构
 
 - `/src` - Web 应用源代码
-- `/android` - Android 平台特定代码
+  - `/components` - React 组件
+  - `/services` - 业务服务层
+  - `/pages` - 页面组件
+  - `/theme` - 主题相关
+  - `/types` - TypeScript 类型定义
+
 - `/electron` - Electron 桌面应用代码
+  - `main.cjs` - 主进程入口
+  - `server.cjs` - 本地服务器
+  - `preload.cjs` - 预加载脚本
+  - `/database` - 数据库相关代码
+
+- `/android` - Android 平台特定代码
+  - `/app` - Android 应用代码
+  - `/capacitor` - Capacitor 配置
+
+- `/scripts` - 构建和工具脚本
+  - `build-main.js` - 主进程构建脚本
+
+- `/dist` - 构建输出目录
+  - Web 应用构建产物
+
 - `/need-migration` - 待迁移的旧版本代码
 
 ## 技术栈
