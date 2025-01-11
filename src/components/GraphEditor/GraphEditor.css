@@ -1,0 +1,83 @@
+.graph-editor-container {
+	width: 100%;
+	height: 100%;
+	min-height: 400px;
+	background: var(--ion-background-color);
+	position: relative;
+	overflow: hidden;
+	user-select: none;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	transform: translateZ(0);
+	-webkit-transform: translateZ(0);
+	-webkit-backface-visibility: hidden;
+	-webkit-perspective: 1000;
+	touch-action: none;
+	-ms-content-zooming: none;
+	-ms-touch-action: none;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	will-change: transform;
+}
+
+/* 节点样式 */
+.x6-node {
+	will-change: transform;
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+}
+
+.x6-node:hover {
+	filter: brightness(0.95);
+}
+
+/* 连接线样式 */
+.x6-edge {
+	pointer-events: none;
+}
+
+.x6-edge:hover {
+	stroke: var(--ion-color-medium-shade) !important;
+}
+
+/* 连接点样式 */
+.x6-port-body {
+	touch-action: none;
+}
+
+.x6-port-body:hover {
+	fill: var(--ion-color-light-shade) !important;
+}
+
+/* 选中状态样式 */
+.x6-node.selected {
+	filter: brightness(0.9);
+}
+
+.x6-edge.selected {
+	stroke: var(--ion-color-medium-shade) !important;
+	stroke-width: 2px !important;
+}
+
+/* 禁用文本选择 */
+.x6-node * {
+	user-select: none !important;
+	-webkit-user-select: none !important;
+	-moz-user-select: none !important;
+	-ms-user-select: none !important;
+	touch-action: none !important;
+}
+
+/* 优化渲染性能 */
+.x6-graph {
+	will-change: transform;
+	transform: translateZ(0);
+	-webkit-transform: translateZ(0);
+	backface-visibility: hidden;
+	-webkit-backface-visibility: hidden;
+}

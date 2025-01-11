@@ -1,8 +1,10 @@
+import React, { useEffect, useState } from 'react';
 import { IonApp, IonRouterOutlet, IonSplitPane, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { Redirect, Route } from 'react-router-dom';
 import Menu from './components/Menu';
 import Page from './pages/Page';
+import { databaseService } from './services/database';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/react/css/core.css';
@@ -33,10 +35,27 @@ import '@ionic/react/css/palettes/dark.system.css';
 
 /* Theme variables */
 import './theme/variables.css';
+import GraphView from './pages/GraphView/GraphView';
 
 setupIonicReact();
 
 const App: React.FC = () => {
+  const [dbInitialized, setDbInitialized] = useState(false);
+
+  useEffect(() => {
+    const initDatabase = async () => {
+      try {
+        await databaseService.initialize();
+        console.log('Database initialized successfully');
+        setDbInitialized(true);
+      } catch (error) {
+        console.error('Failed to initialize database:', error);
+      }
+    };
+
+    initDatabase();
+  }, []);
+
   return (
     <IonApp>
       <IonReactRouter>
@@ -48,6 +67,9 @@ const App: React.FC = () => {
             </Route>
             <Route path="/folder/:name" exact={true}>
               <Page />
+            </Route>
+            <Route path="/graph-view" exact={true}>
+              {dbInitialized ? <GraphView /> : <div>Loading database...</div>}
             </Route>
           </IonRouterOutlet>
         </IonSplitPane>
