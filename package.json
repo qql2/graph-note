@@ -2,8 +2,8 @@
   "name": "graph-note",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
-  "main": "electron/main.cjs",
+  "description": "A graph-based note-taking application",
+  "main": ".vite/build/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -54,7 +54,10 @@
     "@electron-forge/maker-rpm": "^7.6.0",
     "@electron-forge/maker-squirrel": "^7.6.0",
     "@electron-forge/maker-zip": "^7.6.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.6.0",
+    "@electron-forge/plugin-fuses": "^7.6.0",
     "@electron-forge/plugin-vite": "^7.6.0",
+    "@electron/fuses": "^1.8.0",
     "@testing-library/dom": ">=7.21.4",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^14.0.0",
@@ -69,10 +72,8 @@
     "@vitejs/plugin-react": "^4.0.1",
     "cross-env": "^7.0.3",
     "cypress": "^13.5.0",
-    "electron": "^33.2.1",
+    "electron": "^28.1.3",
     "electron-forge": "^5.2.4",
-    "electron-reload": "^2.0.0-alpha.1",
-    "esbuild": "^0.20.2",
     "eslint": "^8.35.0",
     "eslint-plugin-react": "^7.32.2",
     "jsdom": "^22.1.0",
@@ -81,51 +82,5 @@
     "vite": "~5.2.0",
     "vitest": "^2.1.8"
   },
-  "description": "An Ionic project",
-  "config": {
-    "forge": {
-      "packagerConfig": {},
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "config": {
-            "name": "graph-note"
-          }
-        },
-        {
-          "name": "@electron-forge/maker-zip",
-          "platforms": [
-            "darwin"
-          ]
-        },
-        {
-          "name": "@electron-forge/maker-deb",
-          "config": {}
-        },
-        {
-          "name": "@electron-forge/maker-rpm",
-          "config": {}
-        }
-      ],
-      "plugins": [
-        {
-          "name": "@electron-forge/plugin-vite",
-          "config": {
-            "build": [
-              {
-                "entry": "electron/main/main.ts",
-                "config": "vite.config.ts"
-              }
-            ],
-            "renderer": [
-              {
-                "name": "main_window",
-                "config": "vite.config.ts"
-              }
-            ]
-          }
-        }
-      ]
-    }
-  }
+  "config": {}
 }

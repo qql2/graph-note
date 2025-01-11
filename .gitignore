@@ -38,3 +38,4 @@ need-migration/assets/web/tsconfig.json
 need-migration/assets/web/vite.config.ts
 need-migration/assets/web/x6_graph.ts
 need-migration/assets/web/public/vite.svg
+.vite/build/

@@ -65,7 +65,8 @@ class MainProcess {
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
-        preload: path.join(__dirname, "preload.cjs"),
+        preload: path.join(__dirname, "preload.js"),
+        sandbox: true,
       },
     }) as MainWindow;
   }
