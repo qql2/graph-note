@@ -31,7 +31,6 @@ const api: ElectronAPI = {
 };
 
 // 使用 contextBridge 暴露 API 到渲染进程
-// 这样可以在渲染进程中通过 window.electronAPI 访问
 contextBridge.exposeInMainWorld("electronAPI", api);
 
 // 为 TypeScript 添加类型声明

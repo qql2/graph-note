@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { IonApp, IonRouterOutlet, IonSplitPane, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { Redirect, Route } from 'react-router-dom';
@@ -41,15 +41,23 @@ setupIonicReact();
 
 const App: React.FC = () => {
   const [dbInitialized, setDbInitialized] = useState(false);
+  const initializingRef = useRef(false);
 
   useEffect(() => {
     const initDatabase = async () => {
+      if (dbInitialized || initializingRef.current) {
+        return;
+      }
+
       try {
+        initializingRef.current = true;
         await databaseService.initialize();
         console.log('Database initialized successfully');
         setDbInitialized(true);
       } catch (error) {
         console.error('Failed to initialize database:', error);
+      } finally {
+        initializingRef.current = false;
       }
     };
 

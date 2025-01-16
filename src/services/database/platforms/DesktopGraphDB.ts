@@ -8,7 +8,7 @@ declare global {
     electronAPI: {
       database: {
         query: (sql: string, params?: any[]) => Promise<any>;
-        backup: () => Promise<string>;
+       backup: () => Promise<string>;
         restore: (backupPath: string) => Promise<void>;
         listBackups: () => Promise<string[]>;
       };
@@ -43,9 +43,15 @@ export class DesktopGraphDB extends BaseGraphDB {
         throw new Error("Not implemented in renderer process");
       },
       transaction: async (operation: () => any) => {
-        return await window.electronAPI.database.query("BEGIN TRANSACTION") &&
-          operation() &&
-          window.electronAPI.database.query("COMMIT");
+        try {
+          await window.electronAPI.database.query("BEGIN");
+          const result = await operation();
+          await window.electronAPI.database.query("COMMIT");
+          return result;
+        } catch (error) {
+          await window.electronAPI.database.query("ROLLBACK");
+          throw error;
+        }
       },
     };
   }
