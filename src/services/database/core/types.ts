@@ -21,6 +21,7 @@ export interface GraphEdge {
 export interface DatabaseConfig {
   storage_path?: string;
   verbose?: boolean;
+  wasm_path?: string;
 }
 
 export interface Operation {

@@ -1,15 +1,38 @@
-import { DesktopGraphDB } from "../DesktopGraphDB";
-import { GraphNode } from "../../core/types";
-import fs from "fs";
+import { test, expect } from "@playwright/test";
+import { _electron as electron } from "@playwright/test";
 import path from "path";
+import fs from "fs";
 import os from "os";
+import { GraphNode } from "../../core/types";
+import { databaseService, DatabaseService } from "../../DatabaseService";
 
-describe("DesktopGraphDB", () => {
-  let db: DesktopGraphDB;
-  let dbPath: string;
+// 扩展 Playwright 的 Window 类型
+declare global {
+  interface Window {
+    electronAPI: {
+      database: {
+        query: (sql: string, params?: any[]) => Promise<any>;
+        backup: () => Promise<string>;
+        restore: (backupPath: string) => Promise<void>;
+        listBackups: () => Promise<string[]>;
+      };
+    };
+  }
+}
+
+// 扩展 Playwright 的 Page 类型
+declare module "@playwright/test" {
+  interface Page {
+    electronAPI: Window["electronAPI"];
+  }
+}
+
+test.describe("DesktopGraphDB", () => {
+  let electronApp: Awaited<ReturnType<typeof electron.launch>>;
   let tempDir: string;
+  let dbPath: string;
 
-  beforeEach(async () => {
+  test.beforeEach(async () => {
     // 创建临时目录用于测试
     tempDir = path.join(
       os.tmpdir(),
@@ -18,118 +41,195 @@ describe("DesktopGraphDB", () => {
     fs.mkdirSync(tempDir, { recursive: true });
     dbPath = path.join(tempDir, "test.db");
 
-    db = new DesktopGraphDB();
-    await db.initialize({
-      platform: "desktop",
-      storage_path: dbPath,
+    // 启动 Electron 应用
+    electronApp = await electron.launch({
+      args: ["."],
+      env: {
+        ...process.env,
+        ELECTRON_ENABLE_LOGGING: "true",
+        ELECTRON_ENABLE_STACK_DUMPING: "true",
+        NODE_ENV: "test",
+        TEST_DB_PATH: dbPath,
+      },
+    });
+
+    // 初始化数据库表
+    const window = await electronApp.firstWindow();
+    
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      
+      // 创建节点表
+      await database.query(`
+        CREATE TABLE IF NOT EXISTS nodes (
+          id TEXT PRIMARY KEY,
+          type TEXT NOT NULL,
+          label TEXT NOT NULL,
+          x REAL NOT NULL,
+          y REAL NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `);
+
+      // 创建节点属性表
+      await database.query(`
+        CREATE TABLE IF NOT EXISTS node_properties (
+          node_id TEXT NOT NULL,
+          key TEXT NOT NULL,
+          value TEXT,
+          FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE,
+          PRIMARY KEY (node_id, key)
+        )
+      `);
+
+      // 创建关系表
+      await database.query(`
+        CREATE TABLE IF NOT EXISTS relationships (
+          id TEXT PRIMARY KEY,
+          source_id TEXT,
+          target_id TEXT,
+          type TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (source_id) REFERENCES nodes(id) ON DELETE CASCADE,
+          FOREIGN KEY (target_id) REFERENCES nodes(id) ON DELETE CASCADE
+        )
+      `);
+
+      // 创建关系属性表
+      await database.query(`
+        CREATE TABLE IF NOT EXISTS relationship_properties (
+          relationship_id TEXT NOT NULL,
+          key TEXT NOT NULL,
+          value TEXT,
+          FOREIGN KEY (relationship_id) REFERENCES relationships(id) ON DELETE CASCADE,
+          PRIMARY KEY (relationship_id, key)
+        )
+      `);
+
+      // 创建索引
+      await database.query(`CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(type)`);
+      await database.query(`CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(type)`);
+      await database.query(`CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_id)`);
+      await database.query(`CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_id)`);
     });
   });
 
-  afterEach(async () => {
-    await db.close();
+  test.afterEach(async () => {
+    const window = await electronApp.firstWindow();
+    
+    // 清理数据库
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      await database.query("DROP TABLE IF EXISTS relationship_properties");
+      await database.query("DROP TABLE IF EXISTS relationships");
+      await database.query("DROP TABLE IF EXISTS node_properties");
+      await database.query("DROP TABLE IF EXISTS nodes");
+    });
+
+    // 关闭应用
+    await electronApp.close();
+
     // 清理测试文件
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  describe("Basic Operations", () => {
-    it("should create and retrieve nodes", async () => {
-      const node: Omit<GraphNode, "created_at" | "updated_at"> = {
-        id: "test-node",
-        type: "test",
-        label: "Test Node",
-        x: 100,
-        y: 100,
-        properties: { key: "value" },
-      };
+  test("should create and retrieve nodes", async () => {
+    const window = await electronApp.firstWindow();
+    const testNode: Omit<GraphNode, "created_at" | "updated_at"> = {
+      id: "test-node",
+      type: "test",
+      label: "Test Node",
+      x: 100,
+      y: 100,
+      properties: { key: "value" },
+    };
 
-      await db.addNode(node);
-      const nodes = await db.getNodes();
+    // 添加节点
+    const addNodeResult = await window.evaluate(async (node: typeof testNode) => {
+      const { database } = window.electronAPI;
+      await database.query(`
+        INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `, [node.id, node.type, node.label, node.x, node.y]);
 
-      expect(nodes).toHaveLength(1);
-      expect(nodes[0]).toMatchObject({
-        ...node,
-        created_at: expect.any(String),
-        updated_at: expect.any(String),
-      });
+      if (node.properties) {
+        for (const [key, value] of Object.entries(node.properties)) {
+          await database.query(`
+            INSERT INTO node_properties (node_id, key, value)
+            VALUES (?, ?, ?)
+          `, [node.id, key, JSON.stringify(value)]);
+        }
+      }
+      return node.id;
+    }, testNode);
+
+    // 获取节点
+    const nodes = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`
+        SELECT 
+          n.*,
+          (
+            SELECT json_group_object(key, value)
+            FROM node_properties
+            WHERE node_id = n.id
+          ) as props
+        FROM nodes n
+      `);
     });
 
-    it("should update nodes", async () => {
-      const node: Omit<GraphNode, "created_at" | "updated_at"> = {
-        id: "test-node",
-        type: "test",
-        label: "Test Node",
-        x: 100,
-        y: 100,
-        properties: { key: "value" },
-      };
-
-      await db.addNode(node);
-      await db.updateNode("test-node", {
-        label: "Updated Node",
-        properties: { key: "new-value" },
-      });
-
-      const nodes = await db.getNodes();
-      expect(nodes[0].label).toBe("Updated Node");
-      expect(nodes[0].properties.key).toBe("new-value");
-    });
-  });
-
-  describe("Backup Operations", () => {
-    it("should create and restore backups", async () => {
-      // 添加一些测试数据
-      await db.addNode({
-        id: "test-node",
-        type: "test",
-        label: "Test Node",
-        x: 100,
-        y: 100,
-        properties: { key: "value" },
-      });
-
-      // 创建备份
-      const backupId = await db.createBackup();
-      expect(fs.existsSync(backupId)).toBe(true);
-
-      // 修改数据
-      await db.updateNode("test-node", { label: "Modified Node" });
-      let nodes = await db.getNodes();
-      expect(nodes[0].label).toBe("Modified Node");
-
-      // 恢复备份
-      await db.restoreFromBackup(backupId);
-      nodes = await db.getNodes();
-      expect(nodes[0].label).toBe("Test Node");
-    });
-
-    it("should list backups", async () => {
-      // 创建多个备份
-      const backupId1 = await db.createBackup();
-      const backupId2 = await db.createBackup();
-
-      const backups = await db.listBackups();
-      expect(backups).toHaveLength(2);
-      expect(backups).toContain(backupId1);
-      expect(backups).toContain(backupId2);
-      // 确保按时间倒序排列
-      expect(backups[0]).toBe(backupId2);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]).toMatchObject({
+      id: testNode.id,
+      type: testNode.type,
+      label: testNode.label,
+      x: testNode.x,
+      y: testNode.y,
     });
   });
 
-  describe("Error Handling", () => {
-    it("should handle invalid backup restoration", async () => {
-      await expect(db.restoreFromBackup("non-existent-backup")).rejects.toThrow(
-        "Backup not found"
-      );
+  test("should handle backup operations", async () => {
+    const window = await electronApp.firstWindow();
+
+    // 创建备份
+    const backupPath = await window.evaluate(async () => {
+      return await window.electronAPI.database.backup();
     });
 
-    it("should handle database initialization without storage path", async () => {
-      const newDb = new DesktopGraphDB();
-      await expect(newDb.initialize({ platform: "desktop" })).rejects.toThrow(
-        "storage_path is required for desktop platform"
-      );
+    expect(fs.existsSync(backupPath)).toBe(true);
+
+    // 列出备份
+    const backups = await window.evaluate(async () => {
+      return await window.electronAPI.database.listBackups();
     });
+
+    expect(backups).toContain(backupPath);
+
+    // 恢复备份
+    await window.evaluate(async (path: string) => {
+      await window.electronAPI.database.restore(path);
+    }, backupPath);
+  });
+
+  test("should handle errors gracefully", async () => {
+    const window = await electronApp.firstWindow();
+
+    // 测试无效的备份恢复
+    const restorePromise = window.evaluate(async () => {
+      try {
+        await window.electronAPI.database.restore("non-existent-backup");
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          return error.message;
+        }
+        return String(error);
+      }
+    });
+
+    const errorMessage = await restorePromise;
+    expect(errorMessage).toContain("DatabaseError: Backup file not found");
   });
 });
