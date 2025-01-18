@@ -16,6 +16,7 @@ declare global {
         restore: (backupPath: string) => Promise<void>;
         listBackups: () => Promise<string[]>;
       };
+
     };
   }
 }
@@ -117,7 +118,6 @@ test.describe("DesktopGraphDB", () => {
 
   test.afterEach(async () => {
     const window = await electronApp.firstWindow();
-    
     // 清理数据库
     await window.evaluate(async () => {
       const { database } = window.electronAPI;
@@ -198,7 +198,6 @@ test.describe("DesktopGraphDB", () => {
     const backupPath = await window.evaluate(async () => {
       return await window.electronAPI.database.backup();
     });
-
     expect(fs.existsSync(backupPath)).toBe(true);
 
     // 列出备份
@@ -232,4 +231,223 @@ test.describe("DesktopGraphDB", () => {
     const errorMessage = await restorePromise;
     expect(errorMessage).toContain("DatabaseError: Backup file not found");
   });
+
+  test("should update a node", async () => {
+    const window = await electronApp.firstWindow();
+    const testNode = {
+      id: "test-node",
+      type: "test",
+      label: "Test Node",
+      x: 100,
+      y: 100,
+      properties: { key1: "value1" },
+    };
+
+    // 添加节点
+    await window.evaluate(async (node: typeof testNode) => {
+      const { database } = window.electronAPI;
+      await database.query(`
+        INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `, [node.id, node.type, node.label, node.x, node.y]);
+
+      if (node.properties) {
+        for (const [key, value] of Object.entries(node.properties)) {
+          await database.query(`
+            INSERT INTO node_properties (node_id, key, value)
+            VALUES (?, ?, ?)
+          `, [node.id, key, JSON.stringify(value)]);
+        }
+      }
+    }, testNode);
+
+    // 更新节点
+    const updates = {
+      label: "Updated Node",
+      x: 200,
+      properties: { key2: "value2" },
+    };
+
+    await window.evaluate(async (args: { id: string; updates: typeof updates }) => {
+      const { database } = window.electronAPI;
+      await database.query(`
+        UPDATE nodes 
+        SET label = ?, x = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `, [args.updates.label, args.updates.x, args.id]);
+
+      // 更新属性
+      await database.query(`DELETE FROM node_properties WHERE node_id = ?`, [args.id]);
+      for (const [key, value] of Object.entries(args.updates.properties)) {
+        await database.query(`
+          INSERT INTO node_properties (node_id, key, value)
+          VALUES (?, ?, ?)
+        `, [args.id, key, JSON.stringify(value)]);
+      }
+    }, { id: testNode.id, updates });
+
+    // 验证更新
+    const nodes = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`
+        SELECT 
+          n.*,
+          (
+            SELECT json_group_object(key, value)
+            FROM node_properties
+            WHERE node_id = n.id
+          ) as props
+        FROM nodes n
+        WHERE n.id = ?
+      `, ["test-node"]);
+    });
+
+    expect(nodes[0]).toMatchObject({
+      id: testNode.id,
+      type: testNode.type,
+      label: updates.label,
+      x: updates.x,
+      y: testNode.y,
+    });
+  });
+
+  test("should handle node deletion modes", async () => {
+    const window = await electronApp.firstWindow();
+    
+    // 创建测试数据
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      
+      // 创建源节点
+      await database.query(`
+        INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
+        VALUES ('source', 'test', 'Source Node', 0, 0, datetime('now'), datetime('now'))
+      `);
+
+      // 创建目标节点
+      await database.query(`
+        INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
+        VALUES ('target', 'test', 'Target Node', 100, 100, datetime('now'), datetime('now'))
+      `);
+
+      // 创建边
+      await database.query(`
+        INSERT INTO relationships (id, source_id, target_id, type, created_at)
+        VALUES ('test-edge', 'source', 'target', 'test', datetime('now'))
+      `);
+    });
+
+    // 删除源节点
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      await database.query(`
+        UPDATE relationships 
+        SET source_id = NULL 
+        WHERE source_id = 'source'
+      `);
+      await database.query(`DELETE FROM nodes WHERE id = 'source'`);
+    });
+
+    // 验证结果
+    const result = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      const nodes = await database.query(`SELECT * FROM nodes`);
+      const edges = await database.query(`SELECT * FROM relationships`);
+      return { nodes, edges };
+    });
+
+    expect(result.nodes).toHaveLength(1);
+    expect(result.nodes[0].id).toBe('target');
+    expect(result.edges).toHaveLength(1);
+    expect(result.edges[0].source_id).toBeNull();
+    expect(result.edges[0].target_id).toBe('target');
+  });
+
+  test("should handle edge operations", async () => {
+    const window = await electronApp.firstWindow();
+    
+    // 创建测试节点
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      
+      // 创建源节点和目标节点
+      await database.query(`
+        INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
+        VALUES 
+          ('source', 'test', 'Source Node', 0, 0, datetime('now'), datetime('now')),
+          ('target', 'test', 'Target Node', 100, 100, datetime('now'), datetime('now'))
+      `);
+    });
+
+    // 创建边
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      await database.query(`
+        INSERT INTO relationships (id, source_id, target_id, type, created_at)
+        VALUES ('test-edge', 'source', 'target', 'test', datetime('now'))
+      `);
+
+      // 添加边的属性
+      await database.query(`
+        INSERT INTO relationship_properties (relationship_id, key, value)
+        VALUES ('test-edge', 'weight', '1')
+      `);
+    });
+
+    // 更新边
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      await database.query(`
+        UPDATE relationships 
+        SET type = 'updated'
+        WHERE id = 'test-edge'
+      `);
+
+      // 更新边的属性
+      await database.query(`
+        UPDATE relationship_properties 
+        SET value = '2'
+        WHERE relationship_id = 'test-edge' AND key = 'weight'
+      `);
+    });
+
+    // 验证边的更新
+    const edges = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`
+        SELECT 
+          r.*,
+          (
+            SELECT json_group_object(key, value)
+            FROM relationship_properties
+            WHERE relationship_id = r.id
+          ) as props
+        FROM relationships r
+        WHERE r.id = 'test-edge'
+      `);
+    });
+
+    expect(edges[0]).toMatchObject({
+      id: 'test-edge',
+      source_id: 'source',
+      target_id: 'target',
+      type: 'updated',
+    });
+
+    // 删除边
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      await database.query(`DELETE FROM relationship_properties WHERE relationship_id = 'test-edge'`);
+      await database.query(`DELETE FROM relationships WHERE id = 'test-edge'`);
+    });
+
+    // 验证边已被删除
+    const remainingEdges = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`SELECT * FROM relationships`);
+    });
+
+    expect(remainingEdges).toHaveLength(0);
+  });
 });
+
