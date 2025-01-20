@@ -199,4 +199,27 @@ export class WebGraphDB extends BaseGraphDB {
       }
     });
   }
+
+  async isReady(): Promise<boolean> {
+    try {
+      if (!this.db) {
+        return false;
+      }
+
+      // 尝试执行一个简单的查询来验证数据库是否正常工作
+      this.db.exec("SELECT 1");
+      
+      // 检查必要的表是否存在
+      const tables = this.db.exec(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name IN ('nodes', 'node_properties', 'relationships', 'relationship_properties')
+      `);
+      
+      // 确保所有必要的表都存在
+      return tables[0]?.values?.length === 4;
+    } catch (error) {
+      console.error("Database health check failed:", error);
+      return false;
+    }
+  }
 }

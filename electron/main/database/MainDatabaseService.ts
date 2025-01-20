@@ -122,6 +122,20 @@ export class MainDatabaseService {
     }
   }
 
+  public isReady(): boolean {
+    try {
+      if (!this.db) {
+        return false;
+      }
+      // 尝试执行一个简单的查询来验证数据库连接是否正常
+      this.db.prepare("SELECT 1").get();
+      return true;
+    } catch (error) {
+      console.error("[Database] Health check failed:", error);
+      return false;
+    }
+  }
+
   public close() {
     if (this.autoSaveInterval) {
       clearInterval(this.autoSaveInterval);

@@ -509,4 +509,225 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   abstract createBackup(): Promise<string>;
   abstract restoreFromBackup(backupId: string): Promise<void>;
   abstract listBackups(): Promise<string[]>;
+
+  async isReady(): Promise<boolean> {
+    if (!this.db) {
+      return false;
+    }
+
+    try {
+      // 检查数据库是否可以执行简单查询
+      this.db.exec("SELECT 1");
+
+      // 检查必要的表是否存在
+      const tables = this.db.exec(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' AND name IN ('nodes', 'node_properties', 'relationships', 'relationship_properties')
+      `)[0];
+
+      // 确保所有必要的表都存在
+      return tables?.values?.length === 4;
+    } catch (error) {
+      console.error("Database health check failed:", error);
+      return false;
+    }
+  }
+
+  // 条件查询节点
+  async findNodes(conditions?: {
+    type?: string;
+    properties?: Record<string, any>;
+  }): Promise<GraphNode[]> {
+    if (!this.db) throw new Error("Database not initialized");
+
+    let query = `
+      SELECT DISTINCT n.id
+      FROM nodes n
+    `;
+
+    const params: any[] = [];
+    const conditions_list: string[] = [];
+
+    if (conditions?.type) {
+      conditions_list.push('n.type = ?');
+      params.push(conditions.type);
+    }
+
+    if (conditions?.properties) {
+      Object.entries(conditions.properties).forEach(([key, value]) => {
+        conditions_list.push(`
+          EXISTS (
+            SELECT 1 FROM node_properties 
+            WHERE node_id = n.id 
+            AND key = ? 
+            AND value = json(?)
+          )
+        `);
+        params.push(key, JSON.stringify(value));
+      });
+    }
+
+    if (conditions_list.length > 0) {
+      query += ` WHERE ${conditions_list.join(' AND ')}`;
+    }
+
+    try {
+      const result = this.db.exec(query, params)[0];
+      if (!result) return [];
+
+      // 获取每个节点的完整信息
+      return await Promise.all(
+        result.values.map(async (row: any) => {
+          const nodeId = row[0];
+          const nodeResult = this.db!.exec(`
+            SELECT 
+              n.*,
+              (
+                SELECT json_group_object(key, value)
+                FROM node_properties
+                WHERE node_id = n.id
+              ) as props
+            FROM nodes n
+            WHERE n.id = ?
+          `, [nodeId])[0];
+
+          if (!nodeResult) return null;
+
+          const nodeRow = nodeResult.values[0];
+          let properties = {};
+          try {
+            if (nodeRow[7]) {
+              const propsObj = JSON.parse(nodeRow[7]);
+              properties = Object.fromEntries(
+                Object.entries(propsObj).map(([k, v]) => [
+                  k,
+                  JSON.parse(v as string),
+                ])
+              );
+            }
+          } catch (error) {
+            console.warn(`Failed to parse properties for node ${nodeId}:`, error);
+          }
+
+          return {
+            id: nodeRow[0],
+            type: nodeRow[1],
+            label: nodeRow[2],
+            x: nodeRow[3],
+            y: nodeRow[4],
+            created_at: nodeRow[5],
+            updated_at: nodeRow[6],
+            properties,
+          };
+        })
+      ).then(nodes => nodes.filter((node): node is GraphNode => node !== null));
+    } catch (error) {
+      console.error('Error in findNodes:', error);
+      throw new Error(`Failed to find nodes: ${error}`);
+    }
+  }
+
+  // 条件查询边
+  async findEdges(conditions?: {
+    type?: string;
+    source_id?: string;
+    target_id?: string;
+    properties?: Record<string, any>;
+  }): Promise<GraphEdge[]> {
+    if (!this.db) throw new Error("Database not initialized");
+
+    let query = `
+      SELECT DISTINCT r.id
+      FROM relationships r
+    `;
+
+    const params: any[] = [];
+    const conditions_list: string[] = [];
+
+    if (conditions?.type) {
+      conditions_list.push('r.type = ?');
+      params.push(conditions.type);
+    }
+
+    if (conditions?.source_id) {
+      conditions_list.push('r.source_id = ?');
+      params.push(conditions.source_id);
+    }
+
+    if (conditions?.target_id) {
+      conditions_list.push('r.target_id = ?');
+      params.push(conditions.target_id);
+    }
+
+    if (conditions?.properties) {
+      Object.entries(conditions.properties).forEach(([key, value]) => {
+        conditions_list.push(`
+          EXISTS (
+            SELECT 1 FROM relationship_properties 
+            WHERE relationship_id = r.id 
+            AND key = ? 
+            AND value = json(?)
+          )
+        `);
+        params.push(key, JSON.stringify(value));
+      });
+    }
+
+    if (conditions_list.length > 0) {
+      query += ` WHERE ${conditions_list.join(' AND ')}`;
+    }
+
+    try {
+      const result = this.db.exec(query, params)[0];
+      if (!result) return [];
+
+      // 获取每个边的完整信息
+      return await Promise.all(
+        result.values.map(async (row: any) => {
+          const edgeId = row[0];
+          const edgeResult = this.db!.exec(`
+            SELECT 
+              r.*,
+              (
+                SELECT json_group_object(key, value)
+                FROM relationship_properties
+                WHERE relationship_id = r.id
+              ) as props
+            FROM relationships r
+            WHERE r.id = ?
+          `, [edgeId])[0];
+
+          if (!edgeResult) return null;
+
+          const edgeRow = edgeResult.values[0];
+          let properties = {};
+          try {
+            if (edgeRow[5]) {
+              const propsObj = JSON.parse(edgeRow[5]);
+              properties = Object.fromEntries(
+                Object.entries(propsObj).map(([k, v]) => [
+                  k,
+                  JSON.parse(v as string),
+                ])
+              );
+            }
+          } catch (error) {
+            console.warn(`Failed to parse properties for edge ${edgeId}:`, error);
+          }
+
+          return {
+            id: edgeRow[0],
+            source_id: edgeRow[1],
+            target_id: edgeRow[2],
+            type: edgeRow[3],
+            created_at: edgeRow[4],
+            properties,
+          };
+        })
+      ).then(edges => edges.filter((edge): edge is GraphEdge => edge !== null));
+    } catch (error) {
+      console.error('Error in findEdges:', error);
+      throw new Error(`Failed to find edges: ${error}`);
+    }
+  }
 }

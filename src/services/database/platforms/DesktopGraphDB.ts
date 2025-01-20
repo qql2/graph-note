@@ -1,18 +1,11 @@
 import { BaseGraphDB } from "../core/BaseGraphDB";
 import { DatabaseError } from "../core/errors";
-import type { DatabaseConfig, SQLiteEngine } from "../core/types";
+import type { DatabaseConfig, SQLiteEngine, ElectronAPI } from "../core/types";
 
 // 声明全局 electronAPI 类型
 declare global {
   interface Window {
-    electronAPI: {
-      database: {
-        query: (sql: string, params?: any[]) => Promise<any>;
-       backup: () => Promise<string>;
-        restore: (backupPath: string) => Promise<void>;
-        listBackups: () => Promise<string[]>;
-      };
-    };
+    electronAPI: ElectronAPI;
   }
 }
 
@@ -22,6 +15,9 @@ export class DesktopGraphDB extends BaseGraphDB {
   }
 
   protected async createEngine(config: DatabaseConfig): Promise<SQLiteEngine> {
+    // 初始化主进程的数据库
+    await window.electronAPI.database.initialize();
+
     // 在桌面端，我们不需要真正的SQLite引擎实例
     // 因为所有操作都通过IPC转发到主进程
     return {
@@ -82,6 +78,23 @@ export class DesktopGraphDB extends BaseGraphDB {
       return await window.electronAPI.database.listBackups();
     } catch (error) {
       throw new DatabaseError("Failed to list backups", error as Error);
+    }
+  }
+
+  public async isReady(): Promise<boolean> {
+    try {
+      return await window.electronAPI.database.isReady();
+    } catch (error) {
+      console.error("Database health check failed:", error);
+      return false;
+    }
+  }
+
+  public async reload(): Promise<void> {
+    try {
+      await window.electronAPI.database.reload();
+    } catch (error) {
+      throw new DatabaseError("Database reload failed", error as Error);
     }
   }
 }

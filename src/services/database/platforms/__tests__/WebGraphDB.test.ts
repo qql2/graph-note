@@ -257,6 +257,7 @@ describe("WebGraphDB", () => {
         nodes = [];
         nodes.push(
           await db.addNode({
+            id: "A",
             type: "test",
             label: "A",
             x: 0,
@@ -266,6 +267,7 @@ describe("WebGraphDB", () => {
         );
         nodes.push(
           await db.addNode({
+            id: "B",
             type: "test",
             label: "B",
             x: 50,
@@ -275,6 +277,7 @@ describe("WebGraphDB", () => {
         );
         nodes.push(
           await db.addNode({
+            id: "C",
             type: "test",
             label: "C",
             x: 100,
@@ -417,6 +420,184 @@ describe("WebGraphDB", () => {
 
       const nodes = await db.getNodes();
       expect(nodes).toHaveLength(0); // 事务回滚后应该没有节点
+    });
+  });
+
+  describe("Node Queries", () => {
+    beforeEach(async () => {
+      // 创建测试节点
+      await db.addNode({
+        id: "node1",
+        type: "person",
+        label: "Alice",
+        x: 0,
+        y: 0,
+        properties: {
+          age: 25,
+          city: "Shanghai"
+        }
+      });
+
+      await db.addNode({
+        id: "node2",
+        type: "person",
+        label: "Bob",
+        x: 100,
+        y: 0,
+        properties: {
+          age: 30,
+          city: "Beijing"
+        }
+      });
+
+      await db.addNode({
+        id: "node3",
+        type: "company",
+        label: "Tech Corp",
+        x: 50,
+        y: 50,
+        properties: {
+          industry: "IT",
+          city: "Shanghai"
+        }
+      });
+    });
+
+    it("should find nodes without conditions", async () => {
+      const nodes = await db.findNodes();
+      expect(nodes).toHaveLength(3);
+    });
+
+    it("should find nodes by type", async () => {
+      const personNodes = await db.findNodes({ type: "person" });
+      expect(personNodes).toHaveLength(2);
+      expect(personNodes.map(n => n.label)).toContain("Alice");
+      expect(personNodes.map(n => n.label)).toContain("Bob");
+    });
+
+    it("should find nodes by property", async () => {
+      const shanghaiNodes = await db.findNodes({
+        properties: { city: "Shanghai" }
+      });
+      expect(shanghaiNodes).toHaveLength(2);
+      expect(shanghaiNodes.map(n => n.label)).toContain("Alice");
+      expect(shanghaiNodes.map(n => n.label)).toContain("Tech Corp");
+    });
+
+    it("should find nodes by type and property", async () => {
+      const shanghaiPersons = await db.findNodes({
+        type: "person",
+        properties: { city: "Shanghai" }
+      });
+      expect(shanghaiPersons).toHaveLength(1);
+      expect(shanghaiPersons[0].label).toBe("Alice");
+    });
+  });
+
+  describe("Edge Queries", () => {
+    let personId1: string;
+    let personId2: string;
+    let companyId: string;
+
+    beforeEach(async () => {
+      // 创建测试节点
+      personId1 = await db.addNode({
+        id: "person1",
+        type: "person",
+        label: "Alice",
+        x: 0,
+        y: 0,
+        properties: {}
+      });
+
+      personId2 = await db.addNode({
+        id: "person2",
+        type: "person",
+        label: "Bob",
+        x: 100,
+        y: 0,
+        properties: {}
+      });
+
+      companyId = await db.addNode({
+        id: "company1",
+        type: "company",
+        label: "Tech Corp",
+        x: 50,
+        y: 50,
+        properties: {}
+      });
+
+      // 创建测试边
+      await db.addEdge({
+        id: "edge1",
+        source_id: personId1,
+        target_id: companyId,
+        type: "WORKS_AT",
+        properties: {
+          since: 2020,
+          role: "Engineer"
+        }
+      });
+
+      await db.addEdge({
+        id: "edge2",
+        source_id: personId2,
+        target_id: companyId,
+        type: "WORKS_AT",
+        properties: {
+          since: 2021,
+          role: "Manager"
+        }
+      });
+
+      await db.addEdge({
+        id: "edge3",
+        source_id: personId1,
+        target_id: personId2,
+        type: "KNOWS",
+        properties: {
+          since: 2019
+        }
+      });
+    });
+
+    it("should find edges without conditions", async () => {
+      const edges = await db.findEdges();
+      expect(edges).toHaveLength(3);
+    });
+
+    it("should find edges by type", async () => {
+      const worksAtEdges = await db.findEdges({ type: "WORKS_AT" });
+      expect(worksAtEdges).toHaveLength(2);
+    });
+
+    it("should find edges by source node", async () => {
+      const aliceEdges = await db.findEdges({ source_id: personId1 });
+      expect(aliceEdges).toHaveLength(2);
+    });
+
+    it("should find edges by target node", async () => {
+      const toCompanyEdges = await db.findEdges({ target_id: companyId });
+      expect(toCompanyEdges).toHaveLength(2);
+    });
+
+    it("should find edges by property", async () => {
+      const edges2020 = await db.findEdges({
+        properties: { since: 2020 }
+      });
+      expect(edges2020).toHaveLength(1);
+      expect(edges2020[0].properties?.role).toBe("Engineer");
+    });
+
+    it("should find edges by multiple conditions", async () => {
+      const aliceWorksAtEdges = await db.findEdges({
+        type: "WORKS_AT",
+        source_id: personId1,
+        properties: { since: 2020 }
+      });
+      expect(aliceWorksAtEdges).toHaveLength(1);
+      expect(aliceWorksAtEdges[0].target_id).toBe(companyId);
     });
   });
 });

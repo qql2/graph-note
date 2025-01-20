@@ -3,21 +3,13 @@ import { _electron as electron } from "@playwright/test";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { GraphNode } from "../../core/types";
+import { GraphNode, ElectronAPI } from "../../core/types";
 import { databaseService, DatabaseService } from "../../DatabaseService";
 
 // 扩展 Playwright 的 Window 类型
 declare global {
   interface Window {
-    electronAPI: {
-      database: {
-        query: (sql: string, params?: any[]) => Promise<any>;
-        backup: () => Promise<string>;
-        restore: (backupPath: string) => Promise<void>;
-        listBackups: () => Promise<string[]>;
-      };
-
-    };
+    electronAPI: ElectronAPI;
   }
 }
 
@@ -59,7 +51,8 @@ test.describe("DesktopGraphDB", () => {
     
     await window.evaluate(async () => {
       const { database } = window.electronAPI;
-      
+      await database.initialize();
+
       // 创建节点表
       await database.query(`
         CREATE TABLE IF NOT EXISTS nodes (
@@ -448,6 +441,185 @@ test.describe("DesktopGraphDB", () => {
     });
 
     expect(remainingEdges).toHaveLength(0);
+  });
+
+  test("should handle node queries", async () => {
+    const window = await electronApp.firstWindow();
+
+    // 创建测试节点
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      
+      // 创建测试节点
+      await database.query(`
+        INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
+        VALUES 
+          ('node1', 'person', 'Alice', 0, 0, datetime('now'), datetime('now')),
+          ('node2', 'person', 'Bob', 100, 0, datetime('now'), datetime('now')),
+          ('node3', 'company', 'Tech Corp', 50, 50, datetime('now'), datetime('now'))
+      `);
+
+      // 添加节点属性
+      await database.query(`
+        INSERT INTO node_properties (node_id, key, value)
+        VALUES 
+          ('node1', 'age', '25'),
+          ('node1', 'city', '"Shanghai"'),
+          ('node2', 'age', '30'),
+          ('node2', 'city', '"Beijing"'),
+          ('node3', 'industry', '"IT"'),
+          ('node3', 'city', '"Shanghai"')
+      `);
+    });
+
+    // 测试无条件查询
+    const allNodes = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`
+        SELECT 
+          n.*,
+          (
+            SELECT json_group_object(key, value)
+            FROM node_properties
+            WHERE node_id = n.id
+          ) as props
+        FROM nodes n
+      `);
+    });
+    expect(allNodes).toHaveLength(3);
+
+    // 测试按类型查询
+    const personNodes = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`
+        SELECT 
+          n.*,
+          (
+            SELECT json_group_object(key, value)
+            FROM node_properties
+            WHERE node_id = n.id
+          ) as props
+        FROM nodes n
+        WHERE n.type = 'person'
+      `);
+    });
+    expect(personNodes).toHaveLength(2);
+
+    // 测试按属性查询
+    const shanghaiNodes = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`
+        SELECT 
+          n.*,
+          (
+            SELECT json_group_object(key, value)
+            FROM node_properties
+            WHERE node_id = n.id
+          ) as props
+        FROM nodes n
+        WHERE EXISTS (
+          SELECT 1 FROM node_properties 
+          WHERE node_id = n.id 
+          AND key = 'city' 
+          AND value = '"Shanghai"'
+        )
+      `);
+    });
+    expect(shanghaiNodes).toHaveLength(2);
+  });
+
+  test("should handle edge queries", async () => {
+    const window = await electronApp.firstWindow();
+
+    // 创建测试数据
+    await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      
+      // 创建节点
+      await database.query(`
+        INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
+        VALUES 
+          ('person1', 'person', 'Alice', 0, 0, datetime('now'), datetime('now')),
+          ('person2', 'person', 'Bob', 100, 0, datetime('now'), datetime('now')),
+          ('company1', 'company', 'Tech Corp', 50, 50, datetime('now'), datetime('now'))
+      `);
+
+      // 创建边
+      await database.query(`
+        INSERT INTO relationships (id, source_id, target_id, type, created_at)
+        VALUES 
+          ('edge1', 'person1', 'company1', 'WORKS_AT', datetime('now')),
+          ('edge2', 'person2', 'company1', 'WORKS_AT', datetime('now')),
+          ('edge3', 'person1', 'person2', 'KNOWS', datetime('now'))
+      `);
+
+      // 添加边属性
+      await database.query(`
+        INSERT INTO relationship_properties (relationship_id, key, value)
+        VALUES 
+          ('edge1', 'since', '2020'),
+          ('edge1', 'role', 'Engineer'),
+          ('edge2', 'since', '2021'),
+          ('edge2', 'role', 'Manager'),
+          ('edge3', 'since', '2019')
+      `);
+    });
+
+    // 测试无条件查询
+    const allEdges = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`
+        SELECT 
+          r.*,
+          (
+            SELECT json_group_object(key, value)
+            FROM relationship_properties
+            WHERE relationship_id = r.id
+          ) as props
+        FROM relationships r
+      `);
+    });
+    expect(allEdges).toHaveLength(3);
+
+    // 测试按类型查询
+    const worksAtEdges = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`
+        SELECT 
+          r.*,
+          (
+            SELECT json_group_object(key, value)
+            FROM relationship_properties
+            WHERE relationship_id = r.id
+          ) as props
+        FROM relationships r
+        WHERE r.type = 'WORKS_AT'
+      `);
+    });
+    expect(worksAtEdges).toHaveLength(2);
+
+    // 测试按属性查询
+    const edges2020 = await window.evaluate(async () => {
+      const { database } = window.electronAPI;
+      return await database.query(`
+        SELECT 
+          r.*,
+          (
+            SELECT json_group_object(key, value)
+            FROM relationship_properties
+            WHERE relationship_id = r.id
+          ) as props
+        FROM relationships r
+        WHERE EXISTS (
+          SELECT 1 FROM relationship_properties 
+          WHERE relationship_id = r.id 
+          AND key = 'since' 
+          AND value = '2020'
+        )
+      `);
+    });
+    expect(edges2020).toHaveLength(1);
+    expect(JSON.parse(edges2020[0].props).role).toBe("Engineer");
   });
 });
 

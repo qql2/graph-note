@@ -91,6 +91,18 @@ const GraphEditor = forwardRef<GraphEditorRef, GraphEditorProps>(({ onNodeMoved,
 
     try {
       const db = databaseService.getDatabase();
+      
+      // 检查数据库是否就绪
+      const isReady = await db.isReady();
+      if (!isReady) {
+        console.log("[GraphEditor] Database not ready, initializing...");
+        await db.initialize({});
+        const readyAfterInit = await db.isReady();
+        if (!readyAfterInit) {
+          throw new Error("Database initialization failed");
+        }
+      }
+
       const nodes = await db.getNodes();
       console.log('Loaded nodes:', nodes);
       const edges = await db.getEdges();

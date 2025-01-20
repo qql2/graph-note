@@ -1,17 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-
-// 数据库 API 类型定义
-interface DatabaseAPI {
-  query: (sql: string, params?: any[]) => Promise<any>;
-  backup: () => Promise<string>;
-  restore: (backupPath: string) => Promise<void>;
-  listBackups: () => Promise<string[]>;
-}
-
-// 完整的 API 类型定义
-interface ElectronAPI {
-  database: DatabaseAPI;
-}
+import { DatabaseAPI, ElectronAPI } from "../../src/services/database/core/types";
 
 // 数据库操作接口实现
 const databaseAPI: DatabaseAPI = {
@@ -23,6 +11,12 @@ const databaseAPI: DatabaseAPI = {
     ipcRenderer.invoke("database:restore", backupPath),
   listBackups: () => 
     ipcRenderer.invoke("database:listBackups"),
+  reload: () =>
+    ipcRenderer.invoke("database:reload"),
+  initialize: () =>
+    ipcRenderer.invoke("database:initialize"),
+  isReady: () =>
+    ipcRenderer.invoke("database:isReady"),
 };
 
 // 完整的 API 实现

@@ -22,6 +22,7 @@ export interface DatabaseConfig {
   storage_path?: string;
   verbose?: boolean;
   wasm_path?: string;
+  platform?: "web" | "desktop";
 }
 
 export interface Operation {
@@ -46,15 +47,25 @@ export enum DeleteMode {
 }
 
 export interface GraphDatabaseInterface {
-  initialize(config: DatabaseConfig): Promise<void>;
+  initialize(config: DatabaseConfig): void;
   close(): Promise<void>;
   addNode(node: Omit<GraphNode, "created_at" | "updated_at">): Promise<string>;
   updateNode(id: string, updates: Partial<GraphNode>): Promise<void>;
   deleteNode(id: string, mode?: DeleteMode): Promise<void>;
   getNodes(): Promise<GraphNode[]>;
+  findNodes(conditions?: {
+    type?: string;
+    properties?: Record<string, any>;
+  }): Promise<GraphNode[]>;
   addEdge(edge: Omit<GraphEdge, "created_at">): Promise<string>;
   deleteEdge(id: string): Promise<void>;
   getEdges(): Promise<GraphEdge[]>;
+  findEdges(conditions?: {
+    type?: string;
+    source_id?: string;
+    target_id?: string;
+    properties?: Record<string, any>;
+  }): Promise<GraphEdge[]>;
   updateEdge(id: string, updates: Partial<GraphEdge>): Promise<void>;
   findPath(
     startId: string,
@@ -67,4 +78,19 @@ export interface GraphDatabaseInterface {
   createBackup(): Promise<string>;
   restoreFromBackup(backupId: string): Promise<void>;
   listBackups(): Promise<string[]>;
+  isReady(): Promise<boolean>;
+}
+
+export interface DatabaseAPI {
+  query: (sql: string, params?: any[]) => Promise<any>;
+  backup: () => Promise<string>;
+  restore: (backupPath: string) => Promise<void>;
+  listBackups: () => Promise<string[]>;
+  reload: () => Promise<void>;
+  initialize: () => Promise<void>;
+  isReady: () => Promise<boolean>;
+}
+
+export interface ElectronAPI {
+  database: DatabaseAPI;
 }
