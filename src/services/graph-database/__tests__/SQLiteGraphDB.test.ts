@@ -4,16 +4,44 @@ import { GraphNode, GraphEdge, DeleteMode } from "../core/types";
 import sqliteService from "../../sqliteService";
 import "./setup";
 
+// Access the mocked connection through the module's mock implementation
+let mockConnection: any;
+
+// Create a direct mock for the sqliteService
+vi.mock("../../sqliteService", () => {
+  mockConnection = {
+    query: vi.fn(),
+    run: vi.fn(),
+    open: vi.fn(),
+    close: vi.fn(),
+    beginTransaction: vi.fn(),
+    commitTransaction: vi.fn(),
+    rollbackTransaction: vi.fn(),
+    isDBOpen: vi.fn().mockResolvedValue(true),
+  };
+
+  return {
+    default: {
+      getPlatform: vi.fn().mockReturnValue("web"),
+      initWebStore: vi.fn().mockResolvedValue(undefined),
+      openDatabase: vi.fn().mockResolvedValue(mockConnection),
+      closeDatabase: vi.fn().mockResolvedValue(undefined),
+      saveToStore: vi.fn().mockResolvedValue(undefined),
+      saveToLocalDisk: vi.fn().mockResolvedValue(undefined),
+      isConnection: vi.fn().mockResolvedValue({ result: true }),
+      transaction: vi.fn().mockImplementation(async (_, cb) => {
+        return await cb(mockConnection);
+      }),
+    },
+  };
+});
+
 describe("SQLiteGraphDB", () => {
   let db: SQLiteGraphDB;
-  let mockConnection: any;
 
   beforeEach(async () => {
     // 清理模拟状态
     vi.clearAllMocks();
-    
-    // 获取模拟SQLite连接
-    mockConnection = (sqliteService as any).getMockConnection();
     
     // 为了测试getNodes，我们预设query的返回值
     mockConnection.query.mockImplementation((sql: string) => {
@@ -303,6 +331,42 @@ describe("SQLiteGraphDB", () => {
         expect.stringContaining("SELECT * FROM relationships"),
         undefined
       );
+    });
+  });
+
+  describe("事务操作", () => {
+    it("应该使用SQLite事务API执行操作", async () => {
+      const transactionSpy = vi.spyOn(sqliteService, 'transaction');
+      
+      await db.addNode({
+        id: "transaction-test-node",
+        type: "test",
+        label: "事务测试",
+        x: 100,
+        y: 100
+      });
+      
+      expect(transactionSpy).toHaveBeenCalled();
+      expect(mockConnection.run).toHaveBeenCalledWith(
+        expect.stringContaining("INSERT INTO nodes"),
+        expect.arrayContaining(["transaction-test-node"])
+      );
+    });
+    
+    it("应该在事务失败时抛出错误", async () => {
+      // 模拟失败的运行情况
+      mockConnection.run.mockImplementationOnce(() => {
+        throw new Error("模拟的数据库错误");
+      });
+      
+      // 期望在调用addNode时抛出错误
+      await expect(db.addNode({
+        id: "error-node",
+        type: "test",
+        label: "错误测试",
+        x: 200,
+        y: 200
+      })).rejects.toThrow();
     });
   });
 }); 

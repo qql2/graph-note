@@ -16,6 +16,8 @@ import {
   TransactionError,
 } from "./errors";
 
+// TODO: 嵌套事务的处理交给transaction Service
+
 export abstract class BaseGraphDB implements GraphDatabaseInterface {
   protected db: SQLiteEngine | null = null;
   protected config: DatabaseConfig | null = null;
@@ -72,14 +74,15 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
   // 事务支持
   private inTransaction = false;
-
+  
+  // 这些方法保留用于兼容性，实际上我们优先使用SQLite插件的transaction方法
   async beginTransaction(): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     if (this.inTransaction) throw new TransactionError("Transaction already started");
 
     try {
       this.inTransaction = true;
-      await this.db.run("BEGIN TRANSACTION");
+      await this.db.beginTransaction();
     } catch (error) {
       this.inTransaction = false;
       throw new TransactionError("Failed to begin transaction", error as Error);
@@ -91,7 +94,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     if (!this.inTransaction) throw new TransactionError("No transaction in progress");
 
     try {
-      await this.db.run("COMMIT");
+      await this.db.commitTransaction();
       this.inTransaction = false;
       await this.persistData();
     } catch (error) {
@@ -104,13 +107,14 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     if (!this.inTransaction) throw new TransactionError("No transaction in progress");
 
     try {
-      await this.db.run("ROLLBACK");
+      await this.db.rollbackTransaction();
       this.inTransaction = false;
     } catch (error) {
       throw new TransactionError("Failed to rollback transaction", error as Error);
     }
   }
 
+  // 不要再额外包一层了, 直接用db.transaction方法
   protected async withTransaction<T>(operation: () => Promise<T>): Promise<T> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     
@@ -118,16 +122,14 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     if (this.inTransaction) {
       return await operation();
     }
-
+    
     try {
-      await this.beginTransaction();
-      const result = await operation();
-      await this.commitTransaction();
-      return result;
+      return await this.db.transaction(async () => {
+        const result = await operation();
+        await this.persistData();
+        return result;
+      });
     } catch (error) {
-      if (this.inTransaction) {
-        await this.rollbackTransaction();
-      }
       throw error;
     }
   }
@@ -139,177 +141,246 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     const id = node.id || uuidv4();
     const now = new Date().toISOString();
 
-    return this.withTransaction(async () => {
-      try {
-        // 插入节点基本信息
-        await this.db!.run(
-          `INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [id, node.type, node.label, node.x, node.y, now, now]
-        );
+    // 定义添加节点的操作
+    const addNodeOperation = async (db: SQLiteEngine) => {
+      // 插入节点基本信息
+      await db.run(
+        `INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, node.type, node.label, node.x, node.y, now, now]
+      );
 
-        // 插入节点属性
-        if (node.properties) {
-          for (const [key, value] of Object.entries(node.properties)) {
-            await this.db!.run(
-              `INSERT INTO node_properties (node_id, key, value)
-               VALUES (?, ?, ?)`,
-              [id, key, JSON.stringify(value)]
-            );
-          }
+      // 插入节点属性
+      if (node.properties) {
+        for (const [key, value] of Object.entries(node.properties)) {
+          await db.run(
+            `INSERT INTO node_properties (node_id, key, value)
+             VALUES (?, ?, ?)`,
+            [id, key, JSON.stringify(value)]
+          );
         }
+      }
 
-        return id;
+      return id;
+    };
+
+    // 如果已经在事务中，直接执行操作
+    if (this.inTransaction) {
+      try {
+        return await addNodeOperation(this.db);
       } catch (error) {
         throw new DatabaseError(`Failed to add node: ${error}`, error as Error);
       }
-    });
+    }
+
+    // 否则，使用事务执行操作
+    try {
+      return await this.db.transaction(async () => {
+        try {
+          const result = await addNodeOperation(this.db!);
+          await this.persistData();
+          return result;
+        } catch (error) {
+          throw new DatabaseError(`Failed to add node: ${error}`, error as Error);
+        }
+      });
+    } catch (error) {
+      throw error;
+    }
   }
 
   async updateNode(id: string, updates: Partial<GraphNode>): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
-    return this.withTransaction(async () => {
-      try {
-        // 检查节点是否存在
-        const nodeExists = await this.db!.exec(
-          "SELECT 1 FROM nodes WHERE id = ?",
-          [id]
-        );
-        
-        if (!nodeExists || nodeExists.length === 0) {
-          throw new NodeNotFoundError(id);
-        }
-
-        // 更新节点基本属性
-        if (
-          updates.label !== undefined ||
-          updates.type !== undefined ||
-          updates.x !== undefined ||
-          updates.y !== undefined
-        ) {
-          const sets: string[] = [];
-          const params: any[] = [];
-
-          if (updates.label !== undefined) {
-            sets.push("label = ?");
-            params.push(updates.label);
-          }
-          if (updates.type !== undefined) {
-            sets.push("type = ?");
-            params.push(updates.type);
-          }
-          if (updates.x !== undefined) {
-            sets.push("x = ?");
-            params.push(updates.x);
-          }
-          if (updates.y !== undefined) {
-            sets.push("y = ?");
-            params.push(updates.y);
-          }
-
-          if (sets.length > 0) {
-            sets.push("updated_at = ?");
-            params.push(new Date().toISOString());
-            params.push(id);
-
-            await this.db!.run(
-              `UPDATE nodes SET ${sets.join(", ")} WHERE id = ?`,
-              params
-            );
-          }
-        }
-
-        // 更新节点属性
-        if (updates.properties) {
-          // 删除现有属性
-          await this.db!.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
-          
-          // 插入新属性
-          for (const [key, value] of Object.entries(updates.properties)) {
-            await this.db!.run(
-              `INSERT INTO node_properties (node_id, key, value)
-               VALUES (?, ?, ?)`,
-              [id, key, JSON.stringify(value)]
-            );
-          }
-        }
-      } catch (error) {
-        if (error instanceof NodeNotFoundError) {
-          throw error;
-        }
-        throw new DatabaseError(`Failed to update node: ${error}`, error as Error);
+    // 创建更新操作的函数
+    const updateOperation = async (db: SQLiteEngine) => {
+      // 检查节点是否存在
+      const nodeExistsResult = await db.query(
+        "SELECT 1 FROM nodes WHERE id = ?",
+        [id]
+      );
+      
+      if (!nodeExistsResult?.values || nodeExistsResult.values.length === 0) {
+        throw new NodeNotFoundError(id);
       }
-    });
+
+      // 更新节点基本属性
+      if (
+        updates.label !== undefined ||
+        updates.type !== undefined ||
+        updates.x !== undefined ||
+        updates.y !== undefined
+      ) {
+        const sets: string[] = [];
+        const params: any[] = [];
+
+        if (updates.label !== undefined) {
+          sets.push("label = ?");
+          params.push(updates.label);
+        }
+        if (updates.type !== undefined) {
+          sets.push("type = ?");
+          params.push(updates.type);
+        }
+        if (updates.x !== undefined) {
+          sets.push("x = ?");
+          params.push(updates.x);
+        }
+        if (updates.y !== undefined) {
+          sets.push("y = ?");
+          params.push(updates.y);
+        }
+
+        if (sets.length > 0) {
+          sets.push("updated_at = ?");
+          params.push(new Date().toISOString());
+          params.push(id);
+
+          await db.run(
+            `UPDATE nodes SET ${sets.join(", ")} WHERE id = ?`,
+            params
+          );
+        }
+      }
+
+      // 更新节点属性
+      if (updates.properties) {
+        // 删除现有属性
+        await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+        
+        // 插入新属性
+        for (const [key, value] of Object.entries(updates.properties)) {
+          await db.run(
+            `INSERT INTO node_properties (node_id, key, value)
+             VALUES (?, ?, ?)`,
+            [id, key, JSON.stringify(value)]
+          );
+        }
+      }
+    };
+
+    try {
+      // 如果已经在事务中，直接执行操作
+      if (this.inTransaction) {
+        try {
+          await updateOperation(this.db);
+        } catch (error) {
+          if (error instanceof NodeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to update node: ${error}`, error as Error);
+        }
+        return;
+      }
+
+      // 否则，使用事务执行操作
+      await this.db.transaction(async () => {
+        try {
+          await updateOperation(this.db!);
+          await this.persistData();
+        } catch (error) {
+          if (error instanceof NodeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to update node: ${error}`, error as Error);
+        }
+      });
+    } catch (error) {
+      throw error;
+    }
   }
 
   async deleteNode(id: string, mode: DeleteMode = DeleteMode.KEEP_CONNECTED): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
-    return this.withTransaction(async () => {
-      try {
-        // 检查节点是否存在
-        const nodeExists = await this.db!.exec(
-          "SELECT 1 FROM nodes WHERE id = ?",
+    // 创建删除操作的函数
+    const deleteOperation = async (db: SQLiteEngine) => {
+      // 检查节点是否存在
+      const nodeExistsResult = await db.query(
+        "SELECT 1 FROM nodes WHERE id = ?",
+        [id]
+      );
+      
+      if (!nodeExistsResult?.values || nodeExistsResult.values.length === 0) {
+        throw new NodeNotFoundError(id);
+      }
+
+      if (mode === DeleteMode.CASCADE) {
+        // 级联删除模式：删除所有相关数据
+        // 1. 删除与节点相关的所有边的属性
+        await db.run(
+          `DELETE FROM relationship_properties 
+           WHERE relationship_id IN (
+             SELECT id FROM relationships 
+             WHERE source_id = ? OR target_id = ?
+           )`,
+          [id, id]
+        );
+
+        // 2. 删除与节点相关的所有边
+        await db.run(
+          "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
+          [id, id]
+        );
+
+        // 3. 删除节点的属性
+        await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+
+        // 4. 删除节点本身
+        await db.run("DELETE FROM nodes WHERE id = ?", [id]);
+      } else {
+        // 保留关联数据模式：只删除节点本身和它的属性
+        // 1. 删除节点的属性
+        await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+
+        // 2. 将相关边的源节点或目标节点设为 NULL
+        await db.run(
+          `UPDATE relationships 
+           SET source_id = NULL 
+           WHERE source_id = ?`,
           [id]
         );
-        
-        if (!nodeExists || nodeExists.length === 0) {
-          throw new NodeNotFoundError(id);
-        }
+        await db.run(
+          `UPDATE relationships 
+           SET target_id = NULL 
+           WHERE target_id = ?`,
+          [id]
+        );
 
-        if (mode === DeleteMode.CASCADE) {
-          // 级联删除模式：删除所有相关数据
-          // 1. 删除与节点相关的所有边的属性
-          await this.db!.run(
-            `DELETE FROM relationship_properties 
-             WHERE relationship_id IN (
-               SELECT id FROM relationships 
-               WHERE source_id = ? OR target_id = ?
-             )`,
-            [id, id]
-          );
-
-          // 2. 删除与节点相关的所有边
-          await this.db!.run(
-            "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
-            [id, id]
-          );
-
-          // 3. 删除节点的属性
-          await this.db!.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
-
-          // 4. 删除节点本身
-          await this.db!.run("DELETE FROM nodes WHERE id = ?", [id]);
-        } else {
-          // 保留关联数据模式：只删除节点本身和它的属性
-          // 1. 删除节点的属性
-          await this.db!.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
-
-          // 2. 将相关边的源节点或目标节点设为 NULL
-          await this.db!.run(
-            `UPDATE relationships 
-             SET source_id = NULL 
-             WHERE source_id = ?`,
-            [id]
-          );
-          await this.db!.run(
-            `UPDATE relationships 
-             SET target_id = NULL 
-             WHERE target_id = ?`,
-            [id]
-          );
-
-          // 3. 删除节点本身
-          await this.db!.run("DELETE FROM nodes WHERE id = ?", [id]);
-        }
-      } catch (error) {
-        if (error instanceof NodeNotFoundError) {
-          throw error;
-        }
-        throw new DatabaseError(`Failed to delete node: ${error}`, error as Error);
+        // 3. 删除节点本身
+        await db.run("DELETE FROM nodes WHERE id = ?", [id]);
       }
-    });
+    };
+
+    try {
+      // 如果已经在事务中，直接执行操作
+      if (this.inTransaction) {
+        try {
+          await deleteOperation(this.db);
+        } catch (error) {
+          if (error instanceof NodeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to delete node: ${error}`, error as Error);
+        }
+        return;
+      }
+
+      // 否则，使用事务执行操作
+      await this.db.transaction(async () => {
+        try {
+          await deleteOperation(this.db!);
+          await this.persistData();
+        } catch (error) {
+          if (error instanceof NodeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to delete node: ${error}`, error as Error);
+        }
+      });
+    } catch (error) {
+      throw error;
+    }
   }
 
   async getNodes(): Promise<GraphNode[]> {
@@ -317,15 +388,15 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     try {
       // 获取所有节点基本信息
-      const nodesResult = await this.db.exec("SELECT * FROM nodes");
+      const nodesResult = await this.db.query("SELECT * FROM nodes");
       
-      if (!nodesResult || nodesResult.length === 0) {
+      if (!nodesResult?.values || nodesResult.values.length === 0) {
         return [];
       }
 
       const nodes: GraphNode[] = [];
       
-      for (const nodeRow of nodesResult) {
+      for (const nodeRow of nodesResult.values) {
         const node: GraphNode = {
           id: nodeRow[0],
           type: nodeRow[1],
@@ -338,13 +409,13 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         };
 
         // 获取节点属性
-        const propsResult = await this.db.exec(
+        const propsResult = await this.db.query(
           "SELECT key, value FROM node_properties WHERE node_id = ?",
           [node.id]
         );
         
-        if (propsResult && propsResult.length > 0) {
-          for (const propRow of propsResult) {
+        if (propsResult?.values && propsResult.values.length > 0) {
+          for (const propRow of propsResult.values) {
             try {
               node.properties![propRow[0]] = JSON.parse(propRow[1]);
             } catch (e) {
@@ -369,184 +440,256 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     const id = edge.id || uuidv4();
     const now = new Date().toISOString();
 
-    return this.withTransaction(async () => {
-      try {
-        // 验证源节点和目标节点存在
-        if (edge.source_id) {
-          const sourceExists = await this.db!.exec(
-            "SELECT 1 FROM nodes WHERE id = ?",
-            [edge.source_id]
-          );
-          
-          if (!sourceExists || sourceExists.length === 0) {
-            throw new NodeNotFoundError(edge.source_id);
-          }
-        }
-        
-        if (edge.target_id) {
-          const targetExists = await this.db!.exec(
-            "SELECT 1 FROM nodes WHERE id = ?",
-            [edge.target_id]
-          );
-          
-          if (!targetExists || targetExists.length === 0) {
-            throw new NodeNotFoundError(edge.target_id);
-          }
-        }
-
-        // 插入边基本信息
-        await this.db!.run(
-          `INSERT INTO relationships (id, source_id, target_id, type, created_at)
-           VALUES (?, ?, ?, ?, ?)`,
-          [id, edge.source_id, edge.target_id, edge.type, now]
+    // 创建添加边的操作
+    const addEdgeOperation = async (db: SQLiteEngine): Promise<string> => {
+      // 验证源节点和目标节点存在
+      if (edge.source_id) {
+        const sourceExistsResult = await db.query(
+          "SELECT 1 FROM nodes WHERE id = ?",
+          [edge.source_id]
         );
-
-        // 插入边属性
-        if (edge.properties) {
-          for (const [key, value] of Object.entries(edge.properties)) {
-            await this.db!.run(
-              `INSERT INTO relationship_properties (relationship_id, key, value)
-               VALUES (?, ?, ?)`,
-              [id, key, JSON.stringify(value)]
-            );
-          }
+        
+        if (!sourceExistsResult?.values || sourceExistsResult.values.length === 0) {
+          throw new NodeNotFoundError(edge.source_id);
         }
-
-        return id;
-      } catch (error) {
-        if (error instanceof NodeNotFoundError) {
-          throw error;
-        }
-        throw new DatabaseError(`Failed to add edge: ${error}`, error as Error);
       }
-    });
+      
+      if (edge.target_id) {
+        const targetExistsResult = await db.query(
+          "SELECT 1 FROM nodes WHERE id = ?",
+          [edge.target_id]
+        );
+        
+        if (!targetExistsResult?.values || targetExistsResult.values.length === 0) {
+          throw new NodeNotFoundError(edge.target_id);
+        }
+      }
+
+      // 插入边基本信息
+      await db.run(
+        `INSERT INTO relationships (id, source_id, target_id, type, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [id, edge.source_id, edge.target_id, edge.type, now]
+      );
+
+      // 插入边属性
+      if (edge.properties) {
+        for (const [key, value] of Object.entries(edge.properties)) {
+          await db.run(
+            `INSERT INTO relationship_properties (relationship_id, key, value)
+             VALUES (?, ?, ?)`,
+            [id, key, JSON.stringify(value)]
+          );
+        }
+      }
+
+      return id;
+    };
+
+    try {
+      // 如果已经在事务中，直接执行操作
+      if (this.inTransaction) {
+        try {
+          return await addEdgeOperation(this.db);
+        } catch (error) {
+          if (error instanceof NodeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to add edge: ${error}`, error as Error);
+        }
+      }
+
+      // 否则，使用事务执行操作
+      return await this.db.transaction(async () => {
+        try {
+          const result = await addEdgeOperation(this.db!);
+          await this.persistData();
+          return result;
+        } catch (error) {
+          if (error instanceof NodeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to add edge: ${error}`, error as Error);
+        }
+      });
+    } catch (error) {
+      throw error;
+    }
   }
 
   async updateEdge(id: string, updates: Partial<GraphEdge>): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
-    return this.withTransaction(async () => {
-      try {
-        // 检查边是否存在
-        const edgeExists = await this.db!.exec(
-          "SELECT 1 FROM relationships WHERE id = ?",
+    // 创建更新边的操作
+    const updateEdgeOperation = async (db: SQLiteEngine): Promise<void> => {
+      // 检查边是否存在
+      const edgeExistsResult = await db.query(
+        "SELECT 1 FROM relationships WHERE id = ?",
+        [id]
+      );
+      
+      if (!edgeExistsResult?.values || edgeExistsResult.values.length === 0) {
+        throw new EdgeNotFoundError(id);
+      }
+
+      // 更新边基本属性
+      if (
+        updates.source_id !== undefined ||
+        updates.target_id !== undefined ||
+        updates.type !== undefined
+      ) {
+        // 验证源节点和目标节点
+        if (updates.source_id) {
+          const sourceExistsResult = await db.query(
+            "SELECT 1 FROM nodes WHERE id = ?",
+            [updates.source_id]
+          );
+          
+          if (!sourceExistsResult?.values || sourceExistsResult.values.length === 0) {
+            throw new NodeNotFoundError(updates.source_id);
+          }
+        }
+        
+        if (updates.target_id) {
+          const targetExistsResult = await db.query(
+            "SELECT 1 FROM nodes WHERE id = ?",
+            [updates.target_id]
+          );
+          
+          if (!targetExistsResult?.values || targetExistsResult.values.length === 0) {
+            throw new NodeNotFoundError(updates.target_id);
+          }
+        }
+
+        const sets: string[] = [];
+        const params: any[] = [];
+
+        if (updates.source_id !== undefined) {
+          sets.push("source_id = ?");
+          params.push(updates.source_id);
+        }
+        if (updates.target_id !== undefined) {
+          sets.push("target_id = ?");
+          params.push(updates.target_id);
+        }
+        if (updates.type !== undefined) {
+          sets.push("type = ?");
+          params.push(updates.type);
+        }
+
+        if (sets.length > 0) {
+          params.push(id);
+          await db.run(
+            `UPDATE relationships SET ${sets.join(", ")} WHERE id = ?`,
+            params
+          );
+        }
+      }
+
+      // 更新边属性
+      if (updates.properties) {
+        // 删除现有属性
+        await db.run(
+          "DELETE FROM relationship_properties WHERE relationship_id = ?", 
           [id]
         );
         
-        if (!edgeExists || edgeExists.length === 0) {
-          throw new EdgeNotFoundError(id);
-        }
-
-        // 更新边基本属性
-        if (
-          updates.source_id !== undefined ||
-          updates.target_id !== undefined ||
-          updates.type !== undefined
-        ) {
-          // 验证源节点和目标节点
-          if (updates.source_id) {
-            const sourceExists = await this.db!.exec(
-              "SELECT 1 FROM nodes WHERE id = ?",
-              [updates.source_id]
-            );
-            
-            if (!sourceExists || sourceExists.length === 0) {
-              throw new NodeNotFoundError(updates.source_id);
-            }
-          }
-          
-          if (updates.target_id) {
-            const targetExists = await this.db!.exec(
-              "SELECT 1 FROM nodes WHERE id = ?",
-              [updates.target_id]
-            );
-            
-            if (!targetExists || targetExists.length === 0) {
-              throw new NodeNotFoundError(updates.target_id);
-            }
-          }
-
-          const sets: string[] = [];
-          const params: any[] = [];
-
-          if (updates.source_id !== undefined) {
-            sets.push("source_id = ?");
-            params.push(updates.source_id);
-          }
-          if (updates.target_id !== undefined) {
-            sets.push("target_id = ?");
-            params.push(updates.target_id);
-          }
-          if (updates.type !== undefined) {
-            sets.push("type = ?");
-            params.push(updates.type);
-          }
-
-          if (sets.length > 0) {
-            params.push(id);
-            await this.db!.run(
-              `UPDATE relationships SET ${sets.join(", ")} WHERE id = ?`,
-              params
-            );
-          }
-        }
-
-        // 更新边属性
-        if (updates.properties) {
-          // 删除现有属性
-          await this.db!.run(
-            "DELETE FROM relationship_properties WHERE relationship_id = ?", 
-            [id]
+        // 插入新属性
+        for (const [key, value] of Object.entries(updates.properties)) {
+          await db.run(
+            `INSERT INTO relationship_properties (relationship_id, key, value)
+             VALUES (?, ?, ?)`,
+            [id, key, JSON.stringify(value)]
           );
-          
-          // 插入新属性
-          for (const [key, value] of Object.entries(updates.properties)) {
-            await this.db!.run(
-              `INSERT INTO relationship_properties (relationship_id, key, value)
-               VALUES (?, ?, ?)`,
-              [id, key, JSON.stringify(value)]
-            );
-          }
         }
-      } catch (error) {
-        if (error instanceof NodeNotFoundError || error instanceof EdgeNotFoundError) {
-          throw error;
-        }
-        throw new DatabaseError(`Failed to update edge: ${error}`, error as Error);
       }
-    });
+    };
+
+    try {
+      // 如果已经在事务中，直接执行操作
+      if (this.inTransaction) {
+        try {
+          await updateEdgeOperation(this.db);
+        } catch (error) {
+          if (error instanceof NodeNotFoundError || error instanceof EdgeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to update edge: ${error}`, error as Error);
+        }
+        return;
+      }
+
+      // 否则，使用事务执行操作
+      await this.db.transaction(async () => {
+        try {
+          await updateEdgeOperation(this.db!);
+          await this.persistData();
+        } catch (error) {
+          if (error instanceof NodeNotFoundError || error instanceof EdgeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to update edge: ${error}`, error as Error);
+        }
+      });
+    } catch (error) {
+      throw error;
+    }
   }
 
   async deleteEdge(id: string): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
-    return this.withTransaction(async () => {
-      try {
-        // 检查边是否存在
-        const edgeExists = await this.db!.exec(
-          "SELECT 1 FROM relationships WHERE id = ?",
-          [id]
-        );
-        
-        if (!edgeExists || edgeExists.length === 0) {
-          throw new EdgeNotFoundError(id);
-        }
-
-        // 删除边属性
-        await this.db!.run(
-          "DELETE FROM relationship_properties WHERE relationship_id = ?", 
-          [id]
-        );
-        
-        // 删除边
-        await this.db!.run("DELETE FROM relationships WHERE id = ?", [id]);
-      } catch (error) {
-        if (error instanceof EdgeNotFoundError) {
-          throw error;
-        }
-        throw new DatabaseError(`Failed to delete edge: ${error}`, error as Error);
+    // 创建删除边的操作
+    const deleteEdgeOperation = async (db: SQLiteEngine): Promise<void> => {
+      // 检查边是否存在
+      const edgeExistsResult = await db.query(
+        "SELECT 1 FROM relationships WHERE id = ?",
+        [id]
+      );
+      
+      if (!edgeExistsResult?.values || edgeExistsResult.values.length === 0) {
+        throw new EdgeNotFoundError(id);
       }
-    });
+
+      // 删除边属性
+      await db.run(
+        "DELETE FROM relationship_properties WHERE relationship_id = ?", 
+        [id]
+      );
+      
+      // 删除边
+      await db.run("DELETE FROM relationships WHERE id = ?", [id]);
+    };
+
+    try {
+      // 如果已经在事务中，直接执行操作
+      if (this.inTransaction) {
+        try {
+          await deleteEdgeOperation(this.db);
+        } catch (error) {
+          if (error instanceof EdgeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to delete edge: ${error}`, error as Error);
+        }
+        return;
+      }
+
+      // 否则，使用事务执行操作
+      await this.db.transaction(async () => {
+        try {
+          await deleteEdgeOperation(this.db!);
+          await this.persistData();
+        } catch (error) {
+          if (error instanceof EdgeNotFoundError) {
+            throw error;
+          }
+          throw new DatabaseError(`Failed to delete edge: ${error}`, error as Error);
+        }
+      });
+    } catch (error) {
+      throw error;
+    }
   }
 
   async getEdges(): Promise<GraphEdge[]> {
@@ -554,15 +697,15 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     try {
       // 获取所有边基本信息
-      const edgesResult = await this.db.exec("SELECT * FROM relationships");
+      const edgesResult = await this.db.query("SELECT * FROM relationships");
       
-      if (!edgesResult || edgesResult.length === 0) {
+      if (!edgesResult?.values || edgesResult.values.length === 0) {
         return [];
       }
 
       const edges: GraphEdge[] = [];
       
-      for (const edgeRow of edgesResult) {
+      for (const edgeRow of edgesResult.values) {
         const edge: GraphEdge = {
           id: edgeRow[0],
           source_id: edgeRow[1],
@@ -573,13 +716,13 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         };
 
         // 获取边属性
-        const propsResult = await this.db.exec(
+        const propsResult = await this.db.query(
           "SELECT key, value FROM relationship_properties WHERE relationship_id = ?",
           [edge.id]
         );
         
-        if (propsResult && propsResult.length > 0) {
-          for (const propRow of propsResult) {
+        if (propsResult?.values && propsResult.values.length > 0) {
+          for (const propRow of propsResult.values) {
             try {
               edge.properties![propRow[0]] = JSON.parse(propRow[1]);
             } catch (e) {
@@ -606,13 +749,13 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     try {
       // 检查开始和结束节点是否存在
-      const startExists = await this.db.exec("SELECT 1 FROM nodes WHERE id = ?", [startId]);
-      if (!startExists || startExists.length === 0) {
+      const startExistsResult = await this.db.query("SELECT 1 FROM nodes WHERE id = ?", [startId]);
+      if (!startExistsResult?.values || startExistsResult.values.length === 0) {
         throw new NodeNotFoundError(startId);
       }
       
-      const endExists = await this.db.exec("SELECT 1 FROM nodes WHERE id = ?", [endId]);
-      if (!endExists || endExists.length === 0) {
+      const endExistsResult = await this.db.query("SELECT 1 FROM nodes WHERE id = ?", [endId]);
+      if (!endExistsResult?.values || endExistsResult.values.length === 0) {
         throw new NodeNotFoundError(endId);
       }
 
@@ -623,13 +766,17 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       
       // 先获取所有边和边的详细信息，以提高性能
       const allEdges = await this.getEdges();
-      allEdges.forEach(edge => edgesMap.set(edge.id, edge));
+      allEdges.forEach(edge => {
+        if (edge.id) {
+          edgesMap.set(edge.id, edge);
+        }
+      });
       
       // 构建快速查找的邻接表
       const adjacencyList = new Map<string, Array<{ edgeId: string; targetId: string }>>();
       
       allEdges.forEach(edge => {
-        if (edge.source_id && edge.target_id) {
+        if (edge.source_id && edge.target_id && edge.id) {
           if (!adjacencyList.has(edge.source_id)) {
             adjacencyList.set(edge.source_id, []);
           }
@@ -649,7 +796,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
           
           if (nodeId === endId) {
             // 找到路径，返回边的详细信息
-            return path.map(edgeId => edgesMap.get(edgeId)!);
+            return path.map(edgeId => edgesMap.get(edgeId))
+                       .filter((edge): edge is GraphEdge => edge !== undefined);
           }
           
           // 遍历当前节点的所有出边
@@ -682,8 +830,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     try {
       // 检查节点是否存在
-      const nodeExists = await this.db.exec("SELECT 1 FROM nodes WHERE id = ?", [nodeId]);
-      if (!nodeExists || nodeExists.length === 0) {
+      const nodeExistsResult = await this.db.query("SELECT 1 FROM nodes WHERE id = ?", [nodeId]);
+      if (!nodeExistsResult?.values || nodeExistsResult.values.length === 0) {
         throw new NodeNotFoundError(nodeId);
       }
 
@@ -693,7 +841,11 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       
       // 构建节点映射和邻接表
       const nodesMap = new Map<string, GraphNode>();
-      allNodes.forEach(node => nodesMap.set(node.id, node));
+      allNodes.forEach(node => {
+        if (node.id) {
+          nodesMap.set(node.id, node);
+        }
+      });
       
       const adjacencyList = new Map<string, string[]>();
       
@@ -727,7 +879,10 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         const { id, level } = queue.shift()!;
         
         if (level > 0) { // 不包括起始节点
-          connectedNodes.push(nodesMap.get(id)!);
+          const node = nodesMap.get(id);
+          if (node) {
+            connectedNodes.push(node);
+          }
         }
         
         if (level < depth) {

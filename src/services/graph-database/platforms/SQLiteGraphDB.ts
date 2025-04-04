@@ -28,32 +28,51 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
       // 返回SQLite引擎接口
       return {
-        exec: async (sql: string, params?: any[]) => {
+        query: async (sql: string, params?: any[]): Promise<{ values?: any[] }> => {
           if (!this.connection) {
             throw new Error("Database connection not established");
           }
-          const result = await this.connection.query(sql, params);
-          return result?.values || [];
+          return await this.connection.query(sql, params, false);
         },
-        prepare: () => {
-          throw new Error("Prepare method not supported in this implementation");
-        },
-        run: async (sql: string, params?: any[]) => {
+        run: async (sql: string, params?: any[]): Promise<void> => {
           if (!this.connection) {
             throw new Error("Database connection not established");
           }
-          await this.connection.run(sql, params);
+          await this.connection.run(sql, params, false);
         },
-        isOpen: () => {
+        isOpen: (): boolean => {
           return !!this.connection;
         },
-        close: async () => {
+        open: async (): Promise<void> => {
+          if (this.connection) {
+            await this.connection.open();
+          }
+        },
+        close: async (): Promise<void> => {
           if (this.connection) {
             await sqliteService.closeDatabase(this.dbName, false);
             this.connection = null;
           }
         },
-        export: () => {
+        beginTransaction: async (): Promise<void> => {
+          if (!this.connection) {
+            throw new Error("Database connection not established");
+          }
+          await this.connection.beginTransaction();
+        },
+        commitTransaction: async (): Promise<void> => {
+          if (!this.connection) {
+            throw new Error("Database connection not established");
+          }
+          await this.connection.commitTransaction();
+        },
+        rollbackTransaction: async (): Promise<void> => {
+          if (!this.connection) {
+            throw new Error("Database connection not established");
+          }
+          await this.connection.rollbackTransaction();
+        },
+        export: (): Uint8Array => {
           // 返回一个空的Uint8Array作为占位符
           // 真正的导出功能需要在具体平台实现
           return new Uint8Array(0);
@@ -63,8 +82,15 @@ export class SQLiteGraphDB extends BaseGraphDB {
             throw new Error("Database connection not established");
           }
           
+          // 使用Capacitor SQLite的自带事务机制
           return sqliteService.transaction(this.dbName, async () => {
-            return await operation();
+            try {
+              // 执行传入的操作
+              return await operation();
+            } catch (error) {
+              // 重新抛出错误，确保错误能够被上层捕获
+              throw error;
+            }
           });
         },
       };

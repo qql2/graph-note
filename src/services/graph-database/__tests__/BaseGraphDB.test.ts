@@ -21,33 +21,46 @@ class TestGraphDB extends BaseGraphDB {
     }
 
     return {
-      exec: vi.fn().mockImplementation(function(sql: string, params?: any[]) {
+      query: vi.fn().mockImplementation(function(sql: string, params?: any[]) {
         if (sql.includes("SELECT * FROM nodes")) {
-          return [
-            ["node1", "person", "张三", 100, 200, "2023-01-01", "2023-01-01"]
-          ];
+          return {
+            values: [
+              ["node1", "person", "张三", 100, 200, "2023-01-01", "2023-01-01"]
+            ]
+          };
         } else if (sql.includes("SELECT key, value FROM node_properties")) {
-          return [
-            ["age", "30"],
-            ["occupation", "\"软件工程师\""]
-          ];
+          return {
+            values: [
+              ["age", "30"],
+              ["occupation", "\"软件工程师\""]
+            ]
+          };
         } else if (sql.includes("SELECT * FROM relationships")) {
-          return [
-            ["edge1", "node1", "node2", "friend", "2023-01-01"]
-          ];
+          return {
+            values: [
+              ["edge1", "node1", "node2", "friend", "2023-01-01"]
+            ]
+          };
         } else if (sql.includes("SELECT key, value FROM relationship_properties")) {
-          return [
-            ["since", "\"2020-01-01\""]
-          ];
+          return {
+            values: [
+              ["since", "\"2020-01-01\""]
+            ]
+          };
         } else if (sql.includes("SELECT 1 FROM")) {
-          return [["1"]];
+          return {
+            values: [["1"]]
+          };
         }
-        return [];
+        return { values: [] };
       }),
-      prepare: vi.fn(),
       run: vi.fn(),
       isOpen: vi.fn().mockReturnValue(true),
-      close: vi.fn(),
+      open: vi.fn().mockResolvedValue(undefined),
+      close: vi.fn().mockResolvedValue(undefined),
+      beginTransaction: vi.fn().mockResolvedValue(undefined),
+      commitTransaction: vi.fn().mockResolvedValue(undefined),
+      rollbackTransaction: vi.fn().mockResolvedValue(undefined),
       export: vi.fn().mockReturnValue(new Uint8Array(0)),
       transaction: vi.fn().mockImplementation(async (operation) => {
         return await operation();
@@ -96,70 +109,94 @@ describe("BaseGraphDB", () => {
   });
   
   describe("事务操作", () => {
-    it("应该在事务中执行操作", async () => {
+    it("应该使用数据库的事务API执行操作", async () => {
       const mockRun = vi.fn();
+      const mockTransaction = vi.fn().mockImplementation(async (operation) => {
+        return await operation();
+      });
+      
       const mockDb = {
-        exec: vi.fn(),
-        prepare: vi.fn(),
+        query: vi.fn(),
         run: mockRun,
         isOpen: vi.fn().mockReturnValue(true),
-        close: vi.fn(),
+        open: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commitTransaction: vi.fn().mockResolvedValue(undefined),
+        rollbackTransaction: vi.fn().mockResolvedValue(undefined),
         export: vi.fn().mockReturnValue(new Uint8Array(0)),
-        transaction: vi.fn().mockImplementation(async (operation) => {
-          return await operation();
-        }),
+        transaction: mockTransaction,
       };
       
       // 创建一个新的实例，使用我们的自定义mock
       const testDb = new TestGraphDB(mockDb);
       await testDb.initialize({});
       
-      // 测试事务方法
-      const beginTransactionSpy = vi.spyOn(testDb as any, "beginTransaction");
-      const commitTransactionSpy = vi.spyOn(testDb as any, "commitTransaction");
-      const rollbackTransactionSpy = vi.spyOn(testDb as any, "rollbackTransaction");
+      const persistDataSpy = vi.spyOn(testDb as any, "persistData");
       
       await (testDb as any).withTransaction(async () => {
         await mockDb.run("INSERT INTO test_table VALUES (1)");
         return true;
       });
       
-      expect(beginTransactionSpy).toHaveBeenCalled();
+      expect(mockTransaction).toHaveBeenCalled();
       expect(mockRun).toHaveBeenCalled();
-      expect(commitTransactionSpy).toHaveBeenCalled();
-      expect(rollbackTransactionSpy).not.toHaveBeenCalled();
+      expect(persistDataSpy).toHaveBeenCalled();
     });
     
-    it("应该在事务失败时回滚", async () => {
-      const mockRun = vi.fn();
-      const mockDb = {
-        exec: vi.fn(),
-        prepare: vi.fn(),
-        run: mockRun,
-        isOpen: vi.fn().mockReturnValue(true),
-        close: vi.fn(),
-        export: vi.fn().mockReturnValue(new Uint8Array(0)),
-        transaction: vi.fn().mockImplementation(async (operation) => {
+    it("应该处理事务中的错误", async () => {
+      const mockTransaction = vi.fn().mockImplementation(async (operation) => {
+        try {
           return await operation();
-        }),
+        } catch (error) {
+          throw error;
+        }
+      });
+      
+      const mockDb = {
+        query: vi.fn(),
+        run: vi.fn().mockRejectedValue(new Error("测试DB错误")),
+        isOpen: vi.fn().mockReturnValue(true),
+        open: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        beginTransaction: vi.fn().mockResolvedValue(undefined),
+        commitTransaction: vi.fn().mockResolvedValue(undefined),
+        rollbackTransaction: vi.fn().mockResolvedValue(undefined),
+        export: vi.fn().mockReturnValue(new Uint8Array(0)),
+        transaction: mockTransaction,
       };
       
       // 创建一个新的实例，使用我们的自定义mock
       const testDb = new TestGraphDB(mockDb);
       await testDb.initialize({});
       
-      // 测试事务方法
-      const beginTransactionSpy = vi.spyOn(testDb as any, "beginTransaction");
-      const commitTransactionSpy = vi.spyOn(testDb as any, "commitTransaction");
-      const rollbackTransactionSpy = vi.spyOn(testDb as any, "rollbackTransaction");
-      
       // 操作将抛出错误
       await expect((testDb as any).withTransaction(async () => {
-        throw new Error("测试错误");
-      })).rejects.toThrow("测试错误");
+        await mockDb.run("INSERT INTO test_table VALUES (1)");
+        return true;
+      })).rejects.toThrow();
+      
+      expect(mockTransaction).toHaveBeenCalled();
+      expect(mockDb.run).toHaveBeenCalled();
+    });
+    
+    it("应该能够支持兼容性的事务方法", async () => {
+      // 测试传统的事务方法是否仍然可用
+      const beginTransactionSpy = vi.spyOn(db as any, "beginTransaction");
+      const commitTransactionSpy = vi.spyOn(db as any, "commitTransaction");
+      const rollbackTransactionSpy = vi.spyOn(db as any, "rollbackTransaction");
+      
+      // 手动开始和提交事务
+      await (db as any).beginTransaction();
+      await (db as any).commitTransaction();
       
       expect(beginTransactionSpy).toHaveBeenCalled();
-      expect(commitTransactionSpy).not.toHaveBeenCalled();
+      expect(commitTransactionSpy).toHaveBeenCalled();
+      
+      // 测试回滚
+      await (db as any).beginTransaction();
+      await (db as any).rollbackTransaction();
+      
       expect(rollbackTransactionSpy).toHaveBeenCalled();
     });
   });
@@ -188,7 +225,7 @@ describe("BaseGraphDB", () => {
     });
     
     it("应该更新节点", async () => {
-      const execSpy = vi.spyOn((db as any).db, "exec");
+      const querySpy = vi.spyOn((db as any).db, "query");
       const runSpy = vi.spyOn((db as any).db, "run");
       
       await db.updateNode("node1", {
@@ -198,7 +235,7 @@ describe("BaseGraphDB", () => {
         }
       });
       
-      expect(execSpy).toHaveBeenCalledWith(
+      expect(querySpy).toHaveBeenCalledWith(
         expect.stringContaining("SELECT 1 FROM nodes"),
         ["node1"]
       );
@@ -213,14 +250,14 @@ describe("BaseGraphDB", () => {
       await db2.initialize({});
       
       // 使用类型安全的方式创建和设置mock
-      const execMock = vi.fn().mockReturnValue([]);
+      const queryMock = vi.fn().mockReturnValue({ values: [] });
       (db2 as any).db = {
         ...(db2 as any).db,
-        exec: execMock
+        query: queryMock
       };
       
       await expect(db2.deleteNode("not-exists")).rejects.toThrow(NodeNotFoundError);
-      expect(execMock).toHaveBeenCalledWith(
+      expect(queryMock).toHaveBeenCalledWith(
         expect.stringContaining("SELECT 1 FROM nodes"),
         ["not-exists"]
       );
@@ -295,16 +332,16 @@ describe("BaseGraphDB", () => {
       await db2.initialize({});
       
       // 使用类型安全的方式创建和设置mock
-      const execMock = vi.fn().mockImplementation(function(sql: string, params?: any[]) {
+      const queryMock = vi.fn().mockImplementation(function(sql: string, params?: any[]) {
         if (sql.includes("SELECT 1 FROM nodes") && params?.[0] === "not-exists") {
-          return [];
+          return { values: [] };
         }
-        return [["1"]];
+        return { values: [["1"]] };
       });
       
       (db2 as any).db = {
         ...(db2 as any).db,
-        exec: execMock
+        query: queryMock
       };
       
       const edge: GraphEdge = {
@@ -314,7 +351,7 @@ describe("BaseGraphDB", () => {
       };
       
       await expect(db2.addEdge(edge)).rejects.toThrow(NodeNotFoundError);
-      expect(execMock).toHaveBeenCalledWith(
+      expect(queryMock).toHaveBeenCalledWith(
         expect.stringContaining("SELECT 1 FROM nodes"),
         ["not-exists"]
       );
@@ -341,14 +378,14 @@ describe("BaseGraphDB", () => {
       await db2.initialize({});
       
       // 使用类型安全的方式创建和设置mock
-      const execMock = vi.fn().mockReturnValue([]);
+      const queryMock = vi.fn().mockReturnValue({ values: [] });
       (db2 as any).db = {
         ...(db2 as any).db,
-        exec: execMock
+        query: queryMock
       };
       
       await expect(db2.deleteEdge("not-exists")).rejects.toThrow(EdgeNotFoundError);
-      expect(execMock).toHaveBeenCalledWith(
+      expect(queryMock).toHaveBeenCalledWith(
         expect.stringContaining("SELECT 1 FROM relationships"),
         ["not-exists"]
       );
@@ -361,32 +398,36 @@ describe("BaseGraphDB", () => {
       await db2.initialize({});
       
       // 使用类型安全的方式创建和设置mock
-      const execMock = vi.fn().mockImplementation(function(sql: string, params?: any[]) {
+      const queryMock = vi.fn().mockImplementation(function(sql: string, params?: any[]) {
         if (sql.includes("SELECT * FROM nodes")) {
-          return [
-            ["node1", "person", "张三", 100, 200, "2023-01-01", "2023-01-01"],
-            ["node2", "person", "李四", 300, 200, "2023-01-01", "2023-01-01"],
-            ["node3", "project", "项目", 200, 100, "2023-01-01", "2023-01-01"]
-          ];
+          return {
+            values: [
+              ["node1", "person", "张三", 100, 200, "2023-01-01", "2023-01-01"],
+              ["node2", "person", "李四", 300, 200, "2023-01-01", "2023-01-01"],
+              ["node3", "project", "项目", 200, 100, "2023-01-01", "2023-01-01"]
+            ]
+          };
         } else if (sql.includes("SELECT * FROM relationships")) {
-          return [
-            ["edge1", "node1", "node3", "works_on", "2023-01-01"],
-            ["edge2", "node2", "node3", "manages", "2023-01-01"]
-          ];
+          return {
+            values: [
+              ["edge1", "node1", "node3", "works_on", "2023-01-01"],
+              ["edge2", "node2", "node3", "manages", "2023-01-01"]
+            ]
+          };
         } else if (sql.includes("SELECT 1 FROM")) {
-          return [["1"]];
+          return { values: [["1"]] };
         }
-        return [];
+        return { values: [] };
       });
       
       (db2 as any).db = {
         ...(db2 as any).db,
-        exec: execMock
+        query: queryMock
       };
       
       const connectedNodes = await db2.findConnectedNodes("node1");
       expect(connectedNodes.length).toBeGreaterThan(0);
-      expect(execMock).toHaveBeenCalledWith(
+      expect(queryMock).toHaveBeenCalledWith(
         expect.stringContaining("SELECT 1 FROM nodes"),
         ["node1"]
       );
@@ -397,20 +438,20 @@ describe("BaseGraphDB", () => {
       await db2.initialize({});
       
       // 使用类型安全的方式创建和设置mock
-      const execMock = vi.fn().mockImplementation(function(sql: string, params?: any[]) {
+      const queryMock = vi.fn().mockImplementation(function(sql: string, params?: any[]) {
         if (sql.includes("SELECT 1 FROM nodes") && params?.[0] === "not-exists") {
-          return [];
+          return { values: [] };
         }
-        return [["1"]];
+        return { values: [["1"]] };
       });
       
       (db2 as any).db = {
         ...(db2 as any).db,
-        exec: execMock
+        query: queryMock
       };
       
       await expect(db2.findPath("not-exists", "node2")).rejects.toThrow(NodeNotFoundError);
-      expect(execMock).toHaveBeenCalledWith(
+      expect(queryMock).toHaveBeenCalledWith(
         expect.stringContaining("SELECT 1 FROM nodes"),
         ["not-exists"]
       );
@@ -421,20 +462,20 @@ describe("BaseGraphDB", () => {
       await db2.initialize({});
       
       // 使用类型安全的方式创建和设置mock
-      const execMock = vi.fn().mockImplementation(function(sql: string, params?: any[]) {
+      const queryMock = vi.fn().mockImplementation(function(sql: string, params?: any[]) {
         if (sql.includes("SELECT 1 FROM nodes") && params?.[0] === "not-exists") {
-          return [];
+          return { values: [] };
         }
-        return [["1"]];
+        return { values: [["1"]] };
       });
       
       (db2 as any).db = {
         ...(db2 as any).db,
-        exec: execMock
+        query: queryMock
       };
       
       await expect(db2.findPath("node1", "not-exists")).rejects.toThrow(NodeNotFoundError);
-      expect(execMock).toHaveBeenCalledWith(
+      expect(queryMock).toHaveBeenCalledWith(
         expect.stringContaining("SELECT 1 FROM nodes"),
         ["not-exists"]
       );

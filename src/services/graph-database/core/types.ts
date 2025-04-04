@@ -32,13 +32,16 @@ export interface Operation {
 }
 
 export interface SQLiteEngine {
-  exec(sql: string, params?: any[]): any;
-  prepare(sql: string): any;
-  run(sql: string, params?: any[]): void;
+  query(sql: string, params?: any[]): Promise<{ values?: any[] }>;
+  run(sql: string, params?: any[]): Promise<void>;
   isOpen(): boolean;
-  close(): void;
-  export(): Uint8Array;
+  open(): Promise<void>;
+  close(): Promise<void>;
+  beginTransaction(): Promise<void>;
+  commitTransaction(): Promise<void>;
+  rollbackTransaction(): Promise<void>;
   transaction<T>(operation: () => T | Promise<T>): Promise<T>;
+  export(): Uint8Array;
 }
 
 export enum DeleteMode {
