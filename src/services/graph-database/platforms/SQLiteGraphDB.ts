@@ -32,13 +32,13 @@ export class SQLiteGraphDB extends BaseGraphDB {
           if (!this.connection) {
             throw new Error("Database connection not established");
           }
-          return await this.connection.query(sql, params, false);
+          return await this.connection.query(sql, params);
         },
         run: async (sql: string, params?: any[]): Promise<void> => {
           if (!this.connection) {
             throw new Error("Database connection not established");
           }
-          await this.connection.run(sql, params, false);
+          await this.connection.run(sql, params,false);
         },
         isOpen: (): boolean => {
           return !!this.connection;

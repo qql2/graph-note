@@ -37,7 +37,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       this.initialized = true;
     } catch (error) {
       console.error("Database initialization error:", error);
-      throw new DatabaseError("Failed to initialize database", error as Error);
+      throw error
     }
   }
 
@@ -56,7 +56,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         }
       });
     } catch (error) {
-      throw new DatabaseError("Failed to setup database", error as Error);
+      throw error
     }
   }
 
