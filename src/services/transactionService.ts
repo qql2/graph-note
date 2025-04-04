@@ -1,7 +1,5 @@
 import { SQLiteDBConnection } from '@capacitor-community/sqlite';
 import sqliteService from './sqliteService';
-import { GraphDatabaseService } from './graphDatabaseService';
-
 /**
  * TransactionService - 提供批量数据库操作的事务 API
  * 
@@ -12,14 +10,12 @@ import { GraphDatabaseService } from './graphDatabaseService';
  */
 export class TransactionService {
   private static instance: TransactionService;
-  private readonly graphDbService: GraphDatabaseService;
   private readonly DB_NAME = 'graph-note.db';
   
   /**
    * 私有构造函数，确保单例模式
    */
   private constructor() {
-    this.graphDbService = GraphDatabaseService.getInstance();
   }
   
   /**
