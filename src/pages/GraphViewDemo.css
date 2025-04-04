@@ -1,0 +1,201 @@
+.graph-view-demo-container {
+  width: 100%;
+  height: 60vh;
+  padding: 16px;
+}
+
+.graph-controls {
+  padding: 10px 16px;
+  background-color: #fff;
+  border-bottom: 1px solid #eee;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.graph-controls h4 {
+  margin-top: 8px;
+  margin-bottom: 12px;
+  font-weight: 500;
+  color: #333;
+}
+
+.description-text {
+  font-size: 0.9em;
+  color: #666;
+  margin-bottom: 12px;
+  padding: 0 8px;
+}
+
+.relation-description {
+  font-size: 0.8em;
+  color: #777;
+  margin-top: 2px;
+  font-weight: normal;
+}
+
+.quadrant-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 深度配置样式 */
+.depth-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.depth-slider {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 300px;
+  gap: 10px;
+  margin-right: 16px;
+}
+
+.depth-value {
+  min-width: 24px;
+  text-align: center;
+  font-weight: bold;
+  color: #666;
+}
+
+/* 视图配置样式 */
+.view-config {
+  margin-bottom: 16px;
+}
+
+.view-config ion-list {
+  padding: 0;
+}
+
+.view-config ion-list-header {
+  padding-left: 8px;
+  font-size: 0.9em;
+  min-height: 30px;
+}
+
+.view-config ion-item {
+  --padding-start: 8px;
+  --inner-padding-end: 8px;
+  --min-height: 40px;
+}
+
+/* 加载状态 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 50vh;
+  text-align: center;
+  color: #666;
+}
+
+.loading-container ion-spinner {
+  margin-bottom: 16px;
+}
+
+/* 错误状态 */
+.error-container {
+  text-align: center;
+  padding: 20px;
+  color: #f44336;
+}
+
+.debug-info {
+  font-size: 0.9em;
+  background-color: #f5f5f5;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 10px 0;
+  color: #666;
+  text-align: left;
+}
+
+/* 空数据状态 */
+.empty-container {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.empty-container ion-button,
+.error-container ion-button {
+  margin-top: 0;
+}
+
+/* Make the select dropdowns more compact */
+.quadrant-config ion-item {
+  --padding-start: 8px;
+  --inner-padding-end: 8px;
+  --min-height: 40px;
+}
+
+/* Style the quadrant colors in labels */
+.relationship-father {
+  color: #4CAF50;
+}
+
+.relationship-child {
+  color: #2196F3;
+}
+
+.relationship-base {
+  color: #9C27B0;
+}
+
+.relationship-build {
+  color: #F44336;
+}
+
+/* Add a small legend for colors */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 16px;
+  margin-top: 8px;
+  font-size: 0.9em;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .graph-view-demo-container {
+    height: 50vh;
+  }
+}
+
+@media (min-width: 992px) {
+  .quadrant-config {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .depth-config {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+} 

@@ -112,33 +112,6 @@ class SQLiteService implements ISQLiteService {
             throw new Error(`sqliteService.saveToLocalDisk: ${msg}`);
         }
     }
-    async transaction<T>(dbName: string, cb: (db: SQLiteDBConnection) => T | Promise<T>): Promise<T> {
-        return this.transactionQueue = this.transactionQueue.then(async () => {
-            try {
-                const isConn = await this.isConnection(dbName, false);
-                if (!isConn) {
-                    throw new Error(`Database connection not found for ${dbName}`);
-                }
-                
-                const db = await this.sqliteConnection.retrieveConnection(dbName, false);
-                
-                await db.beginTransaction();
-                
-                try {
-                    const result = await cb(db);
-                    
-                    await db.commitTransaction();
-                    
-                    return result;
-                } catch (error) {
-                    await db.rollbackTransaction();
-                    throw error;
-                }
-            } catch (error: any) {
-                const msg = error.message ? error.message : error;
-                throw new Error(`sqliteService.transaction: ${msg}`);
-            }
-        });
-    }
+    // TODO: 把这里的transaction 放到 SqliteGraphDB 中, 因为要用到dbConnection
 }
 export default new SQLiteService();

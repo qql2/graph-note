@@ -16,12 +16,15 @@
     "android:start": "npm run remove:sql:wasm && npm run build:native && npx cap sync && npx cap copy && npx cap open android",
     "electron:install": "cd electron && npm install && cd ..",
     "electron:prepare": "npm run remove:sql:wasm && npm run build && npx cap sync @capacitor-community/electron && npx cap copy @capacitor-community/electron",
+    "electron:sync": "npx cap sync @capacitor-community/electron",
     "electron:start": "npm run electron:prepare && cd electron && npm run electron:start",
     "test.e2e": "cypress run",
     "test.unit": "vitest",
     "lint": "eslint"
   },
   "dependencies": {
+    "@antv/x6": "^2.18.1",
+    "@antv/x6-react-shape": "^2.2.3",
     "@capacitor-community/electron": "^4.1.2",
     "@capacitor-community/sqlite": "^5.2.3",
     "@capacitor/android": "^5.3.0",
@@ -35,13 +38,17 @@
     "@ionic/pwa-elements": "^3.2.2",
     "@ionic/react": "^7.3.2",
     "@ionic/react-router": "^7.3.2",
+    "@types/lodash": "^4.17.16",
     "@types/react-router": "^5.1.20",
     "@types/react-router-dom": "^5.3.3",
+    "@types/uuid": "^10.0.0",
     "ionicons": "^7.0.0",
+    "lodash": "^4.17.21",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router": "^5.3.4",
-    "react-router-dom": "^5.3.4"
+    "react-router-dom": "^5.3.4",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@capacitor/cli": "5.3.0",

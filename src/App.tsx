@@ -10,6 +10,8 @@ import StorageService  from './services/storageService';
 import AppInitializer from './components/AppInitializer/AppInitializer';
 
 import UsersPage from './pages/UsersPage/UsersPage';
+import GraphDBDemo from './pages/GraphDBDemo';
+import GraphViewDemo from './pages/GraphViewDemo';
 import AppMenu from './components/AppMenu/AppMenu';
 
 /* Core CSS required for Ionic components to work properly */
@@ -58,6 +60,8 @@ const App: React.FC = () => {
                     <Redirect to="/home" />
                   </Route>
                   <Route path="/users" component={UsersPage} />
+                  <Route path="/graph-demo" component={GraphDBDemo} />
+                  <Route path="/graph-view-demo" component={GraphViewDemo} />
                 </IonRouterOutlet>
               </IonReactRouter>
             </IonApp>
