@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import './setup';
 import sqliteService from '../sqliteService';
 import transactionService from '../transactionService';
-import { GraphDatabaseService } from '../graphDatabaseService';
+import { graphDatabaseService } from '../graph-database/GraphDatabaseService';
 
 // Mock the sqliteService
 vi.mock('../sqliteService', () => ({
@@ -75,7 +74,7 @@ describe('TransactionService', () => {
   
   it('should integrate with GraphDatabaseService', async () => {
     // Mock GraphDatabaseService methods
-    const graphDbService = GraphDatabaseService.getInstance();
+    const graphDbService = graphDatabaseService;
     graphDbService.executeTransaction = vi.fn().mockImplementation(async (operations) => {
       return await transactionService.executeTransaction(operations);
     });
