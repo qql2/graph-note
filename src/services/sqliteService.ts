@@ -10,6 +10,7 @@ export interface ISQLiteService {
     saveToStore(dbName: string): Promise<void>
     saveToLocalDisk(dbName: string): Promise<void>
     isConnection(dbName: string, readOnly: boolean): Promise<boolean>
+    transaction<T>(dbName: string, cb: (db: SQLiteDBConnection) => T | Promise<T>): Promise<T>
 };
 
 class SQLiteService implements ISQLiteService {
@@ -17,6 +18,7 @@ class SQLiteService implements ISQLiteService {
     sqlitePlugin = CapacitorSQLite;
     sqliteConnection = new SQLiteConnection(CapacitorSQLite);
     dbNameVersionDict: Map<string, number> = new Map();
+    private transactionQueue: Promise<any> = Promise.resolve();
 
     getPlatform(): string {
         return this.platform;
@@ -109,6 +111,34 @@ class SQLiteService implements ISQLiteService {
             const msg = err.message ? err.message : err;
             throw new Error(`sqliteService.saveToLocalDisk: ${msg}`);
         }
+    }
+    async transaction<T>(dbName: string, cb: (db: SQLiteDBConnection) => T | Promise<T>): Promise<T> {
+        return this.transactionQueue = this.transactionQueue.then(async () => {
+            try {
+                const isConn = await this.isConnection(dbName, false);
+                if (!isConn) {
+                    throw new Error(`Database connection not found for ${dbName}`);
+                }
+                
+                const db = await this.sqliteConnection.retrieveConnection(dbName, false);
+                
+                await db.beginTransaction();
+                
+                try {
+                    const result = await cb(db);
+                    
+                    await db.commitTransaction();
+                    
+                    return result;
+                } catch (error) {
+                    await db.rollbackTransaction();
+                    throw error;
+                }
+            } catch (error: any) {
+                const msg = error.message ? error.message : error;
+                throw new Error(`sqliteService.transaction: ${msg}`);
+            }
+        });
     }
 }
 export default new SQLiteService();
