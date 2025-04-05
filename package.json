@@ -16,6 +16,7 @@
     "android:start": "npm run remove:sql:wasm && npm run build:native && npx cap sync && npx cap copy && npx cap open android",
     "electron:install": "cd electron && npm install && cd ..",
     "electron:prepare": "npm run remove:sql:wasm && npm run build && npx cap sync @capacitor-community/electron && npx cap copy @capacitor-community/electron",
+    "electron:sync": "npx cap sync @capacitor-community/electron",
     "electron:start": "npm run electron:prepare && cd electron && npm run electron:start",
     "test.e2e": "cypress run",
     "test.unit": "vitest",

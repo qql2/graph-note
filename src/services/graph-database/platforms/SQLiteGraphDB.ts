@@ -234,7 +234,8 @@ export class SQLiteGraphDB extends BaseGraphDB {
       if (sqliteService.getPlatform() === "web") {
         await sqliteService.saveToStore(this.dbName);
       } else {
-        await sqliteService.saveToLocalDisk(this.dbName);
+        // electron 平台不用手动保存到本地磁盘
+        // await sqliteService.saveToLocalDisk(this.dbName);
       }
     } catch (error) {
       throw new DatabaseError(

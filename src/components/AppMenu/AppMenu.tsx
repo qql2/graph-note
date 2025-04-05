@@ -26,6 +26,9 @@ const AppMenu: FC<AppMenuProps> = () => {
           <IonItem onClick={closeMenu}>
             <IonButton size="default" routerLink="/graph-demo" expand="full">Graph Database Demo</IonButton>
           </IonItem>
+          <IonItem onClick={closeMenu}>
+            <IonButton size="default" routerLink="/graph-view-demo" expand="full">Graph View Demo</IonButton>
+          </IonItem>
           {/* ... other menu items */}
         </IonList>
       </IonContent>
