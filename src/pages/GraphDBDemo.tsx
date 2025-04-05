@@ -86,7 +86,7 @@ const GraphDBDemo: React.FC = () => {
       setLoading(true);
       const db = graphDatabaseService.getDatabase();
       const fetchedNodes = await db.getNodes();
-      const fetchedEdges = await db.getEdges();
+		const fetchedEdges = await db.getEdges();
       setNodes(fetchedNodes);
       setEdges(fetchedEdges);
     } catch (error) {

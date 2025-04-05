@@ -266,33 +266,57 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         throw new NodeNotFoundError(id);
       }
 
+      // 添加日志以便调试
+      console.log(`Deleting node with ID: ${id}, mode: ${mode}`);
+
       if (mode === DeleteMode.CASCADE) {
         // 级联删除模式：删除所有相关数据
-        // 1. 删除与节点相关的所有边的属性
-        await db.run(
-          `DELETE FROM relationship_properties 
-           WHERE relationship_id IN (
-             SELECT id FROM relationships 
-             WHERE source_id = ? OR target_id = ?
-           )`,
+        // 1. 获取与节点相关的所有边ID
+        const relatedEdgesResult = await db.query(
+          `SELECT id FROM relationships 
+           WHERE source_id = ? OR target_id = ?`,
           [id, id]
         );
+        
+        // 记录相关边的ID
+        const edgeIds: string[] = [];
+        if (relatedEdgesResult?.values && relatedEdgesResult.values.length > 0) {
+          relatedEdgesResult.values.forEach(row => {
+            if (row.id) edgeIds.push(row.id);
+          });
+        }
+        
+        console.log(`Found ${edgeIds.length} related edges to delete`);
 
-        // 2. 删除与节点相关的所有边
+        // 2. 删除与节点相关的所有边的属性
+        for (const edgeId of edgeIds) {
+          await db.run(
+            `DELETE FROM relationship_properties 
+             WHERE relationship_id = ?`,
+            [edgeId]
+          );
+          console.log(`Deleted properties for edge: ${edgeId}`);
+        }
+
+        // 3. 删除与节点相关的所有边
         await db.run(
           "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
           [id, id]
         );
+        console.log(`Deleted all edges connected to node: ${id}`);
 
-        // 3. 删除节点的属性
+        // 4. 删除节点的属性
         await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+        console.log(`Deleted properties for node: ${id}`);
 
-        // 4. 删除节点本身
+        // 5. 删除节点本身
         await db.run("DELETE FROM nodes WHERE id = ?", [id]);
+        console.log(`Deleted node: ${id}`);
       } else {
         // 保留关联数据模式：只删除节点本身和它的属性
         // 1. 删除节点的属性
         await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+        console.log(`Deleted properties for node: ${id}`);
 
         // 2. 将相关边的源节点或目标节点设为 NULL
         await db.run(
@@ -307,31 +331,19 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
            WHERE target_id = ?`,
           [id]
         );
+        console.log(`Updated relationships connected to node: ${id}`);
 
         // 3. 删除节点本身
         await db.run("DELETE FROM nodes WHERE id = ?", [id]);
+        console.log(`Deleted node: ${id}`);
       }
     };
 
     try {
-      // 如果已经在事务中，直接执行操作
-      if (this.inTransaction) {
-        try {
-          await deleteOperation(this.db);
-        } catch (error) {
-          if (error instanceof NodeNotFoundError) {
-            throw error;
-          }
-          throw new DatabaseError(`Failed to delete node: ${error}`, error as Error);
-        }
-        return;
-      }
-
-      // 否则，使用事务执行操作
-      await this.db.transaction(async () => {
+      // 使用事务来执行删除操作
+      await this.withTransaction(async () => {
         try {
           await deleteOperation(this.db!);
-          await this.persistData();
         } catch (error) {
           if (error instanceof NodeNotFoundError) {
             throw error;
@@ -357,11 +369,20 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
       const nodes: GraphNode[] = [];
       
-      for (const node of nodesResult.values) {
-
+      for (const nodeRow of nodesResult.values) {
+        // 确保初始化节点属性对象
+        const node: GraphNode = {
+          id: nodeRow.id,
+          label: nodeRow.label,
+          type: nodeRow.type || "node", // 确保有type字段
+          x: nodeRow.x || 0, // 默认值
+          y: nodeRow.y || 0, // 默认值
+          created_at: nodeRow.created_at,
+          updated_at: nodeRow.updated_at,
+          properties: {} // 确保一定有properties对象
+        };
 
         // 获取节点属性
-        // console.log('node', node);
         const propsResult = await this.db.query(
           "SELECT key, value FROM node_properties WHERE node_id = ?",
           [node.id]
@@ -369,10 +390,23 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         
         if (propsResult?.values && propsResult.values.length > 0) {
           for (const propRow of propsResult.values) {
+            let key: string;
+            let rawValue: string;
+            
+            if (Array.isArray(propRow)) {
+              // 如果是数组形式 [key, value]
+              key = propRow[0];
+              rawValue = propRow[1];
+            } else {
+              // 如果是对象形式 {key, value}
+              key = propRow.key;
+              rawValue = propRow.value;
+            }
+            
             try {
-              node.properties![propRow[0]] = JSON.parse(propRow[1]);
+              node.properties![key] = JSON.parse(rawValue);
             } catch (e) {
-              node.properties![propRow[0]] = propRow[1];
+              node.properties![key] = rawValue;
             }
           }
         }
@@ -604,35 +638,25 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         throw new EdgeNotFoundError(id);
       }
 
+      console.log(`Deleting edge with ID: ${id}`);
+
       // 删除边属性
       await db.run(
         "DELETE FROM relationship_properties WHERE relationship_id = ?", 
         [id]
       );
+      console.log(`Deleted properties for edge: ${id}`);
       
       // 删除边
       await db.run("DELETE FROM relationships WHERE id = ?", [id]);
+      console.log(`Deleted edge: ${id}`);
     };
 
     try {
-      // 如果已经在事务中，直接执行操作
-      if (this.inTransaction) {
-        try {
-          await deleteEdgeOperation(this.db);
-        } catch (error) {
-          if (error instanceof EdgeNotFoundError) {
-            throw error;
-          }
-          throw new DatabaseError(`Failed to delete edge: ${error}`, error as Error);
-        }
-        return;
-      }
-
-      // 否则，使用事务执行操作
-      await this.db.transaction(async () => {
+      // 使用事务执行删除操作
+      await this.withTransaction(async () => {
         try {
           await deleteEdgeOperation(this.db!);
-          await this.persistData();
         } catch (error) {
           if (error instanceof EdgeNotFoundError) {
             throw error;
@@ -658,7 +682,16 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
       const edges: GraphEdge[] = [];
       
-      for (const edge of edgesResult.values) {
+      for (const edgeRow of edgesResult.values) {
+        // 确保初始化边属性对象
+        const edge: GraphEdge = {
+          id: edgeRow.id,
+          source_id: edgeRow.source_id,
+          target_id: edgeRow.target_id,
+          type: edgeRow.type,
+          created_at: edgeRow.created_at,
+          properties: {} // 确保一定有properties对象
+        };
 
         // 获取边属性
         const propsResult = await this.db.query(
@@ -668,10 +701,23 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         
         if (propsResult?.values && propsResult.values.length > 0) {
           for (const propRow of propsResult.values) {
+            let key: string;
+            let rawValue: string;
+            
+            if (Array.isArray(propRow)) {
+              // 如果是数组形式 [key, value]
+              key = propRow[0];
+              rawValue = propRow[1];
+            } else {
+              // 如果是对象形式 {key, value}
+              key = propRow.key;
+              rawValue = propRow.value;
+            }
+            
             try {
-              edge.properties![propRow[0]] = JSON.parse(propRow[1]);
+              edge.properties![key] = JSON.parse(rawValue);
             } catch (e) {
-              edge.properties![propRow[0]] = propRow[1];
+              edge.properties![key] = rawValue;
             }
           }
         }
