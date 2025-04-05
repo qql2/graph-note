@@ -1,4 +1,4 @@
-import { GraphData, GraphNode, GraphEdge, QuadrantConfig, RelationshipType } from '../models/GraphNode';
+import { GraphData, GraphNode, GraphEdge, QuadrantConfig, RelationshipType, DepthConfig, defaultDepthConfig } from '../models/GraphNode';
 
 /**
  * Graph Layout Service - Handles the layout calculations for displaying nodes in quadrants
@@ -9,12 +9,14 @@ export class GraphLayoutService {
    * @param graphData Complete graph data
    * @param centralNodeId ID of the central (focus) node
    * @param config Quadrant configuration (which relationship types go to which quadrants)
+   * @param depthConfig 各种关系类型的深度配置
    * @returns A processed data structure with nodes organized by quadrant
    */
   static organizeByQuadrants(
     graphData: GraphData, 
     centralNodeId: string, 
-    config: QuadrantConfig
+    config: QuadrantConfig,
+    depthConfig: DepthConfig = defaultDepthConfig
   ) {
     if (!graphData || !centralNodeId) {
       return {
@@ -42,31 +44,43 @@ export class GraphLayoutService {
       };
     }
 
-    // Organize related nodes by relationship type
+    // 使用Set去重，防止节点重复
     const relatedNodes = {
-      [RelationshipType.FATHER]: [] as GraphNode[],
-      [RelationshipType.CHILD]: [] as GraphNode[],
-      [RelationshipType.BASE]: [] as GraphNode[],
-      [RelationshipType.BUILD]: [] as GraphNode[],
+      [RelationshipType.FATHER]: new Set<GraphNode>(),
+      [RelationshipType.CHILD]: new Set<GraphNode>(),
+      [RelationshipType.BASE]: new Set<GraphNode>(),
+      [RelationshipType.BUILD]: new Set<GraphNode>(),
     };
 
-    // Identify the connected nodes and their relationship types
-    graphData.edges.forEach(edge => {
-      if (edge.source === centralNodeId) {
-        // Outgoing relationship
-        const targetNode = graphData.nodes.find(node => node.id === edge.target);
-        if (targetNode) {
-          relatedNodes[edge.relationshipType].push(targetNode);
-        }
-      } else if (edge.target === centralNodeId) {
-        // Incoming relationship
-        const sourceNode = graphData.nodes.find(node => node.id === edge.source);
-        if (sourceNode) {
-          // For incoming edges, we might need to invert the relationship
-          // E.g., if A is the CHILD of B, then B is the FATHER of A
-          let invertedRelationship = edge.relationshipType;
+    // 使用一个Set来记录已经处理过的节点和边，避免循环依赖
+    const processedNodes = new Set<string>();
+    const processedEdges = new Set<string>();
+
+    // 收集当前节点的直接关系
+    const collectDirectRelationships = (nodeId: string) => {
+      processedNodes.add(nodeId);
+      
+      graphData.edges.forEach(edge => {
+        // 处理出站关系（当前节点 -> 目标节点）
+        if (edge.source === nodeId) {
+          const edgeKey = `${edge.source}-${edge.target}-${edge.relationshipType}`;
+          if (processedEdges.has(edgeKey)) return;
+          processedEdges.add(edgeKey);
           
-          // Invert relationship if necessary
+          const relatedNode = graphData.nodes.find(node => node.id === edge.target);
+          if (relatedNode) {
+            relatedNodes[edge.relationshipType].add(relatedNode);
+          }
+        } 
+        // 处理入站关系（源节点 -> 当前节点）
+        else if (edge.target === nodeId) {
+          const edgeKey = `${edge.source}-${edge.target}-${edge.relationshipType}`;
+          if (processedEdges.has(edgeKey)) return;
+          processedEdges.add(edgeKey);
+          
+          // 反转关系类型
+          let invertedRelationship: RelationshipType;
+          
           if (edge.relationshipType === RelationshipType.FATHER) {
             invertedRelationship = RelationshipType.CHILD;
           } else if (edge.relationshipType === RelationshipType.CHILD) {
@@ -75,21 +89,107 @@ export class GraphLayoutService {
             invertedRelationship = RelationshipType.BUILD;
           } else if (edge.relationshipType === RelationshipType.BUILD) {
             invertedRelationship = RelationshipType.BASE;
+          } else {
+            invertedRelationship = edge.relationshipType;
           }
           
-          relatedNodes[invertedRelationship].push(sourceNode);
+          const relatedNode = graphData.nodes.find(node => node.id === edge.source);
+          if (relatedNode) {
+            relatedNodes[invertedRelationship].add(relatedNode);
+          }
         }
-      }
+      });
+    };
+
+    // 递归查找相同类型的关系
+    const findSameTypeRelationships = (
+      nodeId: string,
+      relationshipType: RelationshipType,
+      depth: number,
+      visited = new Set<string>()
+    ) => {
+      if (depth <= 0 || visited.has(nodeId)) return;
+      visited.add(nodeId);
+      
+      graphData.edges.forEach(edge => {
+        const edgeKey = `${edge.source}-${edge.target}-${edge.relationshipType}`;
+        if (processedEdges.has(edgeKey)) return;
+        
+        // 根据关系类型决定查找方向
+        let nextNodeId: string | null = null;
+        let matchesType = false;
+        
+        // 出站关系：当前节点作为源节点
+        if (edge.source === nodeId) {
+          // 只有当边的类型与我们要查找的类型相同时才继续
+          if (edge.relationshipType === relationshipType) {
+            nextNodeId = edge.target;
+            matchesType = true;
+          }
+        } 
+        // 入站关系：当前节点作为目标节点
+        else if (edge.target === nodeId) {
+          // 计算反转关系类型
+          let invertedType: RelationshipType;
+          
+          if (edge.relationshipType === RelationshipType.FATHER) {
+            invertedType = RelationshipType.CHILD;
+          } else if (edge.relationshipType === RelationshipType.CHILD) {
+            invertedType = RelationshipType.FATHER;
+          } else if (edge.relationshipType === RelationshipType.BASE) {
+            invertedType = RelationshipType.BUILD;
+          } else if (edge.relationshipType === RelationshipType.BUILD) {
+            invertedType = RelationshipType.BASE;
+          } else {
+            invertedType = edge.relationshipType;
+          }
+          
+          // 只有当反转后的类型与我们要查找的类型相同时才继续
+          if (invertedType === relationshipType) {
+            nextNodeId = edge.source;
+            matchesType = true;
+          }
+        }
+        
+        // 如果找到匹配的关系，处理并递归
+        if (matchesType && nextNodeId) {
+          processedEdges.add(edgeKey);
+          const nextNode = graphData.nodes.find(node => node.id === nextNodeId);
+          
+          if (nextNode) {
+            relatedNodes[relationshipType].add(nextNode);
+            // 递归查找，深度减1
+            findSameTypeRelationships(nextNodeId, relationshipType, depth - 1, new Set(visited));
+          }
+        }
+      });
+    };
+
+    // 首先收集中心节点的直接关系
+    collectDirectRelationships(centralNodeId);
+    
+    // 然后对每种关系类型进行递归查找
+    Object.values(RelationshipType).forEach(type => {
+      // 获取当前已收集的这种类型的直接关系节点
+      const directRelationNodes = Array.from(relatedNodes[type]);
+      
+      // 对每个直接关系节点，递归查找相同类型的关系
+      // 这样能保证只递归查找相同类型的关系，例如父节点的父节点，或子节点的子节点
+      directRelationNodes.forEach(node => {
+        if (depthConfig[type] > 1) { // 如果深度 > 1，才需要递归
+          findSameTypeRelationships(node.id, type, depthConfig[type] - 1);
+        }
+      });
     });
 
-    // Map relationship types to quadrants according to the configuration
+    // 将Set转换回数组
     return {
       centralNode,
       quadrants: {
-        top: relatedNodes[config.top],
-        bottom: relatedNodes[config.bottom],
-        left: relatedNodes[config.left],
-        right: relatedNodes[config.right]
+        top: Array.from(relatedNodes[config.top]),
+        bottom: Array.from(relatedNodes[config.bottom]),
+        left: Array.from(relatedNodes[config.left]),
+        right: Array.from(relatedNodes[config.right])
       }
     };
   }

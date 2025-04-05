@@ -17,10 +17,48 @@
   color: #333;
 }
 
+.description-text {
+  font-size: 0.9em;
+  color: #666;
+  margin-bottom: 12px;
+  padding: 0 8px;
+}
+
+.relation-description {
+  font-size: 0.8em;
+  color: #777;
+  margin-top: 2px;
+  font-weight: normal;
+}
+
 .quadrant-config {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* 深度配置样式 */
+.depth-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.depth-slider {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 300px;
+  gap: 10px;
+  margin-right: 16px;
+}
+
+.depth-value {
+  min-width: 24px;
+  text-align: center;
+  font-weight: bold;
+  color: #666;
 }
 
 /* 加载状态 */
@@ -129,6 +167,11 @@
 
 @media (min-width: 992px) {
   .quadrant-config {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .depth-config {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
   }

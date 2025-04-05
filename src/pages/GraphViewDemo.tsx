@@ -15,11 +15,12 @@ import {
   IonIcon,
   IonSpinner,
   IonCard,
-  IonCardContent
+  IonCardContent,
+  IonRange
 } from '@ionic/react';
 import { refreshOutline, arrowBack } from 'ionicons/icons';
 import GraphView from '../components/GraphView';
-import { GraphData, GraphNode, GraphEdge, RelationshipType, QuadrantConfig, defaultQuadrantConfig } from '../models/GraphNode';
+import { GraphData, GraphNode, GraphEdge, RelationshipType, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig } from '../models/GraphNode';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import './GraphViewDemo.css';
 
@@ -99,6 +100,7 @@ const GraphViewDemo: React.FC = () => {
   const [graphData, setGraphData] = useState<GraphData>({nodes: [], edges: []});
   const [centralNodeId, setCentralNodeId] = useState<string>('');
   const [quadrantConfig, setQuadrantConfig] = useState<QuadrantConfig>(defaultQuadrantConfig);
+  const [depthConfig, setDepthConfig] = useState<DepthConfig>(defaultDepthConfig);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
@@ -171,6 +173,14 @@ const GraphViewDemo: React.FC = () => {
       [position]: value
     });
   };
+  
+  // 处理深度配置更改
+  const handleDepthChange = (relationshipType: RelationshipType, value: number) => {
+    setDepthConfig({
+      ...depthConfig,
+      [relationshipType]: value
+    });
+  };
 
   // 刷新视图，返回到第一个节点
   const handleReset = () => {
@@ -182,6 +192,14 @@ const GraphViewDemo: React.FC = () => {
   // 刷新数据
   const handleRefreshData = () => {
     loadGraphData();
+  };
+  
+  // 关系类型的中文名称映射
+  const relationshipTypeNames = {
+    [RelationshipType.FATHER]: '父节点关系',
+    [RelationshipType.CHILD]: '子节点关系',
+    [RelationshipType.BASE]: '基础关系',
+    [RelationshipType.BUILD]: '构建关系'
   };
 
   return (
@@ -292,6 +310,37 @@ const GraphViewDemo: React.FC = () => {
                   </IonSelect>
                 </IonItem>
               </div>
+              
+              <h4>深度配置</h4>
+              <p className="description-text">
+                设置每种关系类型的递归深度。例如，父节点深度设为3将显示"父亲的父亲的父亲"，但不会显示父亲的其他类型关系。
+              </p>
+              <div className="depth-config">
+                {Object.values(RelationshipType).map(type => (
+                  <IonItem key={type}>
+                    <IonLabel>
+                      {relationshipTypeNames[type]}
+                      <p className="relation-description">
+                        {type === RelationshipType.FATHER && '递归显示上层父节点'}
+                        {type === RelationshipType.CHILD && '递归显示下层子节点'}
+                        {type === RelationshipType.BASE && '递归显示基础关系节点'}
+                        {type === RelationshipType.BUILD && '递归显示构建关系节点'}
+                      </p>
+                    </IonLabel>
+                    <div className="depth-slider">
+                      <span className="depth-value">{depthConfig[type]}</span>
+                      <IonRange
+                        min={1}
+                        max={5}
+                        step={1}
+                        snaps={true}
+                        value={depthConfig[type]}
+                        onIonChange={e => handleDepthChange(type, e.detail.value as number)}
+                      />
+                    </div>
+                  </IonItem>
+                ))}
+              </div>
             </div>
             
             <div className="graph-view-demo-container">
@@ -299,6 +348,7 @@ const GraphViewDemo: React.FC = () => {
                 graphData={graphData} 
                 centralNodeId={centralNodeId} 
                 quadrantConfig={quadrantConfig}
+                depthConfig={depthConfig}
                 onNodeClick={handleNodeClick} 
               />
             </div>

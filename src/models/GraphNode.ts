@@ -41,10 +41,26 @@ export interface QuadrantConfig {
   right: RelationshipType;
 }
 
+// 深度配置，控制每种关系类型的最大深度
+export interface DepthConfig {
+  [RelationshipType.FATHER]: number;
+  [RelationshipType.CHILD]: number;
+  [RelationshipType.BASE]: number;
+  [RelationshipType.BUILD]: number;
+}
+
 // Default quadrant configuration
 export const defaultQuadrantConfig: QuadrantConfig = {
   top: RelationshipType.FATHER,
   bottom: RelationshipType.CHILD,
   left: RelationshipType.BASE,
   right: RelationshipType.BUILD,
+};
+
+// 默认深度配置，最大深度为3
+export const defaultDepthConfig: DepthConfig = {
+  [RelationshipType.FATHER]: 3,
+  [RelationshipType.CHILD]: 3,
+  [RelationshipType.BASE]: 3,
+  [RelationshipType.BUILD]: 3,
 }; 

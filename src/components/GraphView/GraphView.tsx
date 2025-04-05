@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Graph } from '@antv/x6';
-import { GraphData, QuadrantConfig, defaultQuadrantConfig } from '../../models/GraphNode';
+import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig } from '../../models/GraphNode';
 import { GraphLayoutService } from '../../services/GraphLayoutService';
 import './GraphView.css';
 
@@ -8,6 +8,7 @@ interface GraphViewProps {
   graphData: GraphData;
   centralNodeId: string;
   quadrantConfig?: QuadrantConfig;
+  depthConfig?: DepthConfig;  // 添加深度配置属性
   onNodeClick?: (nodeId: string) => void;
 }
 
@@ -54,6 +55,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   graphData,
   centralNodeId,
   quadrantConfig = defaultQuadrantConfig,
+  depthConfig = defaultDepthConfig,  // 使用默认深度配置
   onNodeClick
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -160,7 +162,8 @@ const GraphView: React.FC<GraphViewProps> = ({
     const organizedData = GraphLayoutService.organizeByQuadrants(
       graphData, 
       centralNodeId, 
-      quadrantConfig
+      quadrantConfig,
+      depthConfig  // 传递深度配置
     );
 
     // Calculate positions for each node
@@ -238,7 +241,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     // Center the view
     graph.centerContent();
 
-  }, [graph, graphData, centralNodeId, quadrantConfig]);
+  }, [graph, graphData, centralNodeId, quadrantConfig, depthConfig]);
 
   return (
     <div className="graph-view-container">
