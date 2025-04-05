@@ -28,9 +28,19 @@ const convertDbDataToGraphData = (
   dbNodes: any[], 
   dbEdges: any[]
 ): GraphData => {
+  console.log('开始数据转换，节点：', dbNodes.length, '边：', dbEdges.length);
+  
+  // 调试原始数据结构
+  if (dbNodes.length > 0) {
+    console.log('节点示例：', dbNodes[0]);
+  }
+  if (dbEdges.length > 0) {
+    console.log('边示例：', dbEdges[0]);
+  }
+  
   const nodes: GraphNode[] = dbNodes.map(dbNode => ({
-    id: dbNode.id!,
-    label: dbNode.label,
+    id: dbNode.id || '',
+    label: dbNode.label || '无标签',
     description: dbNode.properties?.description || '',
     metadata: dbNode.properties || {},
   }));
@@ -39,7 +49,12 @@ const convertDbDataToGraphData = (
     // 根据边的类型映射到我们定义的关系类型
     let relationshipType: RelationshipType;
     
-    switch (dbEdge.type.toLowerCase()) {
+    // 调试边类型映射
+    console.log('处理边：', dbEdge.id, '类型：', dbEdge.type, 
+                '源节点：', dbEdge.source_id || dbEdge.sourceId, 
+                '目标节点：', dbEdge.target_id || dbEdge.targetId);
+    
+    switch ((dbEdge.type || '').toLowerCase()) {
       case 'father':
       case 'parent':
         relationshipType = RelationshipType.FATHER;
@@ -56,19 +71,25 @@ const convertDbDataToGraphData = (
         relationshipType = RelationshipType.BUILD;
         break;
       default:
-        // 默认关系类型，可以根据需要调整
+        // 默认关系类型，根据数据库中看到的实际类型调整
+        console.log('未知边类型:', dbEdge.type, '默认设为BUILD');
         relationshipType = RelationshipType.BUILD;
     }
 
+    // 处理可能不同的字段名
+    const sourceId = dbEdge.source_id || dbEdge.sourceId;
+    const targetId = dbEdge.target_id || dbEdge.targetId;
+    
     return {
-      id: dbEdge.id!,
-      source: dbEdge.source_id,
-      target: dbEdge.target_id,
+      id: dbEdge.id || '',
+      source: sourceId,
+      target: targetId,
       relationshipType,
       metadata: dbEdge.properties || {},
     };
   });
 
+  console.log('转换完成，GraphNode:', nodes.length, 'GraphEdge:', edges.length);
   return { nodes, edges };
 };
 
@@ -82,42 +103,52 @@ const GraphViewDemo: React.FC = () => {
   const [toastMessage, setToastMessage] = useState('');
 
   // 从数据库加载数据
-  useEffect(() => {
-    const loadGraphData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // 初始化数据库
-        await graphDatabaseService.initialize({
-          dbName: 'graph_database',
-          version: 1,
-          verbose: true
-        });
-        
-        const db = graphDatabaseService.getDatabase();
-        
-        // 获取所有节点和边
-        const dbNodes = await db.getNodes();
-        const dbEdges = await db.getEdges();
-        
-        // 转换数据格式
-        const convertedData = convertDbDataToGraphData(dbNodes, dbEdges);
-        setGraphData(convertedData);
-        
-        // 如果有节点，则设置第一个节点为中心节点
-        if (convertedData.nodes.length > 0) {
-          setCentralNodeId(convertedData.nodes[0].id);
-        }
-        
-      } catch (err) {
-        console.error('加载图数据失败:', err);
-        setError(`加载数据失败: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        setLoading(false);
+  const loadGraphData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // 初始化数据库 - 使用与GraphDBDemo相同的数据库名称
+      console.log('正在初始化数据库...');
+      await graphDatabaseService.initialize({
+        dbName: 'graph_demo', // 改为与GraphDBDemo相同的数据库名称
+        version: 1,
+        verbose: true
+      });
+      
+      const db = graphDatabaseService.getDatabase();
+      
+      // 获取所有节点和边
+      console.log('正在获取节点和边...');
+      const dbNodes = await db.getNodes();
+      const dbEdges = await db.getEdges();
+      
+      console.log('从数据库获取到的节点:', dbNodes.length, dbNodes);
+      console.log('从数据库获取到的边:', dbEdges.length, dbEdges);
+      
+      // 转换数据格式
+      const convertedData = convertDbDataToGraphData(dbNodes, dbEdges);
+      console.log('转换后的数据:', convertedData);
+      setGraphData(convertedData);
+      
+      // 如果有节点，则设置第一个节点为中心节点
+      if (convertedData.nodes.length > 0) {
+        setCentralNodeId(convertedData.nodes[0].id);
+        console.log('设置中心节点:', convertedData.nodes[0].id);
+      } else {
+        console.log('没有找到节点，无法设置中心节点');
       }
-    };
-    
+      
+    } catch (err) {
+      console.error('加载图数据失败:', err);
+      setError(`加载数据失败: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 组件挂载时加载数据
+  useEffect(() => {
     loadGraphData();
     
     // 组件卸载时关闭数据库
@@ -147,6 +178,11 @@ const GraphViewDemo: React.FC = () => {
       setCentralNodeId(graphData.nodes[0].id);
     }
   };
+  
+  // 刷新数据
+  const handleRefreshData = () => {
+    loadGraphData();
+  };
 
   return (
     <IonPage>
@@ -159,6 +195,9 @@ const GraphViewDemo: React.FC = () => {
           </IonButtons>
           <IonTitle>图形视图展示</IonTitle>
           <IonButtons slot="end">
+            <IonButton onClick={handleRefreshData} disabled={loading}>
+              刷新数据
+            </IonButton>
             <IonButton onClick={handleReset} disabled={loading}>
               <IonIcon icon={refreshOutline} />
             </IonButton>
@@ -176,7 +215,11 @@ const GraphViewDemo: React.FC = () => {
             <IonCardContent>
               <div className="error-container">
                 <p>出错了: {error}</p>
-                <IonButton onClick={() => window.location.reload()}>重试</IonButton>
+                <p className="debug-info">请尝试先打开"图数据库演示"页面添加数据，然后再回到此页面。</p>
+                <div className="button-group">
+                  <IonButton onClick={handleRefreshData}>刷新数据</IonButton>
+                  <IonButton routerLink="/graph-demo">前往图数据库演示</IonButton>
+                </div>
               </div>
             </IonCardContent>
           </IonCard>
@@ -185,7 +228,10 @@ const GraphViewDemo: React.FC = () => {
             <IonCardContent>
               <div className="empty-container">
                 <p>数据库中没有图数据，请先使用图数据库演示页面添加节点和边。</p>
-                <IonButton routerLink="/graph-demo">前往图数据库演示</IonButton>
+                <div className="button-group">
+                  <IonButton onClick={handleRefreshData}>刷新数据</IonButton>
+                  <IonButton routerLink="/graph-demo">前往图数据库演示</IonButton>
+                </div>
               </div>
             </IonCardContent>
           </IonCard>
