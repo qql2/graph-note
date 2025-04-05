@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Graph } from '@antv/x6';
-import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig } from '../../models/GraphNode';
+import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, RelationshipType } from '../../models/GraphNode';
 import { GraphLayoutService } from '../../services/GraphLayoutService';
 import './GraphView.css';
 
@@ -9,8 +9,17 @@ interface GraphViewProps {
   centralNodeId: string;
   quadrantConfig?: QuadrantConfig;
   depthConfig?: DepthConfig;  // 添加深度配置属性
+  viewConfig?: ViewConfig;    // 添加视图配置属性
   onNodeClick?: (nodeId: string) => void;
 }
+
+// 关系类型到简短标签的映射
+const relationshipToSimpleLabel = {
+  [RelationshipType.FATHER]: 'F',
+  [RelationshipType.CHILD]: 'C',
+  [RelationshipType.BASE]: 'Ba',
+  [RelationshipType.BUILD]: 'Bu',
+};
 
 // 注册自定义节点
 Graph.registerNode(
@@ -29,6 +38,65 @@ Graph.registerNode(
         fill: '#fff',
       },
     },
+    // 自定义锚点位置，定义在节点的上、下、左、右四个位置
+    ports: {
+      groups: {
+        top: {
+          position: 'top',
+          attrs: {
+            circle: {
+              r: 4,
+              magnet: true,
+              stroke: '#31d0c6',
+              fill: '#fff',
+              strokeWidth: 1,
+            },
+          },
+        },
+        bottom: {
+          position: 'bottom',
+          attrs: {
+            circle: {
+              r: 4,
+              magnet: true,
+              stroke: '#31d0c6',
+              fill: '#fff',
+              strokeWidth: 1,
+            },
+          },
+        },
+        left: {
+          position: 'left',
+          attrs: {
+            circle: {
+              r: 4,
+              magnet: true,
+              stroke: '#31d0c6',
+              fill: '#fff',
+              strokeWidth: 1,
+            },
+          },
+        },
+        right: {
+          position: 'right',
+          attrs: {
+            circle: {
+              r: 4,
+              magnet: true,
+              stroke: '#31d0c6',
+              fill: '#fff',
+              strokeWidth: 1,
+            },
+          },
+        },
+      },
+      items: [
+        { group: 'top', id: 'top' },
+        { group: 'bottom', id: 'bottom' },
+        { group: 'left', id: 'left' },
+        { group: 'right', id: 'right' },
+      ],
+    },
   },
   true
 );
@@ -46,6 +114,31 @@ Graph.registerEdge(
           size: 8,
         },
       },
+      // 添加标签样式
+      label: {
+        fontSize: 10,
+        fill: '#333',
+        textAnchor: 'middle',
+        textVerticalAnchor: 'middle',
+        pointerEvents: 'none',
+        refX: 0.5, // 水平居中
+        refY: -6,  // 稍微向上偏移
+        background: {
+          fill: 'rgba(255, 255, 255, 0.8)',
+          rx: 3,
+          ry: 3,
+          padding: [2, 4],
+        },
+      },
+    },
+    connector: {
+      name: 'rounded',
+      args: {
+        radius: 8,
+      },
+    },
+    router: {
+      name: 'normal',
     },
   },
   true
@@ -56,6 +149,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   centralNodeId,
   quadrantConfig = defaultQuadrantConfig,
   depthConfig = defaultDepthConfig,  // 使用默认深度配置
+  viewConfig = defaultViewConfig,    // 使用默认视图配置
   onNodeClick
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -110,15 +204,13 @@ const GraphView: React.FC<GraphViewProps> = ({
         type: 'dot',
       },
       connecting: {
-        router: 'manhattan',
+        router: 'normal',
         connector: {
           name: 'rounded',
           args: {
             radius: 8,
           },
         },
-        anchor: 'center',
-        connectionPoint: 'anchor',
         validateConnection: () => false, // Prevent interactive connections
       },
       interacting: {
@@ -173,9 +265,17 @@ const GraphView: React.FC<GraphViewProps> = ({
       containerRef.current.offsetHeight
     );
 
+    // 节点和其quadrant的映射，用于决定连接点
+    const nodeQuadrantMap = new Map();
+    const nodeDepthMap = new Map();
+
     // Add nodes to the graph
     const nodes = layoutData.map((nodeData: any) => {
-      const { id, x, y, width, height, label, isCentralNode, quadrant } = nodeData;
+      const { id, x, y, width, height, label, isCentralNode, quadrant, depth } = nodeData;
+      
+      // 存储节点的象限和深度信息，用于后续确定边的连接点
+      nodeQuadrantMap.set(id, quadrant || 'center');
+      nodeDepthMap.set(id, depth || 0);
       
       // Different styles based on node type
       const nodeFill = isCentralNode ? '#FF9800' : 
@@ -204,9 +304,71 @@ const GraphView: React.FC<GraphViewProps> = ({
         data: {
           isCentralNode,
           quadrant,
+          depth,
         },
       });
     });
+
+    // 确定边的源节点和目标节点的连接点
+    const determineConnectionPoints = (sourceId: string, targetId: string) => {
+      const sourceQuadrant = nodeQuadrantMap.get(sourceId) || 'center';
+      const targetQuadrant = nodeQuadrantMap.get(targetId) || 'center';
+      const sourceDepth = nodeDepthMap.get(sourceId) || 0;
+      const targetDepth = nodeDepthMap.get(targetId) || 0;
+      
+      // 中心节点特殊处理
+      if (sourceId === centralNodeId) {
+        // 中心节点 -> 其他节点
+        if (targetQuadrant === 'top') return { source: 'top', target: 'bottom' };
+        if (targetQuadrant === 'bottom') return { source: 'bottom', target: 'top' };
+        if (targetQuadrant === 'left') return { source: 'left', target: 'right' };
+        if (targetQuadrant === 'right') return { source: 'right', target: 'left' };
+      } else if (targetId === centralNodeId) {
+        // 其他节点 -> 中心节点
+        if (sourceQuadrant === 'top') return { source: 'bottom', target: 'top' };
+        if (sourceQuadrant === 'bottom') return { source: 'top', target: 'bottom' };
+        if (sourceQuadrant === 'left') return { source: 'right', target: 'left' };
+        if (sourceQuadrant === 'right') return { source: 'left', target: 'right' };
+      }
+      
+      // 处理同象限不同深度的节点
+      if (sourceQuadrant === targetQuadrant) {
+        if (sourceQuadrant === 'top') {
+          return sourceDepth < targetDepth 
+            ? { source: 'top', target: 'bottom' }     // 浅层 -> 深层
+            : { source: 'bottom', target: 'top' };    // 深层 -> 浅层
+        }
+        if (sourceQuadrant === 'bottom') {
+          return sourceDepth < targetDepth 
+            ? { source: 'bottom', target: 'top' }     // 浅层 -> 深层
+            : { source: 'top', target: 'bottom' };    // 深层 -> 浅层
+        }
+        if (sourceQuadrant === 'left') {
+          return sourceDepth < targetDepth 
+            ? { source: 'left', target: 'right' }     // 浅层 -> 深层
+            : { source: 'right', target: 'left' };    // 深层 -> 浅层
+        }
+        if (sourceQuadrant === 'right') {
+          return sourceDepth < targetDepth 
+            ? { source: 'right', target: 'left' }     // 浅层 -> 深层
+            : { source: 'left', target: 'right' };    // 深层 -> 浅层
+        }
+      }
+      
+      // 跨象限连接的默认规则
+      return { source: 'center', target: 'center' };
+    };
+
+    // 获取关系类型的显示标签
+    const getRelationshipLabel = (relationshipType: RelationshipType) => {
+      if (viewConfig.showRelationshipLabels === RelationshipLabelMode.NONE) {
+        return null;
+      } else if (viewConfig.showRelationshipLabels === RelationshipLabelMode.SIMPLE) {
+        return relationshipToSimpleLabel[relationshipType] || '';
+      } else {
+        return relationshipType;
+      }
+    };
 
     // Create edges between nodes
     graphData.edges.forEach((edgeData) => {
@@ -221,10 +383,26 @@ const GraphView: React.FC<GraphViewProps> = ({
                          edgeData.relationshipType === quadrantConfig.right ? '#F44336' :
                          '#607D8B';
         
-        graph.addEdge({
+        // 确定连接点
+        const { source: sourcePort, target: targetPort } = determineConnectionPoints(
+          edgeData.source, 
+          edgeData.target
+        );
+        
+        // 获取关系类型标签
+        const relationshipLabel = getRelationshipLabel(edgeData.relationshipType);
+        
+        // 创建边的基本属性
+        const edgeOptions: any = {
           id: edgeData.id,
-          source: edgeData.source,
-          target: edgeData.target,
+          source: {
+            cell: edgeData.source,
+            port: sourcePort
+          },
+          target: {
+            cell: edgeData.target,
+            port: targetPort
+          },
           shape: 'graph-edge',
           attrs: {
             line: {
@@ -234,14 +412,44 @@ const GraphView: React.FC<GraphViewProps> = ({
           data: {
             relationshipType: edgeData.relationshipType,
           },
-        });
+        };
+        
+        // 只在有标签时添加标签
+        if (relationshipLabel) {
+          // 直接在边对象上设置label数组
+          edgeOptions.labels = [
+            {
+              position: 0.5,
+              attrs: {
+                text: {
+                  text: relationshipLabel,
+                  fill: '#333',
+                  fontSize: 10,
+                  textAnchor: 'middle',
+                  textVerticalAnchor: 'middle',
+                  pointerEvents: 'none',
+                },
+                rect: {
+                  fill: 'rgba(255, 255, 255, 0.8)',
+                  stroke: edgeColor,
+                  strokeWidth: 0.5,
+                  rx: 3,
+                  ry: 3,
+                },
+              },
+            },
+          ];
+        }
+        
+        // 添加边到图中
+        graph.addEdge(edgeOptions);
       }
     });
 
     // Center the view
     graph.centerContent();
 
-  }, [graph, graphData, centralNodeId, quadrantConfig, depthConfig]);
+  }, [graph, graphData, centralNodeId, quadrantConfig, depthConfig, viewConfig]);
 
   return (
     <div className="graph-view-container">

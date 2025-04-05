@@ -16,11 +16,15 @@ import {
   IonSpinner,
   IonCard,
   IonCardContent,
-  IonRange
+  IonRange,
+  IonList,
+  IonRadioGroup,
+  IonRadio,
+  IonListHeader
 } from '@ionic/react';
 import { refreshOutline, arrowBack } from 'ionicons/icons';
 import GraphView from '../components/GraphView';
-import { GraphData, GraphNode, GraphEdge, RelationshipType, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig } from '../models/GraphNode';
+import { GraphData, GraphNode, GraphEdge, RelationshipType, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode } from '../models/GraphNode';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import './GraphViewDemo.css';
 
@@ -101,6 +105,7 @@ const GraphViewDemo: React.FC = () => {
   const [centralNodeId, setCentralNodeId] = useState<string>('');
   const [quadrantConfig, setQuadrantConfig] = useState<QuadrantConfig>(defaultQuadrantConfig);
   const [depthConfig, setDepthConfig] = useState<DepthConfig>(defaultDepthConfig);
+  const [viewConfig, setViewConfig] = useState<ViewConfig>(defaultViewConfig);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
@@ -194,12 +199,27 @@ const GraphViewDemo: React.FC = () => {
     loadGraphData();
   };
   
+  // 处理关系标签显示方式变更
+  const handleRelationshipLabelModeChange = (value: RelationshipLabelMode) => {
+    setViewConfig({
+      ...viewConfig,
+      showRelationshipLabels: value
+    });
+  };
+
   // 关系类型的中文名称映射
   const relationshipTypeNames = {
     [RelationshipType.FATHER]: '父节点关系',
     [RelationshipType.CHILD]: '子节点关系',
     [RelationshipType.BASE]: '基础关系',
     [RelationshipType.BUILD]: '构建关系'
+  };
+
+  // 关系标签模式的中文名称
+  const labelModeNames = {
+    [RelationshipLabelMode.NONE]: '不显示',
+    [RelationshipLabelMode.SIMPLE]: '简洁显示（F/C/Ba/Bu）',
+    [RelationshipLabelMode.FULL]: '完整显示（father/child/base/build）'
   };
 
   return (
@@ -342,6 +362,27 @@ const GraphViewDemo: React.FC = () => {
                   </IonItem>
                 ))}
               </div>
+              
+              <h4>显示设置</h4>
+              <div className="view-config">
+                <IonList>
+                  <IonRadioGroup 
+                    value={viewConfig.showRelationshipLabels} 
+                    onIonChange={e => handleRelationshipLabelModeChange(e.detail.value)}
+                  >
+                    <IonListHeader>
+                      <IonLabel>关系标签显示方式</IonLabel>
+                    </IonListHeader>
+                    
+                    {Object.values(RelationshipLabelMode).map(mode => (
+                      <IonItem key={mode}>
+                        <IonLabel>{labelModeNames[mode]}</IonLabel>
+                        <IonRadio slot="start" value={mode} />
+                      </IonItem>
+                    ))}
+                  </IonRadioGroup>
+                </IonList>
+              </div>
             </div>
             
             <div className="graph-view-demo-container">
@@ -350,6 +391,7 @@ const GraphViewDemo: React.FC = () => {
                 centralNodeId={centralNodeId} 
                 quadrantConfig={quadrantConfig}
                 depthConfig={depthConfig}
+                viewConfig={viewConfig}
                 onNodeClick={handleNodeClick} 
               />
             </div>

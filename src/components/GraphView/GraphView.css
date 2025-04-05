@@ -16,6 +16,21 @@
   border-radius: 4px;
 }
 
+/* 隐藏锚点，只在需要时显示 */
+.x6-port-body {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.x6-node:hover .x6-port-body,
+.x6-edge:hover + .x6-node .x6-port-body {
+  opacity: 0.5;
+}
+
+.x6-node.highlighted .x6-port-body {
+  opacity: 0.8;
+}
+
 /* 画布控制按钮样式 */
 .graph-view-controls {
   position: absolute;

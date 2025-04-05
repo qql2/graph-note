@@ -8,6 +8,13 @@ export enum RelationshipType {
   BUILD = 'build',
 }
 
+// 关系类型的显示方式
+export enum RelationshipLabelMode {
+  NONE = 'none', // 不显示关系标签
+  SIMPLE = 'simple', // 简单显示（F/C/B/B）
+  FULL = 'full', // 完整显示关系名称
+}
+
 // Graph node model
 export interface GraphNode {
   id: string;
@@ -56,6 +63,11 @@ export interface DepthConfig {
   [RelationshipType.BUILD]: number;
 }
 
+// 视图配置
+export interface ViewConfig {
+  showRelationshipLabels: RelationshipLabelMode; // 是否在连线上显示关系类型
+}
+
 // Default quadrant configuration
 export const defaultQuadrantConfig: QuadrantConfig = {
   top: RelationshipType.FATHER,
@@ -70,4 +82,9 @@ export const defaultDepthConfig: DepthConfig = {
   [RelationshipType.CHILD]: 3,
   [RelationshipType.BASE]: 3,
   [RelationshipType.BUILD]: 3,
+};
+
+// 默认视图配置
+export const defaultViewConfig: ViewConfig = {
+  showRelationshipLabels: RelationshipLabelMode.SIMPLE, // 默认使用简洁模式显示关系标签
 }; 
