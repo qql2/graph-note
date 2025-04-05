@@ -3,7 +3,7 @@ import {
   IonContent, IonHeader, IonPage, IonTitle, IonToolbar,
   IonGrid, IonRow, IonCol, IonCard, IonCardHeader, IonCardTitle, IonCardContent,
   IonItem, IonLabel, IonInput, IonButton, IonList, IonSpinner,
-  IonToast, IonTextarea
+  IonToast, IonTextarea, IonSelect, IonSelectOption
 } from '@ionic/react';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import { GraphNode, GraphEdge, DeleteMode } from '../services/graph-database/core/types';
@@ -232,6 +232,15 @@ const GraphDBDemo: React.FC = () => {
     }));
   };
 
+  // 生成节点选择项
+  const renderNodeOptions = () => {
+    return nodes.map(node => (
+      <IonSelectOption key={node.id} value={node.id}>
+        {node.label} ({node.id})
+      </IonSelectOption>
+    ));
+  };
+
   return (
     <IonPage>
       <IonHeader>
@@ -331,26 +340,60 @@ const GraphDBDemo: React.FC = () => {
                 </IonCardHeader>
                 <IonCardContent>
                   <IonItem>
-                    <IonLabel position="floating">源节点ID</IonLabel>
-                    <IonInput
+                    <IonLabel position="floating">源节点</IonLabel>
+                    <IonSelect 
                       value={edgeForm.source_id}
-                      onIonInput={(e) => handleEdgeFormChange('source_id', e.detail.value!)}
-                    ></IonInput>
+                      onIonChange={(e) => handleEdgeFormChange('source_id', e.detail.value)}
+                      interfaceOptions={{
+                        header: '选择源节点',
+                        cssClass: 'custom-select'
+                      }}
+                      placeholder="选择源节点"
+                    >
+                      {renderNodeOptions()}
+                    </IonSelect>
                   </IonItem>
                   <IonItem>
-                    <IonLabel position="floating">目标节点ID</IonLabel>
-                    <IonInput
+                    <IonLabel position="floating">目标节点</IonLabel>
+                    <IonSelect 
                       value={edgeForm.target_id}
-                      onIonInput={(e) => handleEdgeFormChange('target_id', e.detail.value!)}
-                    ></IonInput>
+                      onIonChange={(e) => handleEdgeFormChange('target_id', e.detail.value)}
+                      interfaceOptions={{
+                        header: '选择目标节点',
+                        cssClass: 'custom-select'
+                      }}
+                      placeholder="选择目标节点"
+                    >
+                      {renderNodeOptions()}
+                    </IonSelect>
                   </IonItem>
                   <IonItem>
-                    <IonLabel position="floating">类型</IonLabel>
-                    <IonInput
+                    <IonLabel position="floating">关系类型</IonLabel>
+                    <IonSelect 
                       value={edgeForm.type}
-                      onIonInput={(e) => handleEdgeFormChange('type', e.detail.value!)}
-                    ></IonInput>
+                      onIonChange={(e) => handleEdgeFormChange('type', e.detail.value)}
+                      interfaceOptions={{
+                        header: '选择关系类型',
+                        cssClass: 'custom-select'
+                      }}
+                      placeholder="选择关系类型"
+                    >
+                      <IonSelectOption value="related_to">关联</IonSelectOption>
+                      <IonSelectOption value="belongs_to">属于</IonSelectOption>
+                      <IonSelectOption value="contains">包含</IonSelectOption>
+                      <IonSelectOption value="depends_on">依赖</IonSelectOption>
+                      <IonSelectOption value="custom">自定义</IonSelectOption>
+                    </IonSelect>
                   </IonItem>
+                  {edgeForm.type === 'custom' && (
+                    <IonItem>
+                      <IonLabel position="floating">自定义关系类型</IonLabel>
+                      <IonInput
+                        value={edgeForm.type === 'custom' ? '' : edgeForm.type}
+                        onIonInput={(e) => handleEdgeFormChange('type', e.detail.value!)}
+                      ></IonInput>
+                    </IonItem>
+                  )}
                   <IonItem>
                     <IonLabel position="floating">属性 (JSON格式)</IonLabel>
                     <IonTextarea

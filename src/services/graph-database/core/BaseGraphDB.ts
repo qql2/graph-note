@@ -500,7 +500,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       return await this.db.transaction(async () => {
         try {
           const result = await addEdgeOperation(this.db!);
-          // 移除persistData调用，因为它已经在事务API中自动执行了
+          // 不需要调用persistData，因为withTransaction会自动处理
           console.log(`Edge ${result} added successfully`);
           return result;
         } catch (error) {
