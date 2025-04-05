@@ -238,7 +238,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       await this.db.transaction(async () => {
         try {
           await updateOperation(this.db!);
-          await this.persistData();
+          // 移除persistData调用，因为它已经在事务API中自动执行了
         } catch (error) {
           if (error instanceof NodeNotFoundError) {
             throw error;
@@ -426,6 +426,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     
     const id = edge.id || uuidv4();
     const now = new Date().toISOString();
+    
+    console.log("Adding edge with data:", { id, ...edge, created_at: now });
 
     // 创建添加边的操作
     const addEdgeOperation = async (db: SQLiteEngine): Promise<string> => {
@@ -439,6 +441,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         if (!sourceExistsResult?.values || sourceExistsResult.values.length === 0) {
           throw new NodeNotFoundError(edge.source_id);
         }
+        console.log(`Source node ${edge.source_id} exists`);
       }
       
       if (edge.target_id) {
@@ -450,6 +453,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         if (!targetExistsResult?.values || targetExistsResult.values.length === 0) {
           throw new NodeNotFoundError(edge.target_id);
         }
+        console.log(`Target node ${edge.target_id} exists`);
       }
 
       // 插入边基本信息
@@ -458,6 +462,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
          VALUES (?, ?, ?, ?, ?)`,
         [id, edge.source_id, edge.target_id, edge.type, now]
       );
+      console.log(`Edge ${id} inserted into relationships table`);
 
       // 插入边属性
       if (edge.properties) {
@@ -467,6 +472,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
              VALUES (?, ?, ?)`,
             [id, key, JSON.stringify(value)]
           );
+          console.log(`Property ${key}=${JSON.stringify(value)} added to edge ${id}`);
         }
       }
 
@@ -476,9 +482,11 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     try {
       // 如果已经在事务中，直接执行操作
       if (this.inTransaction) {
+        console.log("Already in transaction, executing operation directly");
         try {
           return await addEdgeOperation(this.db);
         } catch (error) {
+          console.error("Error in addEdge operation:", error);
           if (error instanceof NodeNotFoundError) {
             throw error;
           }
@@ -487,12 +495,16 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       }
 
       // 否则，使用事务执行操作
+      console.log("Starting new transaction for addEdge");
+      // TODO: 这里只要在事务中执行就会导致事务提交失败
       return await this.db.transaction(async () => {
         try {
           const result = await addEdgeOperation(this.db!);
-          await this.persistData();
+          // 移除persistData调用，因为它已经在事务API中自动执行了
+          console.log(`Edge ${result} added successfully`);
           return result;
         } catch (error) {
+          console.error("Error in addEdge transaction:", error);
           if (error instanceof NodeNotFoundError) {
             throw error;
           }
@@ -500,6 +512,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         }
       });
     } catch (error) {
+      console.error("Fatal error in addEdge:", error);
       throw error;
     }
   }
@@ -610,7 +623,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       await this.db.transaction(async () => {
         try {
           await updateEdgeOperation(this.db!);
-          await this.persistData();
+          // 移除persistData调用，因为它已经在事务API中自动执行了
         } catch (error) {
           if (error instanceof NodeNotFoundError || error instanceof EdgeNotFoundError) {
             throw error;
@@ -673,16 +686,24 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
     try {
+      console.log("Fetching edges from database");
       // 获取所有边基本信息
       const edgesResult = await this.db.query("SELECT * FROM relationships");
       
+      console.log("Edges query result:", edgesResult);
+      
       if (!edgesResult?.values || edgesResult.values.length === 0) {
+        console.log("No edges found in database");
         return [];
       }
 
+      console.log(`Found ${edgesResult.values.length} edges in database`);
+      
       const edges: GraphEdge[] = [];
       
       for (const edgeRow of edgesResult.values) {
+        console.log("Processing edge row:", edgeRow);
+        
         // 确保初始化边属性对象
         const edge: GraphEdge = {
           id: edgeRow.id,
@@ -693,11 +714,15 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
           properties: {} // 确保一定有properties对象
         };
 
+        console.log("Created edge object:", edge);
+
         // 获取边属性
         const propsResult = await this.db.query(
           "SELECT key, value FROM relationship_properties WHERE relationship_id = ?",
           [edge.id]
         );
+        
+        console.log(`Properties for edge ${edge.id}:`, propsResult);
         
         if (propsResult?.values && propsResult.values.length > 0) {
           for (const propRow of propsResult.values) {
@@ -719,14 +744,19 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
             } catch (e) {
               edge.properties![key] = rawValue;
             }
+            
+            console.log(`Added property ${key} to edge ${edge.id}`);
           }
         }
 
         edges.push(edge);
+        console.log(`Added edge to result array: ${edge.id}`);
       }
 
+      console.log(`Returning ${edges.length} edges`);
       return edges;
     } catch (error) {
+      console.error("Error in getEdges:", error);
       throw new DatabaseError(`Failed to get edges: ${error}`, error as Error);
     }
   }

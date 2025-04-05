@@ -37,14 +37,20 @@ export class SQLiteGraphDB extends BaseGraphDB {
           if (!this.connection) {
             throw new Error("Database connection not established");
           }
-          console.log("query sql", sql, params);
+          // 减少输出,只保留edges相关的日志
+          if (sql.includes("relationships") || sql.includes("relationship_properties")) {
+            console.log("query sql", sql, params);
+          }
           return await this.connection.query(sql, params);
         },
         run: async (sql: string, params?: any[]): Promise<void> => {
           if (!this.connection) {
             throw new Error("Database connection not established");
           }
-          console.log("run sql", sql, params);
+          // 减少输出,只保留edges相关的日志
+          if (sql.includes("relationships") || sql.includes("relationship_properties")) {
+            console.log("run sql", sql, params);
+          }
           await this.connection.run(sql, params, false);
         },
         isOpen: (): boolean => {
@@ -147,6 +153,8 @@ export class SQLiteGraphDB extends BaseGraphDB {
   }
 
   // 优化的事务执行方法，使用队列确保事务按顺序执行
+  // 注意：不要在事务操作中调用persistData()，因为它已经在这个方法的成功路径上自动调用了
+  // 在事务中调用persistData()会导致"Transaction has been ended unexpectedly"错误
   async transaction<T>(operation: () => T | Promise<T>): Promise<T> {
     return (this.transactionQueue = this.transactionQueue.then(async () => {
       if (!this.connection) {
@@ -175,6 +183,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
           result = await operation();
         } catch (error) {
           // 如果执行失败，回滚事务
+          console.log("Operation failed, rolling back transaction:", error);
           await this.connection.rollbackTransaction();
           this.isInTransaction = false;
           throw error;
@@ -182,22 +191,38 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
         // 提交事务
         try {
+          console.log("Committing transaction");
           await this.connection.commitTransaction();
+          console.log("Transaction committed successfully");
         } catch (error: any) {
-          if(error.message.includes('no transaction is active')){
-            console.warn('Transaction has been ended unexpectedly');
+          if(error.message && error.message.includes('no transaction is active')){
+            console.warn('Transaction has been ended unexpectedly, but operation was successful');
+            // 尽管事务状态有问题，但操作已经执行成功，继续保存数据
           } else {
+            console.error("Error committing transaction:", error);
+            // 只有在提交时出现非事务状态类错误时才抛出
+            this.isInTransaction = false;
             throw error;
           }
         }
           
         this.isInTransaction = false;
-        await this.persistData();
+        
+        // 无论事务状态如何，都尝试保存数据
+        // 注意：这是事务API自动调用的persistData，不应在operation函数中再次调用
+        try {
+          await this.persistData();
+          console.log("Data persisted successfully");
+        } catch (persistError) {
+          console.error("Error persisting data:", persistError);
+          // 保存数据失败不应该影响操作的结果
+        }
 
         return result;
       } catch (error: any) {
         this.isInTransaction = false;
         const msg = error.message ? error.message : error;
+        console.error("Transaction failed:", msg);
         throw new DatabaseError(`Transaction failed: ${msg}`, error);
       }
     }));
