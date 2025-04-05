@@ -30,7 +30,10 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
       // 返回SQLite引擎接口
       return {
-        query: async (sql: string, params?: any[]): Promise<{ values?: any[] }> => {
+        query: async (
+          sql: string,
+          params?: any[]
+        ): Promise<{ values?: any[] }> => {
           if (!this.connection) {
             throw new Error("Database connection not established");
           }
@@ -115,7 +118,10 @@ export class SQLiteGraphDB extends BaseGraphDB {
       this.isInTransaction = false;
       await this.persistData();
     } catch (error) {
-      throw new TransactionError("Failed to commit transaction", error as Error);
+      throw new TransactionError(
+        "Failed to commit transaction",
+        error as Error
+      );
     }
   }
 
@@ -132,13 +138,16 @@ export class SQLiteGraphDB extends BaseGraphDB {
       await this.connection.rollbackTransaction();
       this.isInTransaction = false;
     } catch (error) {
-      throw new TransactionError("Failed to rollback transaction", error as Error);
+      throw new TransactionError(
+        "Failed to rollback transaction",
+        error as Error
+      );
     }
   }
 
   // 优化的事务执行方法，使用队列确保事务按顺序执行
   async transaction<T>(operation: () => T | Promise<T>): Promise<T> {
-    return this.transactionQueue = this.transactionQueue.then(async () => {
+    return (this.transactionQueue = this.transactionQueue.then(async () => {
       if (!this.connection) {
         throw new DatabaseError("Database connection not established");
       }
@@ -170,25 +179,27 @@ export class SQLiteGraphDB extends BaseGraphDB {
           throw error;
         }
 
-        // 检查事务是否仍然活跃
-        const stillActive = await this.connection.isTransactionActive();
-        if (stillActive.result === false) {
-          console.warn("Transaction has been ended unexpectedly");
-          return result;
-        }
-
         // 提交事务
-        await this.connection.commitTransaction();
+        try {
+          await this.connection.commitTransaction();
+        } catch (error: any) {
+          if(error.message.includes('no transaction is active')){
+            console.warn('Transaction has been ended unexpectedly');
+          } else {
+            throw error;
+          }
+        }
+          
         this.isInTransaction = false;
         await this.persistData();
-        
+
         return result;
       } catch (error: any) {
         this.isInTransaction = false;
         const msg = error.message ? error.message : error;
         throw new DatabaseError(`Transaction failed: ${msg}`, error);
       }
-    });
+    }));
   }
 
   protected async persistData(): Promise<void> {
@@ -210,14 +221,14 @@ export class SQLiteGraphDB extends BaseGraphDB {
     // 由于Capacitor SQLite不直接支持备份，我们使用导出/导入功能
     try {
       const backupId = `backup_${Date.now()}`;
-      
+
       // 在web平台上，我们只能保存到IndexedDB
       if (sqliteService.getPlatform() === "web") {
         await sqliteService.saveToStore(this.dbName);
       } else {
         await sqliteService.saveToLocalDisk(this.dbName);
       }
-      
+
       return backupId;
     } catch (error) {
       throw new DatabaseError(
@@ -229,7 +240,9 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
   async restoreFromBackup(_backupId: string): Promise<void> {
     // 恢复备份需要具体平台的实现
-    throw new DatabaseError("Restore from backup not implemented for this platform");
+    throw new DatabaseError(
+      "Restore from backup not implemented for this platform"
+    );
   }
 
   async listBackups(): Promise<string[]> {

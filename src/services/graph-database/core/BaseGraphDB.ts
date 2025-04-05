@@ -361,7 +361,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
 
         // 获取节点属性
-        console.log('node', node);
+        // console.log('node', node);
         const propsResult = await this.db.query(
           "SELECT key, value FROM node_properties WHERE node_id = ?",
           [node.id]
