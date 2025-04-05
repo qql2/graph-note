@@ -72,63 +72,35 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     }
   }
 
-  // 事务支持
-  private inTransaction = false;
-  
-  // 这些方法保留用于兼容性，实际上我们优先使用SQLite插件的transaction方法
+  // 事务支持 - 这些方法现在是抽象的，由具体平台实现
   async beginTransaction(): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
-    if (this.inTransaction) throw new TransactionError("Transaction already started");
-
-    try {
-      this.inTransaction = true;
-      await this.db.beginTransaction();
-    } catch (error) {
-      this.inTransaction = false;
-      throw new TransactionError("Failed to begin transaction", error as Error);
-    }
+    await this.db.beginTransaction();
   }
 
   async commitTransaction(): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
-    if (!this.inTransaction) throw new TransactionError("No transaction in progress");
-
-    try {
-      await this.db.commitTransaction();
-      this.inTransaction = false;
-      await this.persistData();
-    } catch (error) {
-      throw new TransactionError("Failed to commit transaction", error as Error);
-    }
+    await this.db.commitTransaction();
   }
 
   async rollbackTransaction(): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
-    if (!this.inTransaction) throw new TransactionError("No transaction in progress");
+    await this.db.rollbackTransaction();
+  }
 
-    try {
-      await this.db.rollbackTransaction();
-      this.inTransaction = false;
-    } catch (error) {
-      throw new TransactionError("Failed to rollback transaction", error as Error);
-    }
+  // 判断是否在事务中 - 这个方法也由具体平台实现
+  protected get inTransaction(): boolean {
+    // 这个需要在具体实现中提供，默认返回false
+    return false;
   }
 
   // 不要再额外包一层了, 直接用db.transaction方法
   protected async withTransaction<T>(operation: () => Promise<T>): Promise<T> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     
-    // 如果已经在事务中，直接执行操作
-    if (this.inTransaction) {
-      return await operation();
-    }
-    
+    // 直接使用db.transaction方法，该方法会在具体实现中提供
     try {
-      return await this.db.transaction(async () => {
-        const result = await operation();
-        await this.persistData();
-        return result;
-      });
+      return await this.db.transaction(operation);
     } catch (error) {
       throw error;
     }
@@ -164,22 +136,11 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       return id;
     };
 
-    // 如果已经在事务中，直接执行操作
-    if (this.inTransaction) {
-      try {
-        return await addNodeOperation(this.db);
-      } catch (error) {
-        throw new DatabaseError(`Failed to add node: ${error}`, error as Error);
-      }
-    }
-
-    // 否则，使用事务执行操作
+    // 使用事务执行操作
     try {
-      return await this.db.transaction(async () => {
+      return await this.withTransaction(async () => {
         try {
-          const result = await addNodeOperation(this.db!);
-          await this.persistData();
-          return result;
+          return await addNodeOperation(this.db!);
         } catch (error) {
           throw new DatabaseError(`Failed to add node: ${error}`, error as Error);
         }
@@ -396,19 +357,11 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
       const nodes: GraphNode[] = [];
       
-      for (const nodeRow of nodesResult.values) {
-        const node: GraphNode = {
-          id: nodeRow[0],
-          type: nodeRow[1],
-          label: nodeRow[2],
-          x: nodeRow[3],
-          y: nodeRow[4],
-          created_at: nodeRow[5],
-          updated_at: nodeRow[6],
-          properties: {}
-        };
+      for (const node of nodesResult.values) {
+
 
         // 获取节点属性
+        console.log('node', node);
         const propsResult = await this.db.query(
           "SELECT key, value FROM node_properties WHERE node_id = ?",
           [node.id]
@@ -705,15 +658,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
       const edges: GraphEdge[] = [];
       
-      for (const edgeRow of edgesResult.values) {
-        const edge: GraphEdge = {
-          id: edgeRow[0],
-          source_id: edgeRow[1],
-          target_id: edgeRow[2],
-          type: edgeRow[3],
-          created_at: edgeRow[4],
-          properties: {}
-        };
+      for (const edge of edgesResult.values) {
 
         // 获取边属性
         const propsResult = await this.db.query(

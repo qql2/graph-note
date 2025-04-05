@@ -120,7 +120,7 @@ const GraphDBDemo: React.FC = () => {
       };
       
 		const db = graphDatabaseService.getDatabase();
-		debugger
+		// debugger
       const nodeId = await db.addNode(node);
       
       showMessage(`节点添加成功，ID: ${nodeId}`, 'success');

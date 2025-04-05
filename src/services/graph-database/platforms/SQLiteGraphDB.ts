@@ -1,6 +1,6 @@
 import { BaseGraphDB } from "../core/BaseGraphDB";
 import { DatabaseConfig, SQLiteEngine } from "../core/types";
-import { DatabaseError } from "../core/errors";
+import { DatabaseError, TransactionError } from "../core/errors";
 import sqliteService from "../../sqliteService";
 import { SQLiteDBConnection } from "@capacitor-community/sqlite";
 
@@ -8,6 +8,8 @@ export class SQLiteGraphDB extends BaseGraphDB {
   private dbName: string = "graph_database";
   private dbVersion: number = 1;
   private connection: SQLiteDBConnection | null = null;
+  private transactionQueue: Promise<any> = Promise.resolve();
+  private isInTransaction: boolean = false;
 
   protected async createEngine(config: DatabaseConfig): Promise<SQLiteEngine> {
     try {
@@ -38,7 +40,8 @@ export class SQLiteGraphDB extends BaseGraphDB {
           if (!this.connection) {
             throw new Error("Database connection not established");
           }
-          await this.connection.run(sql, params,false);
+          console.log("run sql", sql, params);
+          await this.connection.run(sql, params, false);
         },
         isOpen: (): boolean => {
           return !!this.connection;
@@ -55,22 +58,13 @@ export class SQLiteGraphDB extends BaseGraphDB {
           }
         },
         beginTransaction: async (): Promise<void> => {
-          if (!this.connection) {
-            throw new Error("Database connection not established");
-          }
-          await this.connection.beginTransaction();
+          await this.beginTransaction();
         },
         commitTransaction: async (): Promise<void> => {
-          if (!this.connection) {
-            throw new Error("Database connection not established");
-          }
-          await this.connection.commitTransaction();
+          await this.commitTransaction();
         },
         rollbackTransaction: async (): Promise<void> => {
-          if (!this.connection) {
-            throw new Error("Database connection not established");
-          }
-          await this.connection.rollbackTransaction();
+          await this.rollbackTransaction();
         },
         export: (): Uint8Array => {
           // 返回一个空的Uint8Array作为占位符
@@ -78,20 +72,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
           return new Uint8Array(0);
         },
         transaction: async <T>(operation: () => T | Promise<T>): Promise<T> => {
-          if (!this.connection) {
-            throw new Error("Database connection not established");
-          }
-          
-          // 使用Capacitor SQLite的自带事务机制
-          return sqliteService.transaction(this.dbName, async () => {
-            try {
-              // 执行传入的操作
-              return await operation();
-            } catch (error) {
-              // 重新抛出错误，确保错误能够被上层捕获
-              throw error;
-            }
-          });
+          return this.transaction(operation);
         },
       };
     } catch (error) {
@@ -100,6 +81,114 @@ export class SQLiteGraphDB extends BaseGraphDB {
         error as Error
       );
     }
+  }
+
+  // 改进的事务处理方法
+  async beginTransaction(): Promise<void> {
+    if (!this.connection) {
+      throw new DatabaseError("Database connection not established");
+    }
+
+    if (this.isInTransaction) {
+      throw new TransactionError("Transaction already started");
+    }
+
+    try {
+      await this.connection.beginTransaction();
+      this.isInTransaction = true;
+    } catch (error) {
+      throw new TransactionError("Failed to begin transaction", error as Error);
+    }
+  }
+
+  async commitTransaction(): Promise<void> {
+    if (!this.connection) {
+      throw new DatabaseError("Database connection not established");
+    }
+
+    if (!this.isInTransaction) {
+      throw new TransactionError("No transaction in progress");
+    }
+
+    try {
+      await this.connection.commitTransaction();
+      this.isInTransaction = false;
+      await this.persistData();
+    } catch (error) {
+      throw new TransactionError("Failed to commit transaction", error as Error);
+    }
+  }
+
+  async rollbackTransaction(): Promise<void> {
+    if (!this.connection) {
+      throw new DatabaseError("Database connection not established");
+    }
+
+    if (!this.isInTransaction) {
+      throw new TransactionError("No transaction in progress");
+    }
+
+    try {
+      await this.connection.rollbackTransaction();
+      this.isInTransaction = false;
+    } catch (error) {
+      throw new TransactionError("Failed to rollback transaction", error as Error);
+    }
+  }
+
+  // 优化的事务执行方法，使用队列确保事务按顺序执行
+  async transaction<T>(operation: () => T | Promise<T>): Promise<T> {
+    return this.transactionQueue = this.transactionQueue.then(async () => {
+      if (!this.connection) {
+        throw new DatabaseError("Database connection not established");
+      }
+
+      // 如果已经在事务中，直接执行操作
+      if (this.isInTransaction) {
+        return await operation();
+      }
+
+      try {
+        // 开始事务
+        await this.connection.beginTransaction();
+        this.isInTransaction = true;
+
+        // 检查事务是否真的开始了
+        const transactionActive = await this.connection.isTransactionActive();
+        if (transactionActive.result === false) {
+          throw new TransactionError("Failed to begin transaction");
+        }
+
+        let result;
+        try {
+          // 执行操作
+          result = await operation();
+        } catch (error) {
+          // 如果执行失败，回滚事务
+          await this.connection.rollbackTransaction();
+          this.isInTransaction = false;
+          throw error;
+        }
+
+        // 检查事务是否仍然活跃
+        const stillActive = await this.connection.isTransactionActive();
+        if (stillActive.result === false) {
+          console.warn("Transaction has been ended unexpectedly");
+          return result;
+        }
+
+        // 提交事务
+        await this.connection.commitTransaction();
+        this.isInTransaction = false;
+        await this.persistData();
+        
+        return result;
+      } catch (error: any) {
+        this.isInTransaction = false;
+        const msg = error.message ? error.message : error;
+        throw new DatabaseError(`Transaction failed: ${msg}`, error);
+      }
+    });
   }
 
   protected async persistData(): Promise<void> {
@@ -151,4 +240,9 @@ export class SQLiteGraphDB extends BaseGraphDB {
   async importData(_data: Uint8Array): Promise<void> {
     throw new DatabaseError("Import data not implemented for this platform");
   }
-} 
+
+  // 重写inTransaction属性，让BaseGraphDB可以获取当前事务状态
+  protected override get inTransaction(): boolean {
+    return this.isInTransaction;
+  }
+}
