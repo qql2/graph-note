@@ -44,12 +44,12 @@ export class GraphLayoutService {
       };
     }
 
-    // 使用Set去重，防止节点重复
-    const relatedNodes = {
-      [RelationshipType.FATHER]: new Set<GraphNode>(),
-      [RelationshipType.CHILD]: new Set<GraphNode>(),
-      [RelationshipType.BASE]: new Set<GraphNode>(),
-      [RelationshipType.BUILD]: new Set<GraphNode>(),
+    // 使用Map存储节点及其层级关系，value是[节点, 层级深度]
+    const relatedNodesMap = {
+      [RelationshipType.FATHER]: new Map<string, [GraphNode, number]>(),
+      [RelationshipType.CHILD]: new Map<string, [GraphNode, number]>(),
+      [RelationshipType.BASE]: new Map<string, [GraphNode, number]>(),
+      [RelationshipType.BUILD]: new Map<string, [GraphNode, number]>(),
     };
 
     // 使用一个Set来记录已经处理过的节点和边，避免循环依赖
@@ -69,7 +69,8 @@ export class GraphLayoutService {
           
           const relatedNode = graphData.nodes.find(node => node.id === edge.target);
           if (relatedNode) {
-            relatedNodes[edge.relationshipType].add(relatedNode);
+            // 将直接关系节点添加为第1层
+            relatedNodesMap[edge.relationshipType].set(relatedNode.id, [relatedNode, 1]);
           }
         } 
         // 处理入站关系（源节点 -> 当前节点）
@@ -95,20 +96,22 @@ export class GraphLayoutService {
           
           const relatedNode = graphData.nodes.find(node => node.id === edge.source);
           if (relatedNode) {
-            relatedNodes[invertedRelationship].add(relatedNode);
+            // 将直接关系节点添加为第1层
+            relatedNodesMap[invertedRelationship].set(relatedNode.id, [relatedNode, 1]);
           }
         }
       });
     };
 
-    // 递归查找相同类型的关系
+    // 递归查找相同类型的关系，并记录层级
     const findSameTypeRelationships = (
       nodeId: string,
       relationshipType: RelationshipType,
-      depth: number,
+      currentDepth: number,
+      maxDepth: number,
       visited = new Set<string>()
     ) => {
-      if (depth <= 0 || visited.has(nodeId)) return;
+      if (currentDepth >= maxDepth || visited.has(nodeId)) return;
       visited.add(nodeId);
       
       graphData.edges.forEach(edge => {
@@ -157,9 +160,18 @@ export class GraphLayoutService {
           const nextNode = graphData.nodes.find(node => node.id === nextNodeId);
           
           if (nextNode) {
-            relatedNodes[relationshipType].add(nextNode);
-            // 递归查找，深度减1
-            findSameTypeRelationships(nextNodeId, relationshipType, depth - 1, new Set(visited));
+            // 设置节点的层级为当前层级+1
+            const nextDepth = currentDepth + 1;
+            
+            // 只有当这个节点不存在，或者存在但层级更大时才更新
+            // 这确保节点总是以最短路径的层级被记录
+            const existingInfo = relatedNodesMap[relationshipType].get(nextNodeId);
+            if (!existingInfo || existingInfo[1] > nextDepth) {
+              relatedNodesMap[relationshipType].set(nextNodeId, [nextNode, nextDepth]);
+              
+              // 递归查找，层级递增
+              findSameTypeRelationships(nextNodeId, relationshipType, nextDepth, maxDepth, new Set(visited));
+            }
           }
         }
       });
@@ -171,25 +183,34 @@ export class GraphLayoutService {
     // 然后对每种关系类型进行递归查找
     Object.values(RelationshipType).forEach(type => {
       // 获取当前已收集的这种类型的直接关系节点
-      const directRelationNodes = Array.from(relatedNodes[type]);
+      const directRelationNodes = Array.from(relatedNodesMap[type].entries());
       
       // 对每个直接关系节点，递归查找相同类型的关系
       // 这样能保证只递归查找相同类型的关系，例如父节点的父节点，或子节点的子节点
-      directRelationNodes.forEach(node => {
+      directRelationNodes.forEach(([nodeId, [node, depth]]) => {
         if (depthConfig[type] > 1) { // 如果深度 > 1，才需要递归
-          findSameTypeRelationships(node.id, type, depthConfig[type] - 1);
+          findSameTypeRelationships(nodeId, type, depth, depthConfig[type]);
         }
       });
     });
 
-    // 将Set转换回数组
+    // 将Map转换为按层级排序的数组
+    const createSortedNodeArray = (nodesMap: Map<string, [GraphNode, number]>) => {
+      return Array.from(nodesMap.values())
+        .sort((a, b) => a[1] - b[1])  // 按层级排序
+        .map(([node, depth]) => ({
+          ...node,
+          depth // 将层级信息附加到节点上，供布局使用
+        }));
+    };
+    
     return {
       centralNode,
       quadrants: {
-        top: Array.from(relatedNodes[config.top]),
-        bottom: Array.from(relatedNodes[config.bottom]),
-        left: Array.from(relatedNodes[config.left]),
-        right: Array.from(relatedNodes[config.right])
+        top: createSortedNodeArray(relatedNodesMap[config.top]),
+        bottom: createSortedNodeArray(relatedNodesMap[config.bottom]),
+        left: createSortedNodeArray(relatedNodesMap[config.left]),
+        right: createSortedNodeArray(relatedNodesMap[config.right])
       }
     };
   }
@@ -219,9 +240,13 @@ export class GraphLayoutService {
     const horizontalSpacing = 120; // 同一象限中节点的水平间距
     const verticalSpacing = 80;    // 同一象限中节点的垂直间距
     
-    // 象限距离中心的偏移量
-    const quadrantOffsetX = 250;   // 水平象限（左/右）与中心的距离
-    const quadrantOffsetY = 180;   // 垂直象限（上/下）与中心的距离
+    // 象限的基础偏移量
+    const baseQuadrantOffsetX = 250;   // 水平象限（左/右）与中心的基础距离
+    const baseQuadrantOffsetY = 180;   // 垂直象限（上/下）与中心的基础距离
+    
+    // 每增加一层的额外偏移
+    const layerOffsetX = 120; // 水平方向每层增加的偏移
+    const layerOffsetY = 100; // 垂直方向每层增加的偏移
 
     // Result will contain node data with their positions
     const result: any[] = [
@@ -231,67 +256,111 @@ export class GraphLayoutService {
         y: centerY - nodeHeight / 2,
         width: nodeWidth,
         height: nodeHeight,
-        isCentralNode: true
+        isCentralNode: true,
+        depth: 0
       }
     ];
 
-    // 上方象限：节点水平排列
-    quadrants.top.forEach((node: GraphNode, index: number) => {
-      const totalWidth = quadrants.top.length * (nodeWidth + horizontalSpacing) - horizontalSpacing;
+    // 按层级分组节点
+    const groupNodesByDepth = (nodes: any[]) => {
+      const groupedNodes: {[key: number]: any[]} = {};
+      
+      nodes.forEach(node => {
+        const depth = node.depth || 1; // 默认为第1层
+        if (!groupedNodes[depth]) {
+          groupedNodes[depth] = [];
+        }
+        groupedNodes[depth].push(node);
+      });
+      
+      return groupedNodes;
+    };
+
+    // 上方象限：按层级垂直排列，每层内部水平排列
+    const topNodesByDepth = groupNodesByDepth(quadrants.top);
+    Object.entries(topNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
+      const depth = parseInt(depthStr);
+      const quadrantOffsetY = baseQuadrantOffsetY + (depth - 1) * layerOffsetY;
+      
+      // 每层节点水平居中排列
+      const totalWidth = nodesInDepth.length * (nodeWidth + horizontalSpacing) - horizontalSpacing;
       const startX = centerX - totalWidth / 2;
       
-      result.push({
-        ...node,
-        x: startX + index * (nodeWidth + horizontalSpacing),
-        y: centerY - quadrantOffsetY - nodeHeight,
-        width: nodeWidth,
-        height: nodeHeight,
-        quadrant: 'top'
+      nodesInDepth.forEach((node: any, index: number) => {
+        result.push({
+          ...node,
+          x: startX + index * (nodeWidth + horizontalSpacing),
+          y: centerY - quadrantOffsetY - nodeHeight,
+          width: nodeWidth,
+          height: nodeHeight,
+          quadrant: 'top'
+        });
       });
     });
 
-    // 下方象限：节点水平排列
-    quadrants.bottom.forEach((node: GraphNode, index: number) => {
-      const totalWidth = quadrants.bottom.length * (nodeWidth + horizontalSpacing) - horizontalSpacing;
+    // 下方象限：按层级垂直排列，每层内部水平排列
+    const bottomNodesByDepth = groupNodesByDepth(quadrants.bottom);
+    Object.entries(bottomNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
+      const depth = parseInt(depthStr);
+      const quadrantOffsetY = baseQuadrantOffsetY + (depth - 1) * layerOffsetY;
+      
+      // 每层节点水平居中排列
+      const totalWidth = nodesInDepth.length * (nodeWidth + horizontalSpacing) - horizontalSpacing;
       const startX = centerX - totalWidth / 2;
       
-      result.push({
-        ...node,
-        x: startX + index * (nodeWidth + horizontalSpacing),
-        y: centerY + quadrantOffsetY,
-        width: nodeWidth,
-        height: nodeHeight,
-        quadrant: 'bottom'
+      nodesInDepth.forEach((node: any, index: number) => {
+        result.push({
+          ...node,
+          x: startX + index * (nodeWidth + horizontalSpacing),
+          y: centerY + quadrantOffsetY,
+          width: nodeWidth,
+          height: nodeHeight,
+          quadrant: 'bottom'
+        });
       });
     });
 
-    // 左侧象限：节点垂直排列
-    quadrants.left.forEach((node: GraphNode, index: number) => {
-      const totalHeight = quadrants.left.length * (nodeHeight + verticalSpacing) - verticalSpacing;
+    // 左侧象限：按层级水平排列，每层内部垂直排列
+    const leftNodesByDepth = groupNodesByDepth(quadrants.left);
+    Object.entries(leftNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
+      const depth = parseInt(depthStr);
+      const quadrantOffsetX = baseQuadrantOffsetX + (depth - 1) * layerOffsetX;
+      
+      // 每层节点垂直居中排列
+      const totalHeight = nodesInDepth.length * (nodeHeight + verticalSpacing) - verticalSpacing;
       const startY = centerY - totalHeight / 2;
       
-      result.push({
-        ...node,
-        x: centerX - quadrantOffsetX - nodeWidth,
-        y: startY + index * (nodeHeight + verticalSpacing),
-        width: nodeWidth,
-        height: nodeHeight,
-        quadrant: 'left'
+      nodesInDepth.forEach((node: any, index: number) => {
+        result.push({
+          ...node,
+          x: centerX - quadrantOffsetX - nodeWidth,
+          y: startY + index * (nodeHeight + verticalSpacing),
+          width: nodeWidth,
+          height: nodeHeight,
+          quadrant: 'left'
+        });
       });
     });
 
-    // 右侧象限：节点垂直排列
-    quadrants.right.forEach((node: GraphNode, index: number) => {
-      const totalHeight = quadrants.right.length * (nodeHeight + verticalSpacing) - verticalSpacing;
+    // 右侧象限：按层级水平排列，每层内部垂直排列
+    const rightNodesByDepth = groupNodesByDepth(quadrants.right);
+    Object.entries(rightNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
+      const depth = parseInt(depthStr);
+      const quadrantOffsetX = baseQuadrantOffsetX + (depth - 1) * layerOffsetX;
+      
+      // 每层节点垂直居中排列
+      const totalHeight = nodesInDepth.length * (nodeHeight + verticalSpacing) - verticalSpacing;
       const startY = centerY - totalHeight / 2;
       
-      result.push({
-        ...node,
-        x: centerX + quadrantOffsetX,
-        y: startY + index * (nodeHeight + verticalSpacing),
-        width: nodeWidth,
-        height: nodeHeight,
-        quadrant: 'right'
+      nodesInDepth.forEach((node: any, index: number) => {
+        result.push({
+          ...node,
+          x: centerX + quadrantOffsetX,
+          y: startY + index * (nodeHeight + verticalSpacing),
+          width: nodeWidth,
+          height: nodeHeight,
+          quadrant: 'right'
+        });
       });
     });
 

@@ -314,6 +314,7 @@ const GraphViewDemo: React.FC = () => {
               <h4>深度配置</h4>
               <p className="description-text">
                 设置每种关系类型的递归深度。例如，父节点深度设为3将显示"父亲的父亲的父亲"，但不会显示父亲的其他类型关系。
+                每层节点会按层级排列，如父节点的父节点会显示在父节点的更上方区域。
               </p>
               <div className="depth-config">
                 {Object.values(RelationshipType).map(type => (
@@ -321,10 +322,10 @@ const GraphViewDemo: React.FC = () => {
                     <IonLabel>
                       {relationshipTypeNames[type]}
                       <p className="relation-description">
-                        {type === RelationshipType.FATHER && '递归显示上层父节点'}
-                        {type === RelationshipType.CHILD && '递归显示下层子节点'}
-                        {type === RelationshipType.BASE && '递归显示基础关系节点'}
-                        {type === RelationshipType.BUILD && '递归显示构建关系节点'}
+                        {type === RelationshipType.FATHER && '递归显示上层父节点（层级越深越靠上）'}
+                        {type === RelationshipType.CHILD && '递归显示下层子节点（层级越深越靠下）'}
+                        {type === RelationshipType.BASE && '递归显示基础关系节点（层级越深越靠左）'}
+                        {type === RelationshipType.BUILD && '递归显示构建关系节点（层级越深越靠右）'}
                       </p>
                     </IonLabel>
                     <div className="depth-slider">

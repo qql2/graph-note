@@ -15,6 +15,13 @@ export interface GraphNode {
   // Additional properties like description, created date, etc. can be added here
   description?: string;
   metadata?: Record<string, any>;
+  // 节点在关系图中的深度层级
+  depth?: number;
+}
+
+// 带有层级信息的节点，用于布局
+export interface GraphNodeWithDepth extends GraphNode {
+  depth: number;
 }
 
 // Edge/connection between nodes
