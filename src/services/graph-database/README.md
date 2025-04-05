@@ -36,8 +36,6 @@ const db = graphDatabaseService.getDatabase();
 const nodeId = await db.addNode({
   type: "person", // 节点类型
   label: "张三", // 节点标签
-  x: 100, // X坐标
-  y: 200, // Y坐标
   properties: { // 自定义属性
     age: 30,
     occupation: "软件工程师"
@@ -133,7 +131,7 @@ await graphDatabaseService.closeDatabase();
 
 ## 数据模型
 
-- **节点**：包含id、类型、标签、坐标和属性
+- **节点**：包含id、类型、标签和属性
 - **边**：包含id、源节点id、目标节点id、类型和属性
 
 ## 限制

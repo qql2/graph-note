@@ -54,7 +54,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         for (const createIndex of DATABASE_SCHEMA.createIndexes) {
           await this.db!.run(createIndex);
         }
-      });
+      });      
     } catch (error) {
       throw error
     }
@@ -118,9 +118,9 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     const addNodeOperation = async (db: SQLiteEngine) => {
       // 插入节点基本信息
       await db.run(
-        `INSERT INTO nodes (id, type, label, x, y, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id, node.type, node.label, node.x, node.y, now, now]
+        `INSERT INTO nodes (id, type, label, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [id, node.type, node.label, now, now]
       );
 
       // 插入节点属性
@@ -169,9 +169,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       // 更新节点基本属性
       if (
         updates.label !== undefined ||
-        updates.type !== undefined ||
-        updates.x !== undefined ||
-        updates.y !== undefined
+        updates.type !== undefined
       ) {
         const sets: string[] = [];
         const params: any[] = [];
@@ -183,14 +181,6 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         if (updates.type !== undefined) {
           sets.push("type = ?");
           params.push(updates.type);
-        }
-        if (updates.x !== undefined) {
-          sets.push("x = ?");
-          params.push(updates.x);
-        }
-        if (updates.y !== undefined) {
-          sets.push("y = ?");
-          params.push(updates.y);
         }
 
         if (sets.length > 0) {
@@ -376,8 +366,6 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
           id: nodeRow.id,
           label: nodeRow.label,
           type: nodeRow.type || "node", // 确保有type字段
-          x: nodeRow.x || 0, // 默认值
-          y: nodeRow.y || 0, // 默认值
           created_at: nodeRow.created_at,
           updated_at: nodeRow.updated_at,
           properties: {} // 确保一定有properties对象

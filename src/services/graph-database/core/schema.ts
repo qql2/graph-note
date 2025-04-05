@@ -5,8 +5,6 @@ export const DATABASE_SCHEMA = {
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
       label TEXT NOT NULL,
-      x REAL NOT NULL,
-      y REAL NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`,

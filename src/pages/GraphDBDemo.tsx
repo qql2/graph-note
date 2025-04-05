@@ -21,14 +21,10 @@ const GraphDBDemo: React.FC = () => {
   const [nodeForm, setNodeForm] = useState<{
     type: string;
     label: string;
-    x: number;
-    y: number;
     properties: string;
   }>({
     type: 'default',
     label: '',
-    x: 0,
-    y: 0,
     properties: '{}'
   });
 
@@ -114,8 +110,6 @@ const GraphDBDemo: React.FC = () => {
       const node: Omit<GraphNode, 'created_at' | 'updated_at'> = {
         type: nodeForm.type,
         label: nodeForm.label,
-        x: nodeForm.x,
-        y: nodeForm.y,
         properties: parsedProperties
       };
       
@@ -130,8 +124,6 @@ const GraphDBDemo: React.FC = () => {
       setNodeForm({
         type: 'default',
         label: '',
-        x: 0,
-        y: 0,
         properties: '{}'
       });
     } catch (error) {
@@ -220,7 +212,7 @@ const GraphDBDemo: React.FC = () => {
   const handleNodeFormChange = (field: string, value: any) => {
     setNodeForm((prev) => ({
       ...prev,
-      [field]: (field === 'x' || field === 'y') ? (value === '' ? 0 : Number(value)) : value,
+      [field]: value,
     }));
   };
 
@@ -290,28 +282,6 @@ const GraphDBDemo: React.FC = () => {
                       onIonInput={(e) => handleNodeFormChange('label', e.detail.value!)}
                     ></IonInput>
                   </IonItem>
-                  <IonRow>
-                    <IonCol size="6">
-                      <IonItem>
-                        <IonLabel position="floating">X坐标</IonLabel>
-                        <IonInput
-                          type="number"
-                          value={nodeForm.x}
-                          onIonInput={(e) => handleNodeFormChange('x', e.detail.value!)}
-                        ></IonInput>
-                      </IonItem>
-                    </IonCol>
-                    <IonCol size="6">
-                      <IonItem>
-                        <IonLabel position="floating">Y坐标</IonLabel>
-                        <IonInput
-                          type="number"
-                          value={nodeForm.y}
-                          onIonInput={(e) => handleNodeFormChange('y', e.detail.value!)}
-                        ></IonInput>
-                      </IonItem>
-                    </IonCol>
-                  </IonRow>
                   <IonItem>
                     <IonLabel position="floating">属性 (JSON格式)</IonLabel>
                     <IonTextarea
@@ -433,7 +403,6 @@ const GraphDBDemo: React.FC = () => {
                             <IonLabel>
                               <h2>{node.label} ({node.type})</h2>
                               <p>ID: {node.id}</p>
-                              <p>坐标: ({node.x}, {node.y})</p>
                               <p>属性: {JSON.stringify(node.properties)}</p>
                             </IonLabel>
                             <IonButton

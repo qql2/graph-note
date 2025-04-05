@@ -2,8 +2,6 @@ export interface GraphNode {
   id?: string;
   type: string;
   label: string;
-  x: number;
-  y: number;
   properties?: Record<string, any>;
   created_at?: string;
   updated_at?: string;
