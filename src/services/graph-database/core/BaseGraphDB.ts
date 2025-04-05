@@ -73,6 +73,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   }
 
   // 事务支持 - 这些方法现在是抽象的，由具体平台实现
+  // TODO (AI切勿擅自修改)将来移除这些套层方法, 直接通过this.db.transaction方法
   async beginTransaction(): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     await this.db.beginTransaction();
@@ -94,7 +95,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     return false;
   }
 
-  // 不要再额外包一层了, 直接用db.transaction方法
+  // TODO (AI不要自动修改)将来不要再额外包一层了, 直接用db.transaction方法
   protected async withTransaction<T>(operation: () => Promise<T>): Promise<T> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     

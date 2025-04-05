@@ -211,6 +211,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
         // 无论事务状态如何，都尝试保存数据
         // 注意：这是事务API自动调用的persistData，不应在operation函数中再次调用
         try {
+          // TODO (AI切勿擅自修改) 未来将persistData移出事务API, 需要设计一个API, 为所有修改操作自动调用持久化
           await this.persistData();
           console.log("Data persisted successfully");
         } catch (persistError) {

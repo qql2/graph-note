@@ -25,31 +25,45 @@ class TestGraphDB extends BaseGraphDB {
         if (sql.includes("SELECT * FROM nodes")) {
           return {
             values: [
-              ["node1", "person", "张三", 100, 200, "2023-01-01", "2023-01-01"]
+              {
+                id: "node1",
+                type: "person",
+                label: "张三",
+                x: 100,
+                y: 200,
+                created_at: "2023-01-01",
+                updated_at: "2023-01-01"
+              }
             ]
           };
         } else if (sql.includes("SELECT key, value FROM node_properties")) {
           return {
             values: [
-              ["age", "30"],
-              ["occupation", "\"软件工程师\""]
+              { key: "age", value: "30" },
+              { key: "occupation", value: "\"软件工程师\"" }
             ]
           };
         } else if (sql.includes("SELECT * FROM relationships")) {
           return {
             values: [
-              ["edge1", "node1", "node2", "friend", "2023-01-01"]
+              {
+                id: "edge1",
+                source_id: "node1",
+                target_id: "node2",
+                type: "friend",
+                created_at: "2023-01-01"
+              }
             ]
           };
         } else if (sql.includes("SELECT key, value FROM relationship_properties")) {
           return {
             values: [
-              ["since", "\"2020-01-01\""]
+              { key: "since", value: "\"2020-01-01\"" }
             ]
           };
         } else if (sql.includes("SELECT 1 FROM")) {
           return {
-            values: [["1"]]
+            values: [{ "1": 1 }]
           };
         }
         return { values: [] };
@@ -336,7 +350,7 @@ describe("BaseGraphDB", () => {
         if (sql.includes("SELECT 1 FROM nodes") && params?.[0] === "not-exists") {
           return { values: [] };
         }
-        return { values: [["1"]] };
+        return { values: [{ "1": 1 }] };
       });
       
       (db2 as any).db = {
@@ -402,20 +416,56 @@ describe("BaseGraphDB", () => {
         if (sql.includes("SELECT * FROM nodes")) {
           return {
             values: [
-              ["node1", "person", "张三", 100, 200, "2023-01-01", "2023-01-01"],
-              ["node2", "person", "李四", 300, 200, "2023-01-01", "2023-01-01"],
-              ["node3", "project", "项目", 200, 100, "2023-01-01", "2023-01-01"]
+              {
+                id: "node1",
+                type: "person",
+                label: "张三",
+                x: 100,
+                y: 200,
+                created_at: "2023-01-01",
+                updated_at: "2023-01-01"
+              },
+              {
+                id: "node2",
+                type: "person",
+                label: "李四",
+                x: 300,
+                y: 200,
+                created_at: "2023-01-01",
+                updated_at: "2023-01-01"
+              },
+              {
+                id: "node3",
+                type: "project",
+                label: "项目",
+                x: 200,
+                y: 100,
+                created_at: "2023-01-01",
+                updated_at: "2023-01-01"
+              }
             ]
           };
         } else if (sql.includes("SELECT * FROM relationships")) {
           return {
             values: [
-              ["edge1", "node1", "node3", "works_on", "2023-01-01"],
-              ["edge2", "node2", "node3", "manages", "2023-01-01"]
+              {
+                id: "edge1",
+                source_id: "node1",
+                target_id: "node3",
+                type: "works_on",
+                created_at: "2023-01-01"
+              },
+              {
+                id: "edge2",
+                source_id: "node2",
+                target_id: "node3",
+                type: "manages",
+                created_at: "2023-01-01"
+              }
             ]
           };
         } else if (sql.includes("SELECT 1 FROM")) {
-          return { values: [["1"]] };
+          return { values: [{ "1": 1 }] };
         }
         return { values: [] };
       });
@@ -442,7 +492,7 @@ describe("BaseGraphDB", () => {
         if (sql.includes("SELECT 1 FROM nodes") && params?.[0] === "not-exists") {
           return { values: [] };
         }
-        return { values: [["1"]] };
+        return { values: [{ "1": 1 }] };
       });
       
       (db2 as any).db = {
@@ -466,7 +516,7 @@ describe("BaseGraphDB", () => {
         if (sql.includes("SELECT 1 FROM nodes") && params?.[0] === "not-exists") {
           return { values: [] };
         }
-        return { values: [["1"]] };
+        return { values: [{ "1": 1 }] };
       });
       
       (db2 as any).db = {
