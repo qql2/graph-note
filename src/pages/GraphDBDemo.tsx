@@ -41,6 +41,9 @@ const GraphDBDemo: React.FC = () => {
     properties: '{}'
   });
 
+  // 自定义关系类型
+  const [customType, setCustomType] = useState<string>('');
+
   // 初始化数据库
   useEffect(() => {
     const initDB = async () => {
@@ -151,7 +154,7 @@ const GraphDBDemo: React.FC = () => {
       const edge: Omit<GraphEdge, 'created_at'> = {
         source_id: edgeForm.source_id,
         target_id: edgeForm.target_id,
-        type: edgeForm.type,
+        type: edgeForm.type === 'custom' ? customType : edgeForm.type,
         properties: parsedProperties
       };
       
@@ -168,6 +171,7 @@ const GraphDBDemo: React.FC = () => {
         type: 'related_to',
         properties: '{}'
       });
+      setCustomType('');
     } catch (error) {
       console.error('添加边失败:', error);
       showMessage(`添加边失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
@@ -352,6 +356,10 @@ const GraphDBDemo: React.FC = () => {
                       <IonSelectOption value="belongs_to">属于</IonSelectOption>
                       <IonSelectOption value="contains">包含</IonSelectOption>
                       <IonSelectOption value="depends_on">依赖</IonSelectOption>
+                      <IonSelectOption value="father">父亲</IonSelectOption>
+                      <IonSelectOption value="child">子女</IonSelectOption>
+                      <IonSelectOption value="base">基础</IonSelectOption>
+                      <IonSelectOption value="build">构建</IonSelectOption>
                       <IonSelectOption value="custom">自定义</IonSelectOption>
                     </IonSelect>
                   </IonItem>
@@ -359,8 +367,8 @@ const GraphDBDemo: React.FC = () => {
                     <IonItem>
                       <IonLabel position="floating">自定义关系类型</IonLabel>
                       <IonInput
-                        value={edgeForm.type === 'custom' ? '' : edgeForm.type}
-                        onIonInput={(e) => handleEdgeFormChange('type', e.detail.value!)}
+                        value={customType}
+                        onIonInput={(e) => setCustomType(e.detail.value!)}
                       ></IonInput>
                     </IonItem>
                   )}
