@@ -12,6 +12,7 @@ interface GraphViewProps {
   quadrantConfig?: QuadrantConfig;
   depthConfig?: DepthConfig;  // 添加深度配置属性
   viewConfig?: ViewConfig;    // 添加视图配置属性
+  navbarHeight?: number; // 添加导航栏高度参数
   onNodeClick?: (nodeId: string) => void;
   onEditNode?: (nodeId: string, label: string) => void;
   onDeleteNode?: (nodeId: string) => void;
@@ -175,6 +176,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   quadrantConfig = defaultQuadrantConfig,
   depthConfig = defaultDepthConfig,  // 使用默认深度配置
   viewConfig = defaultViewConfig,    // 使用默认视图配置
+  navbarHeight = 56, // 默认 Ionic 导航栏高度
   onNodeClick,
   onEditNode,
   onDeleteNode,
@@ -669,6 +671,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         position={contextMenu.position}
         items={contextMenu.items}
         onClose={closeContextMenu}
+        navbarHeight={navbarHeight} // 传入导航栏高度
       />
     </div>
   );
