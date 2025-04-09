@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Graph } from '@antv/x6';
 import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, RelationshipType } from '../../models/GraphNode';
 import { GraphLayoutService } from '../../services/GraphLayoutService';
+import ContextMenu from '../ContextMenu';
+import { pencil, trash, copy, add } from 'ionicons/icons';
 import './GraphView.css';
 
 interface GraphViewProps {
@@ -11,6 +13,11 @@ interface GraphViewProps {
   depthConfig?: DepthConfig;  // 添加深度配置属性
   viewConfig?: ViewConfig;    // 添加视图配置属性
   onNodeClick?: (nodeId: string) => void;
+  onEditNode?: (nodeId: string, label: string) => void;
+  onDeleteNode?: (nodeId: string) => void;
+  onEditEdge?: (edgeId: string, label: string) => void;
+  onDeleteEdge?: (edgeId: string) => void;
+  onCreateRelation?: (sourceNodeId: string, relationType: RelationshipType) => void;
 }
 
 // 关系类型到简短标签的映射
@@ -20,6 +27,24 @@ const relationshipToSimpleLabel = {
   [RelationshipType.BASE]: 'Ba',
   [RelationshipType.BUILD]: 'Bu',
 };
+
+// 定义菜单项接口
+interface MenuItem {
+  id: string;
+  label: string;
+  icon?: string;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+// 定义右键菜单状态接口
+interface ContextMenuState {
+  isOpen: boolean;
+  position: { x: number; y: number };
+  items: MenuItem[];
+  targetId: string;
+  type: 'node' | 'edge' | '';
+}
 
 // 注册自定义节点
 Graph.registerNode(
@@ -150,10 +175,24 @@ const GraphView: React.FC<GraphViewProps> = ({
   quadrantConfig = defaultQuadrantConfig,
   depthConfig = defaultDepthConfig,  // 使用默认深度配置
   viewConfig = defaultViewConfig,    // 使用默认视图配置
-  onNodeClick
+  onNodeClick,
+  onEditNode,
+  onDeleteNode,
+  onEditEdge,
+  onDeleteEdge,
+  onCreateRelation
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [graph, setGraph] = useState<Graph | null>(null);
+  
+  // 右键菜单状态
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    items: [],
+    targetId: '',
+    type: ''
+  });
 
   // 处理缩放和重置视图的函数
   const handleZoomIn = () => {
@@ -179,6 +218,151 @@ const GraphView: React.FC<GraphViewProps> = ({
       graph.zoomTo(1);
       graph.centerContent();
     }
+  };
+
+  // 关闭上下文菜单
+  const closeContextMenu = () => {
+    setContextMenu(prev => ({ ...prev, isOpen: false }));
+  };
+
+  // 处理节点右键菜单
+  const handleNodeContextMenu = (node: any, event: any) => {
+    event.preventDefault();
+    
+    const nodeId = node.id;
+    const isCenter = nodeId === centralNodeId;
+    const menuItems: MenuItem[] = [];
+    
+    // 编辑节点菜单项
+    if (onEditNode) {
+      menuItems.push({
+        id: 'edit-node',
+        label: '编辑节点',
+        icon: pencil,
+        onClick: () => {
+          // 暂时使用 prompt，实际项目中应该用更好的 UI
+          const newLabel = prompt('编辑节点名称:', node.attrs.label.text);
+          if (newLabel !== null && newLabel.trim() !== '') {
+            onEditNode(nodeId, newLabel.trim());
+          }
+        }
+      });
+    }
+    
+    // 创建关系菜单项（仅对中心节点显示）
+    if (isCenter && onCreateRelation) {
+      // 添加默认关系类型
+      menuItems.push({
+        id: 'create-father',
+        label: '添加父节点关系',
+        icon: add,
+        onClick: () => onCreateRelation(nodeId, RelationshipType.FATHER)
+      });
+      
+      menuItems.push({
+        id: 'create-child',
+        label: '添加子节点关系',
+        icon: add,
+        onClick: () => onCreateRelation(nodeId, RelationshipType.CHILD)
+      });
+      
+      menuItems.push({
+        id: 'create-base',
+        label: '添加基础关系',
+        icon: add,
+        onClick: () => onCreateRelation(nodeId, RelationshipType.BASE)
+      });
+      
+      menuItems.push({
+        id: 'create-build',
+        label: '添加构建关系',
+        icon: add,
+        onClick: () => onCreateRelation(nodeId, RelationshipType.BUILD)
+      });
+      
+      // 添加自定义关系（实际实现中需要弹出输入框）
+      menuItems.push({
+        id: 'create-custom',
+        label: '添加自定义关系',
+        icon: add,
+        onClick: () => {
+          const customType = prompt('请输入自定义关系名称:');
+          if (customType && customType.trim() !== '') {
+            // 这里需要根据实际实现处理自定义关系的创建
+            alert(`暂不支持自定义关系类型: ${customType}`);
+          }
+        }
+      });
+    }
+    
+    // 删除节点菜单项
+    if (onDeleteNode) {
+      menuItems.push({
+        id: 'delete-node',
+        label: '删除节点',
+        icon: trash,
+        onClick: () => {
+          if (confirm('确定要删除此节点吗？')) {
+            onDeleteNode(nodeId);
+          }
+        }
+      });
+    }
+    
+    setContextMenu({
+      isOpen: true,
+      position: { x: event.clientX, y: event.clientY },
+      items: menuItems,
+      targetId: nodeId,
+      type: 'node'
+    });
+  };
+  
+  // 处理边右键菜单
+  const handleEdgeContextMenu = (edge: any, event: any) => {
+    event.preventDefault();
+    
+    const edgeId = edge.id;
+    const menuItems: MenuItem[] = [];
+    
+    // 编辑边菜单项
+    if (onEditEdge) {
+      menuItems.push({
+        id: 'edit-edge',
+        label: '编辑关系',
+        icon: pencil,
+        onClick: () => {
+          // 暂时使用 prompt，实际项目中应该用更好的 UI
+          const currentLabel = edge.getLabels()?.[0]?.attrs?.text?.text || edge.data.relationshipType;
+          const newLabel = prompt('编辑关系名称:', currentLabel);
+          if (newLabel !== null && newLabel.trim() !== '') {
+            onEditEdge(edgeId, newLabel.trim());
+          }
+        }
+      });
+    }
+    
+    // 删除边菜单项
+    if (onDeleteEdge) {
+      menuItems.push({
+        id: 'delete-edge',
+        label: '删除关系',
+        icon: trash,
+        onClick: () => {
+          if (confirm('确定要删除此关系吗？')) {
+            onDeleteEdge(edgeId);
+          }
+        }
+      });
+    }
+    
+    setContextMenu({
+      isOpen: true,
+      position: { x: event.clientX, y: event.clientY },
+      items: menuItems,
+      targetId: edgeId,
+      type: 'edge'
+    });
   };
 
   // Initialize the graph when the component mounts
@@ -238,6 +422,21 @@ const GraphView: React.FC<GraphViewProps> = ({
         onNodeClick(node.id);
       }
     });
+    
+    // 注册节点右键菜单事件
+    newGraph.on('node:contextmenu', ({ cell, e }) => {
+      handleNodeContextMenu(cell, e);
+    });
+    
+    // 注册边右键菜单事件
+    newGraph.on('edge:contextmenu', ({ cell, e }) => {
+      handleEdgeContextMenu(cell, e);
+    });
+    
+    // 点击画布空白处关闭菜单
+    newGraph.on('blank:click', () => {
+      closeContextMenu();
+    });
 
     setGraph(newGraph);
 
@@ -245,7 +444,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     return () => {
       newGraph.dispose();
     };
-  }, [containerRef]);
+  }, [containerRef, onNodeClick, onEditNode, onDeleteNode, onEditEdge, onDeleteEdge, onCreateRelation]);
 
   // Render the graph when data or central node changes
   useEffect(() => {
@@ -463,6 +662,14 @@ const GraphView: React.FC<GraphViewProps> = ({
         <button className="graph-view-control-button" onClick={handleResetView} title="重置视图">⟲</button>
       </div>
       <div className="graph-view" ref={containerRef}></div>
+      
+      {/* 右键菜单组件 */}
+      <ContextMenu 
+        isOpen={contextMenu.isOpen}
+        position={contextMenu.position}
+        items={contextMenu.items}
+        onClose={closeContextMenu}
+      />
     </div>
   );
 };

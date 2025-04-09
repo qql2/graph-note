@@ -21,7 +21,8 @@ import {
   IonRadioGroup,
   IonRadio,
   IonListHeader,
-  IonMenuButton
+  IonMenuButton,
+  IonAlert
 } from '@ionic/react';
 import { refreshOutline, arrowBack } from 'ionicons/icons';
 import GraphView from '../components/GraphView';
@@ -111,6 +112,12 @@ const GraphViewDemo: React.FC = () => {
   const [viewConfig, setViewConfig] = useState<ViewConfig>(defaultViewConfig);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  
+  // 弹窗状态
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertHeader, setAlertHeader] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [confirmHandler, setConfirmHandler] = useState<() => void>(() => {});
 
   // 从URL参数获取节点ID
   const getNodeIdFromUrl = () => {
@@ -188,6 +195,167 @@ const GraphViewDemo: React.FC = () => {
     setCentralNodeId(nodeId);
     setToastMessage(`正在查看节点: ${nodeId}`);
     setShowToast(true);
+  };
+
+  // 显示确认对话框
+  const showConfirmDialog = (header: string, message: string, onConfirm: () => void) => {
+    setAlertHeader(header);
+    setAlertMessage(message);
+    setConfirmHandler(() => onConfirm);
+    setShowAlert(true);
+  };
+
+  // 处理编辑节点
+  const handleEditNode = async (nodeId: string, newLabel: string) => {
+    try {
+      setLoading(true);
+      const db = graphDatabaseService.getDatabase();
+      
+      // 更新节点
+      await db.updateNode(nodeId, { label: newLabel });
+      
+      setToastMessage(`节点已更新: ${newLabel}`);
+      setShowToast(true);
+      
+      // 重新加载数据
+      await loadGraphData();
+    } catch (error) {
+      console.error('编辑节点失败:', error);
+      setToastMessage(`编辑节点失败: ${error instanceof Error ? error.message : String(error)}`);
+      setShowToast(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 处理删除节点
+  const handleDeleteNode = async (nodeId: string) => {
+    showConfirmDialog(
+      '确认删除',
+      '确定要删除此节点吗？这也将删除所有与此节点相关的关系。',
+      async () => {
+        try {
+          setLoading(true);
+          const db = graphDatabaseService.getDatabase();
+          
+          // 删除节点
+          await db.deleteNode(nodeId);
+          
+          setToastMessage('节点已删除');
+          setShowToast(true);
+          
+          // 如果删除的是当前中心节点，重置中心节点
+          if (nodeId === centralNodeId) {
+            // 重新加载数据后设置新的中心节点
+            await loadGraphData();
+          } else {
+            // 否则只重新加载数据
+            await loadGraphData();
+          }
+        } catch (error) {
+          console.error('删除节点失败:', error);
+          setToastMessage(`删除节点失败: ${error instanceof Error ? error.message : String(error)}`);
+          setShowToast(true);
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
+  };
+
+  // 处理编辑关系
+  const handleEditEdge = async (edgeId: string, newLabel: string) => {
+    try {
+      setLoading(true);
+      const db = graphDatabaseService.getDatabase();
+      
+      // 更新边
+      await db.updateEdge(edgeId, { type: newLabel });
+      
+      setToastMessage(`关系已更新: ${newLabel}`);
+      setShowToast(true);
+      
+      // 重新加载数据
+      await loadGraphData();
+    } catch (error) {
+      console.error('编辑关系失败:', error);
+      setToastMessage(`编辑关系失败: ${error instanceof Error ? error.message : String(error)}`);
+      setShowToast(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 处理删除关系
+  const handleDeleteEdge = async (edgeId: string) => {
+    showConfirmDialog(
+      '确认删除',
+      '确定要删除此关系吗？',
+      async () => {
+        try {
+          setLoading(true);
+          const db = graphDatabaseService.getDatabase();
+          
+          // 删除边
+          await db.deleteEdge(edgeId);
+          
+          setToastMessage('关系已删除');
+          setShowToast(true);
+          
+          // 重新加载数据
+          await loadGraphData();
+        } catch (error) {
+          console.error('删除关系失败:', error);
+          setToastMessage(`删除关系失败: ${error instanceof Error ? error.message : String(error)}`);
+          setShowToast(true);
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
+  };
+
+  // 处理创建关系
+  const handleCreateRelation = async (sourceNodeId: string, relationType: RelationshipType) => {
+    try {
+      setLoading(true);
+      const db = graphDatabaseService.getDatabase();
+      
+      // 创建新节点
+      const newNodeId = await db.addNode({
+        type: 'knowledge',
+        label: `新${relationType}节点`,
+        properties: {
+          created_at: new Date().toISOString(),
+          description: `从节点 ${sourceNodeId} 创建的 ${relationType} 关系节点`
+        }
+      });
+      
+      // 创建边
+      await db.addEdge({
+        source_id: sourceNodeId,
+        target_id: newNodeId,
+        type: relationType,
+        properties: {
+          created_at: new Date().toISOString()
+        }
+      });
+      
+      setToastMessage(`已创建 ${relationType} 关系和新节点`);
+      setShowToast(true);
+      
+      // 重新加载数据
+      await loadGraphData();
+      
+      // 将新节点设为中心节点
+      setCentralNodeId(newNodeId);
+    } catch (error) {
+      console.error('创建关系失败:', error);
+      setToastMessage(`创建关系失败: ${error instanceof Error ? error.message : String(error)}`);
+      setShowToast(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 处理象限配置更改
@@ -412,7 +580,12 @@ const GraphViewDemo: React.FC = () => {
                 quadrantConfig={quadrantConfig}
                 depthConfig={depthConfig}
                 viewConfig={viewConfig}
-                onNodeClick={handleNodeClick} 
+                onNodeClick={handleNodeClick}
+                onEditNode={handleEditNode}
+                onDeleteNode={handleDeleteNode}
+                onEditEdge={handleEditEdge}
+                onDeleteEdge={handleDeleteEdge}
+                onCreateRelation={handleCreateRelation}
               />
             </div>
           </>
@@ -424,6 +597,27 @@ const GraphViewDemo: React.FC = () => {
           message={toastMessage}
           duration={2000}
           position="bottom"
+        />
+        
+        <IonAlert
+          isOpen={showAlert}
+          onDidDismiss={() => setShowAlert(false)}
+          header={alertHeader}
+          message={alertMessage}
+          buttons={[
+            {
+              text: '取消',
+              role: 'cancel',
+              handler: () => setShowAlert(false)
+            },
+            {
+              text: '确认',
+              handler: () => {
+                confirmHandler();
+                setShowAlert(false);
+              }
+            }
+          ]}
         />
       </IonContent>
     </IonPage>
