@@ -196,12 +196,16 @@ const GraphView: React.FC<GraphViewProps> = ({
       width: containerRef.current.offsetWidth,
       height: containerRef.current.offsetHeight,
       background: {
-        color: '#F5F5F5',  // Light background
+        color: 'var(--ion-background-color, #F5F5F5)',  // Use theme background color
       },
       grid: {
         visible: true,
         size: 10,
         type: 'dot',
+        args: {
+          color: 'var(--ion-color-medium-tint, rgba(0, 0, 0, 0.1))', // Use theme color for grid
+          thickness: 1,
+        },
       },
       connecting: {
         router: 'normal',
@@ -277,13 +281,13 @@ const GraphView: React.FC<GraphViewProps> = ({
       nodeQuadrantMap.set(id, quadrant || 'center');
       nodeDepthMap.set(id, depth || 0);
       
-      // Different styles based on node type
-      const nodeFill = isCentralNode ? '#FF9800' : 
-                       quadrant === 'top' ? '#4CAF50' : 
-                       quadrant === 'bottom' ? '#2196F3' : 
-                       quadrant === 'left' ? '#9C27B0' : 
-                       quadrant === 'right' ? '#F44336' : 
-                       '#607D8B';
+      // Different styles based on node type using Ionic theme variables
+      const nodeFill = isCentralNode ? 'var(--ion-color-warning, #FF9800)' : 
+                       quadrant === 'top' ? 'var(--ion-color-success, #4CAF50)' : 
+                       quadrant === 'bottom' ? 'var(--ion-color-primary, #2196F3)' : 
+                       quadrant === 'left' ? 'var(--ion-color-tertiary, #9C27B0)' : 
+                       quadrant === 'right' ? 'var(--ion-color-danger, #F44336)' : 
+                       'var(--ion-color-medium, #607D8B)';
 
       return graph.addNode({
         id,
@@ -377,11 +381,11 @@ const GraphView: React.FC<GraphViewProps> = ({
       const targetExists = nodes.some(node => node.id === edgeData.target);
       
       if (sourceExists && targetExists) {
-        const edgeColor = edgeData.relationshipType === quadrantConfig.top ? '#4CAF50' :
-                         edgeData.relationshipType === quadrantConfig.bottom ? '#2196F3' :
-                         edgeData.relationshipType === quadrantConfig.left ? '#9C27B0' :
-                         edgeData.relationshipType === quadrantConfig.right ? '#F44336' :
-                         '#607D8B';
+        const edgeColor = edgeData.relationshipType === quadrantConfig.top ? 'var(--ion-color-success, #4CAF50)' :
+                         edgeData.relationshipType === quadrantConfig.bottom ? 'var(--ion-color-primary, #2196F3)' :
+                         edgeData.relationshipType === quadrantConfig.left ? 'var(--ion-color-tertiary, #9C27B0)' :
+                         edgeData.relationshipType === quadrantConfig.right ? 'var(--ion-color-danger, #F44336)' :
+                         'var(--ion-color-medium, #607D8B)';
         
         // 确定连接点
         const { source: sourcePort, target: targetPort } = determineConnectionPoints(
@@ -423,14 +427,14 @@ const GraphView: React.FC<GraphViewProps> = ({
               attrs: {
                 text: {
                   text: relationshipLabel,
-                  fill: '#333',
+                  fill: 'var(--ion-text-color, #333)',
                   fontSize: 10,
                   textAnchor: 'middle',
                   textVerticalAnchor: 'middle',
                   pointerEvents: 'none',
                 },
                 rect: {
-                  fill: 'rgba(255, 255, 255, 0.8)',
+                  fill: 'var(--ion-background-color, rgba(255, 255, 255, 0.8))',
                   stroke: edgeColor,
                   strokeWidth: 0.5,
                   rx: 3,

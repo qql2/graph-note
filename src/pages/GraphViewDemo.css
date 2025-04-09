@@ -6,8 +6,8 @@
 
 .graph-controls {
   padding: 10px 16px;
-  background-color: #fff;
-  border-bottom: 1px solid #eee;
+  background-color: var(--ion-background-color, #fff);
+  border-bottom: 1px solid var(--ion-border-color, #eee);
   max-height: 40vh;
   overflow-y: auto;
 }
@@ -16,19 +16,19 @@
   margin-top: 8px;
   margin-bottom: 12px;
   font-weight: 500;
-  color: #333;
+  color: var(--ion-text-color, #333);
 }
 
 .description-text {
   font-size: 0.9em;
-  color: #666;
+  color: var(--ion-color-medium, #666);
   margin-bottom: 12px;
   padding: 0 8px;
 }
 
 .relation-description {
   font-size: 0.8em;
-  color: #777;
+  color: var(--ion-color-medium, #777);
   margin-top: 2px;
   font-weight: normal;
 }
@@ -60,7 +60,7 @@
   min-width: 24px;
   text-align: center;
   font-weight: bold;
-  color: #666;
+  color: var(--ion-color-medium, #666);
 }
 
 /* 视图配置样式 */
@@ -92,7 +92,7 @@
   align-items: center;
   height: 50vh;
   text-align: center;
-  color: #666;
+  color: var(--ion-color-medium, #666);
 }
 
 .loading-container ion-spinner {
@@ -103,16 +103,16 @@
 .error-container {
   text-align: center;
   padding: 20px;
-  color: #f44336;
+  color: var(--ion-color-danger, #f44336);
 }
 
 .debug-info {
   font-size: 0.9em;
-  background-color: #f5f5f5;
+  background-color: var(--ion-color-light, #f5f5f5);
   padding: 10px;
   border-radius: 4px;
   margin: 10px 0;
-  color: #666;
+  color: var(--ion-color-medium, #666);
   text-align: left;
 }
 
@@ -120,7 +120,7 @@
 .empty-container {
   text-align: center;
   padding: 20px;
-  color: #666;
+  color: var(--ion-color-medium, #666);
 }
 
 .button-group {
@@ -144,19 +144,19 @@
 
 /* Style the quadrant colors in labels */
 .relationship-father {
-  color: #4CAF50;
+  color: var(--ion-color-success, #4CAF50);
 }
 
 .relationship-child {
-  color: #2196F3;
+  color: var(--ion-color-primary, #2196F3);
 }
 
 .relationship-base {
-  color: #9C27B0;
+  color: var(--ion-color-tertiary, #9C27B0);
 }
 
 .relationship-build {
-  color: #F44336;
+  color: var(--ion-color-danger, #F44336);
 }
 
 /* Add a small legend for colors */
