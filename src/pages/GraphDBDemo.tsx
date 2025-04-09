@@ -3,10 +3,18 @@ import {
   IonContent, IonHeader, IonPage, IonTitle, IonToolbar,
   IonGrid, IonRow, IonCol, IonCard, IonCardHeader, IonCardTitle, IonCardContent,
   IonItem, IonLabel, IonInput, IonButton, IonList, IonSpinner,
-  IonToast, IonTextarea, IonSelect, IonSelectOption
+  IonToast, IonTextarea, IonSelect, IonSelectOption,
+  IonButtons,
+  IonText,
+  IonNote,
+  IonBadge,
+  IonAlert,
+  IonIcon,
+  IonMenuButton
 } from '@ionic/react';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import { GraphNode, GraphEdge, DeleteMode } from '../services/graph-database/core/types';
+import { arrowBack } from 'ionicons/icons';
 
 const GraphDBDemo: React.FC = () => {
   // 状态管理
@@ -241,7 +249,15 @@ const GraphDBDemo: React.FC = () => {
     <IonPage>
       <IonHeader>
         <IonToolbar>
+          <IonButtons slot="start">
+            <IonButton routerLink="/home">
+              <IonIcon icon={arrowBack} />
+            </IonButton>
+          </IonButtons>
           <IonTitle>图形数据库演示</IonTitle>
+          <IonButtons slot="end">
+            <IonMenuButton />
+          </IonButtons>
         </IonToolbar>
       </IonHeader>
       

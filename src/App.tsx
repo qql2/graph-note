@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Redirect, Route } from 'react-router-dom';
-import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
+import { IonApp, IonRouterOutlet, setupIonicReact, useIonAlert, useIonToast } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import Home from './pages/Home';
 import { Capacitor } from '@capacitor/core';
@@ -8,6 +8,7 @@ import SqliteService from './services/sqliteService';
 import DbVersionService from './services/dbVersionService';
 import StorageService  from './services/storageService';
 import AppInitializer from './components/AppInitializer/AppInitializer';
+import graphDatabaseService from './services/graph-database/GraphDatabaseService';
 
 import UsersPage from './pages/UsersPage/UsersPage';
 import GraphDBDemo from './pages/GraphDBDemo';
@@ -44,6 +45,85 @@ export const StorageServiceContext = React.createContext(new StorageService(Sqli
 setupIonicReact();
 
 const App: React.FC = () => {
+  const [presentAlert] = useIonAlert();
+  const [presentToast] = useIonToast();
+
+  // Function to create a new node
+  const handleCreateNode = async () => {
+    // Initialize the database if not already initialized
+    try {
+      await graphDatabaseService.initialize({
+        dbName: 'graph_demo',
+        version: 1,
+        verbose: true
+      });
+      
+      const db = graphDatabaseService.getDatabase();
+      
+      // Show dialog to input node label
+      presentAlert({
+        header: '创建独立节点',
+        inputs: [
+          {
+            name: 'label',
+            type: 'text',
+            placeholder: '节点名称'
+          },
+        ],
+        buttons: [
+          {
+            text: '取消',
+            role: 'cancel'
+          },
+          {
+            text: '创建',
+            handler: async (data) => {
+              if (!data.label || data.label.trim() === '') {
+                presentToast({
+                  message: '节点名称不能为空',
+                  duration: 2000,
+                  color: 'warning'
+                });
+                return;
+              }
+              
+              try {
+                // Create a new node with the provided label
+                const nodeId = await db.addNode({
+                  type: 'knowledge',
+                  label: data.label.trim()
+                });
+                
+                presentToast({
+                  message: `成功创建节点：${data.label}`,
+                  duration: 2000,
+                  color: 'success'
+                });
+                
+                // 通过URL参数传递新创建的节点ID
+                window.location.href = `/graph-view-demo?node=${nodeId}`;
+              } catch (error) {
+                console.error('创建节点失败:', error);
+                presentToast({
+                  message: `创建节点失败: ${error instanceof Error ? error.message : String(error)}`,
+                  duration: 3000,
+                  color: 'danger'
+                });
+              }
+            }
+          }
+        ]
+      });
+    } catch (error) {
+      console.error('初始化数据库失败:', error);
+      presentToast({
+        message: `初始化数据库失败: ${error instanceof Error ? error.message : String(error)}`,
+        duration: 3000,
+        color: 'danger'
+      });
+    }
+  };
+
   return (
     <SqliteServiceContext.Provider value={SqliteService}>
       <DbVersionServiceContext.Provider value={DbVersionService}>
@@ -51,7 +131,7 @@ const App: React.FC = () => {
           <AppInitializer>
             <IonApp>
               <IonReactRouter>
-                <AppMenu />
+                <AppMenu onCreateNode={handleCreateNode} />
                 <IonRouterOutlet id="main-content">
                   <Route exact path="/home">
                     <Home />

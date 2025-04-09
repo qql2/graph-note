@@ -20,10 +20,12 @@ import {
   IonList,
   IonRadioGroup,
   IonRadio,
-  IonListHeader
+  IonListHeader,
+  IonMenuButton
 } from '@ionic/react';
 import { refreshOutline, arrowBack } from 'ionicons/icons';
 import GraphView from '../components/GraphView';
+import { useLocation } from 'react-router-dom';
 import { GraphData, GraphNode, GraphEdge, RelationshipType, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode } from '../models/GraphNode';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import './GraphViewDemo.css';
@@ -99,6 +101,7 @@ const convertDbDataToGraphData = (
 };
 
 const GraphViewDemo: React.FC = () => {
+  const location = useLocation();
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [graphData, setGraphData] = useState<GraphData>({nodes: [], edges: []});
@@ -108,6 +111,12 @@ const GraphViewDemo: React.FC = () => {
   const [viewConfig, setViewConfig] = useState<ViewConfig>(defaultViewConfig);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+
+  // 从URL参数获取节点ID
+  const getNodeIdFromUrl = () => {
+    const searchParams = new URLSearchParams(location.search);
+    return searchParams.get('node');
+  };
 
   // 从数据库加载数据
   const loadGraphData = async () => {
@@ -138,8 +147,18 @@ const GraphViewDemo: React.FC = () => {
       console.log('转换后的数据:', convertedData);
       setGraphData(convertedData);
       
-      // 如果有节点，则设置第一个节点为中心节点
-      if (convertedData.nodes.length > 0) {
+      // 从URL获取节点ID
+      const urlNodeId = getNodeIdFromUrl();
+      
+      // 优先使用URL中的节点ID，如果存在且在图中
+      if (urlNodeId && convertedData.nodes.some(node => node.id === urlNodeId)) {
+        setCentralNodeId(urlNodeId);
+        console.log('从URL设置中心节点:', urlNodeId);
+        setToastMessage(`正在查看节点: ${urlNodeId}`);
+        setShowToast(true);
+      }
+      // 否则如果有节点，则设置第一个节点为中心节点
+      else if (convertedData.nodes.length > 0) {
         setCentralNodeId(convertedData.nodes[0].id);
         console.log('设置中心节点:', convertedData.nodes[0].id);
       } else {
@@ -239,6 +258,7 @@ const GraphViewDemo: React.FC = () => {
             <IonButton onClick={handleReset} disabled={loading}>
               <IonIcon icon={refreshOutline} />
             </IonButton>
+            <IonMenuButton />
           </IonButtons>
         </IonToolbar>
       </IonHeader>

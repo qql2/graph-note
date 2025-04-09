@@ -3,12 +3,21 @@ import './AppMenu.css';
 import { IonMenu, IonHeader, IonToolbar, IonTitle, IonContent,
          IonList, IonItem, IonButton} from '@ionic/react';
 
-interface AppMenuProps {}
+interface AppMenuProps {
+  onCreateNode?: () => void; // Add callback for creating a new node
+}
 
-const AppMenu: FC<AppMenuProps> = () => {
+const AppMenu: FC<AppMenuProps> = ({ onCreateNode }) => {
   const closeMenu = () => {
     const menu = document.querySelector('ion-menu');
     menu!.close();
+  };
+
+  const handleCreateNode = () => {
+    closeMenu();
+    if (onCreateNode) {
+      onCreateNode();
+    }
   };
 
   return (
@@ -20,6 +29,9 @@ const AppMenu: FC<AppMenuProps> = () => {
       </IonHeader>
       <IonContent>
         <IonList>
+          <IonItem onClick={handleCreateNode}>
+            <IonButton size="default" expand="full">创建独立节点</IonButton>
+          </IonItem>
           <IonItem onClick={closeMenu}>
             <IonButton size="default" routerLink="/users" expand="full">Managing Users</IonButton>
           </IonItem>
