@@ -113,6 +113,9 @@ const GraphViewDemo: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   
+  // 导航栏高度 - Ionic 默认为 56px，但可以根据实际情况调整
+  const navbarHeight = 56;
+  
   // 弹窗状态
   const [showAlert, setShowAlert] = useState(false);
   const [alertHeader, setAlertHeader] = useState('');
@@ -580,6 +583,7 @@ const GraphViewDemo: React.FC = () => {
                 quadrantConfig={quadrantConfig}
                 depthConfig={depthConfig}
                 viewConfig={viewConfig}
+                navbarHeight={navbarHeight}
                 onNodeClick={handleNodeClick}
                 onEditNode={handleEditNode}
                 onDeleteNode={handleDeleteNode}

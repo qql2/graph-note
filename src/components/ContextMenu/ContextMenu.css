@@ -3,16 +3,54 @@
   z-index: 1000;
   background-color: var(--ion-background-color);
   border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  min-width: 160px;
-  max-width: 200px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  min-width: 180px;
+  max-width: 280px;
   overflow: hidden;
-  padding: 0;
+  padding: 4px 0;
+  transition: opacity 0.15s ease-in-out, transform 0.15s ease-out;
+  transform-origin: top left;
+  /* 初始化过渡效果 */
+  opacity: 0;
+  transform: scale(0.95);
+  animation: contextMenuFadeIn 0.15s ease-out forwards;
+  /* 确保滚动条在菜单内部 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--ion-color-medium) var(--ion-color-light);
+}
+
+@keyframes contextMenuFadeIn {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 自定义滚动条样式 */
+.context-menu::-webkit-scrollbar {
+  width: 5px;
+}
+
+.context-menu::-webkit-scrollbar-track {
+  background: var(--ion-color-light);
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.context-menu::-webkit-scrollbar-thumb {
+  background: var(--ion-color-medium);
+  border-radius: 4px;
+}
+
+.context-menu::-webkit-scrollbar-thumb:hover {
+  background: var(--ion-color-medium-shade);
 }
 
 .context-menu-list {
   padding: 0;
   margin: 0;
+  /* 确保在使用滚动条时内容不会被截断 */
+  width: 100%;
 }
 
 .context-menu-item {
@@ -20,15 +58,22 @@
   --padding-end: 12px;
   --padding-top: 8px;
   --padding-bottom: 8px;
-  --min-height: 32px;
+  --min-height: 36px;
   font-size: 14px;
+  cursor: pointer;
 }
 
 .context-menu-item:hover {
   --ion-item-background: var(--ion-color-light-shade);
 }
 
+.context-menu-item[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .context-menu ion-icon {
   margin-right: 8px;
   font-size: 18px;
+  color: var(--ion-color-medium);
 } 
