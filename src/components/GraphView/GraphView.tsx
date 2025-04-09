@@ -334,10 +334,13 @@ const GraphView: React.FC<GraphViewProps> = ({
         label: '编辑关系',
         icon: pencil,
         onClick: () => {
-          // 暂时使用 prompt，实际项目中应该用更好的 UI
+          // 获取当前显示的标签
           const currentLabel = edge.getLabels()?.[0]?.attrs?.text?.text || edge.data.relationshipType;
+          // 提示用户输入新的标签
           const newLabel = prompt('编辑关系名称:', currentLabel);
           if (newLabel !== null && newLabel.trim() !== '') {
+            // 将新标签传递给 onEditEdge 回调
+            // 在上层组件中，应该将此值保存到边的 properties.shortLabel 中
             onEditEdge(edgeId, newLabel.trim());
           }
         }
@@ -565,14 +568,23 @@ const GraphView: React.FC<GraphViewProps> = ({
     };
 
     // 获取关系类型的显示标签
-    const getRelationshipLabel = (relationshipType: RelationshipType) => {
+    const getRelationshipLabel = (edge: { relationshipType: RelationshipType; properties?: Record<string, any> }) => {
       if (viewConfig.showRelationshipLabels === RelationshipLabelMode.NONE) {
         return null;
-      } else if (viewConfig.showRelationshipLabels === RelationshipLabelMode.SIMPLE) {
-        return relationshipToSimpleLabel[relationshipType] || '';
-      } else {
-        return relationshipType;
-      }
+      } 
+      
+      // 如果是简洁模式
+      if (viewConfig.showRelationshipLabels === RelationshipLabelMode.SIMPLE) {
+        // 如果边的属性中有 shortLabel，优先使用
+        if (edge.properties && 'shortLabel' in edge.properties) {
+          return edge.properties.shortLabel;
+        }
+        // 否则使用默认的简短标签映射
+        return relationshipToSimpleLabel[edge.relationshipType] || '';
+      } 
+      
+      // 完整模式
+      return edge.relationshipType;
     };
 
     // Create edges between nodes
@@ -595,7 +607,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         );
         
         // 获取关系类型标签
-        const relationshipLabel = getRelationshipLabel(edgeData.relationshipType);
+        const relationshipLabel = getRelationshipLabel(edgeData);
         
         // 创建边的基本属性
         const edgeOptions: any = {
