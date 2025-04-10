@@ -10,11 +10,14 @@ import {
   IonBadge,
   IonAlert,
   IonIcon,
-  IonMenuButton
+  IonMenuButton,
+  IonModal,
+  IonChip,
+  IonCardSubtitle
 } from '@ionic/react';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import { GraphNode, GraphEdge, DeleteMode } from '../services/graph-database/core/types';
-import { arrowBack } from 'ionicons/icons';
+import { arrowBack, search, eyeOutline, timeOutline, informationCircleOutline } from 'ionicons/icons';
 
 const GraphDBDemo: React.FC = () => {
   // 状态管理
@@ -24,6 +27,14 @@ const GraphDBDemo: React.FC = () => {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' }>({ text: '', type: 'info' });
   const [showToast, setShowToast] = useState<boolean>(false);
+
+  // 详情查看状态
+  const [showNodeDetail, setShowNodeDetail] = useState<boolean>(false);
+  const [showEdgeDetail, setShowEdgeDetail] = useState<boolean>(false);
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
+  const [connectedNodes, setConnectedNodes] = useState<GraphNode[]>([]);
+  const [relatedEdges, setRelatedEdges] = useState<GraphEdge[]>([]);
 
   // 节点表单状态
   const [nodeForm, setNodeForm] = useState<{
@@ -245,6 +256,91 @@ const GraphDBDemo: React.FC = () => {
     ));
   };
 
+  // 获取节点详情
+  const getNodeDetail = async (nodeId: string) => {
+    try {
+      setLoading(true);
+      const db = graphDatabaseService.getDatabase();
+      
+      // 获取节点的关联节点
+      const connected = await db.findConnectedNodes(nodeId, 1);
+      setConnectedNodes(connected);
+      
+      // 获取与该节点相关的所有边
+      const nodeEdges = edges.filter(edge => 
+        edge.source_id === nodeId || edge.target_id === nodeId
+      );
+      setRelatedEdges(nodeEdges);
+      
+      // 找到选中的节点
+      const node = nodes.find(n => n.id === nodeId);
+      if (node) {
+        setSelectedNode(node);
+        setShowNodeDetail(true);
+      }
+    } catch (error) {
+      console.error('获取节点详情失败:', error);
+      showMessage(`获取节点详情失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 获取边详情
+  const getEdgeDetail = async (edgeId: string) => {
+    try {
+      setLoading(true);
+      
+      // 找到选中的边
+      const edge = edges.find(e => e.id === edgeId);
+      if (edge) {
+        // 获取源节点和目标节点的详细信息
+        const sourceNode = nodes.find(n => n.id === edge.source_id);
+        const targetNode = nodes.find(n => n.id === edge.target_id);
+        
+        setSelectedEdge(edge);
+        // 将源节点和目标节点添加到关联节点列表
+        setConnectedNodes([
+          ...(sourceNode ? [sourceNode] : []),
+          ...(targetNode ? [targetNode] : [])
+        ]);
+        
+        setShowEdgeDetail(true);
+      }
+    } catch (error) {
+      console.error('获取边详情失败:', error);
+      showMessage(`获取边详情失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 格式化时间戳
+  const formatTimestamp = (timestamp: number | string | undefined) => {
+    if (!timestamp) return '未知时间';
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : new Date(timestamp);
+    return date.toLocaleString();
+  };
+
+  // 格式化属性显示
+  const formatProperties = (properties: Record<string, any> | undefined) => {
+    if (!properties || Object.keys(properties).length === 0) {
+      return "无";
+    }
+    
+    return (
+      <div style={{ marginTop: '8px' }}>
+        {Object.entries(properties).map(([key, value]) => (
+          <IonChip key={key} outline={true}>
+            <IonLabel>
+              <strong>{key}:</strong> {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+            </IonLabel>
+          </IonChip>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <IonPage>
       <IonHeader>
@@ -431,6 +527,14 @@ const GraphDBDemo: React.FC = () => {
                             </IonLabel>
                             <IonButton
                               slot="end"
+                              color="primary"
+                              onClick={() => node.id && getNodeDetail(node.id)}
+                              disabled={loading}
+                            >
+                              <IonIcon icon={eyeOutline} slot="icon-only" />
+                            </IonButton>
+                            <IonButton
+                              slot="end"
                               color="danger"
                               onClick={() => node.id && deleteNode(node.id)}
                               disabled={loading}
@@ -474,6 +578,14 @@ const GraphDBDemo: React.FC = () => {
                               <p>目标节点: {edge.target_id}</p>
                               <p>属性: {JSON.stringify(edge.properties)}</p>
                             </IonLabel>
+                            <IonButton
+                              slot="end"
+                              color="primary"
+                              onClick={() => edge.id && getEdgeDetail(edge.id)}
+                              disabled={loading}
+                            >
+                              <IonIcon icon={eyeOutline} slot="icon-only" />
+                            </IonButton>
                             <IonButton
                               slot="end"
                               color="danger"
@@ -569,6 +681,182 @@ const GraphDBDemo: React.FC = () => {
             </IonCol>
           </IonRow>
         </IonGrid>
+        
+        {/* 节点详情模态窗口 */}
+        <IonModal isOpen={showNodeDetail} onDidDismiss={() => setShowNodeDetail(false)}>
+          <IonHeader>
+            <IonToolbar>
+              <IonTitle>节点详情</IonTitle>
+              <IonButtons slot="end">
+                <IonButton onClick={() => setShowNodeDetail(false)}>关闭</IonButton>
+              </IonButtons>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent>
+            {selectedNode && (
+              <div style={{ padding: '16px' }}>
+                <IonCard>
+                  <IonCardHeader>
+                    <IonCardTitle>{selectedNode.label}</IonCardTitle>
+                    <IonCardSubtitle>类型: {selectedNode.type}</IonCardSubtitle>
+                  </IonCardHeader>
+                  <IonCardContent>
+                    <IonItem lines="none">
+                      <IonIcon icon={informationCircleOutline} slot="start" />
+                      <IonLabel>
+                        <h2>基本信息</h2>
+                        <p>ID: {selectedNode.id}</p>
+                      </IonLabel>
+                    </IonItem>
+
+                    <IonItem lines="none">
+                      <IonIcon icon={timeOutline} slot="start" />
+                      <IonLabel>
+                        <h2>时间信息</h2>
+                        <p>创建时间: {selectedNode.created_at ? new Date(selectedNode.created_at).toLocaleString() : '未知时间'}</p>
+                        <p>更新时间: {selectedNode.updated_at ? new Date(selectedNode.updated_at).toLocaleString() : '未知时间'}</p>
+                      </IonLabel>
+                    </IonItem>
+
+                    <IonItem lines="none">
+                      <IonLabel>
+                        <h2>属性</h2>
+                        {formatProperties(selectedNode.properties)}
+                      </IonLabel>
+                    </IonItem>
+                  </IonCardContent>
+                </IonCard>
+
+                {/* 关联节点 */}
+                <IonCard>
+                  <IonCardHeader>
+                    <IonCardTitle>关联节点 ({connectedNodes.length})</IonCardTitle>
+                  </IonCardHeader>
+                  <IonCardContent>
+                    {connectedNodes.length > 0 ? (
+                      <IonList>
+                        {connectedNodes.map(node => (
+                          <IonItem key={node.id}>
+                            <IonLabel>
+                              <h2>{node.label} ({node.type})</h2>
+                              <p>ID: {node.id}</p>
+                            </IonLabel>
+                          </IonItem>
+                        ))}
+                      </IonList>
+                    ) : (
+                      <IonItem>
+                        <IonLabel>没有关联节点</IonLabel>
+                      </IonItem>
+                    )}
+                  </IonCardContent>
+                </IonCard>
+
+                {/* 相关边 */}
+                <IonCard>
+                  <IonCardHeader>
+                    <IonCardTitle>相关关系 ({relatedEdges.length})</IonCardTitle>
+                  </IonCardHeader>
+                  <IonCardContent>
+                    {relatedEdges.length > 0 ? (
+                      <IonList>
+                        {relatedEdges.map(edge => (
+                          <IonItem key={edge.id}>
+                            <IonLabel>
+                              <h2>{edge.type}</h2>
+                              <p>从: {nodes.find(n => n.id === edge.source_id)?.label || edge.source_id}</p>
+                              <p>到: {nodes.find(n => n.id === edge.target_id)?.label || edge.target_id}</p>
+                            </IonLabel>
+                          </IonItem>
+                        ))}
+                      </IonList>
+                    ) : (
+                      <IonItem>
+                        <IonLabel>没有相关关系</IonLabel>
+                      </IonItem>
+                    )}
+                  </IonCardContent>
+                </IonCard>
+              </div>
+            )}
+          </IonContent>
+        </IonModal>
+
+        {/* 边详情模态窗口 */}
+        <IonModal isOpen={showEdgeDetail} onDidDismiss={() => setShowEdgeDetail(false)}>
+          <IonHeader>
+            <IonToolbar>
+              <IonTitle>关系详情</IonTitle>
+              <IonButtons slot="end">
+                <IonButton onClick={() => setShowEdgeDetail(false)}>关闭</IonButton>
+              </IonButtons>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent>
+            {selectedEdge && (
+              <div style={{ padding: '16px' }}>
+                <IonCard>
+                  <IonCardHeader>
+                    <IonCardTitle>{selectedEdge.type}</IonCardTitle>
+                    <IonCardSubtitle>关系类型</IonCardSubtitle>
+                  </IonCardHeader>
+                  <IonCardContent>
+                    <IonItem lines="none">
+                      <IonIcon icon={informationCircleOutline} slot="start" />
+                      <IonLabel>
+                        <h2>基本信息</h2>
+                        <p>ID: {selectedEdge.id}</p>
+                        <p>源节点ID: {selectedEdge.source_id}</p>
+                        <p>目标节点ID: {selectedEdge.target_id}</p>
+                      </IonLabel>
+                    </IonItem>
+
+                    <IonItem lines="none">
+                      <IonIcon icon={timeOutline} slot="start" />
+                      <IonLabel>
+                        <h2>时间信息</h2>
+                        <p>创建时间: {selectedEdge.created_at ? new Date(selectedEdge.created_at).toLocaleString() : '未知时间'}</p>
+                      </IonLabel>
+                    </IonItem>
+
+                    <IonItem lines="none">
+                      <IonLabel>
+                        <h2>属性</h2>
+                        {formatProperties(selectedEdge.properties)}
+                      </IonLabel>
+                    </IonItem>
+                  </IonCardContent>
+                </IonCard>
+
+                {/* 相关节点 */}
+                <IonCard>
+                  <IonCardHeader>
+                    <IonCardTitle>关联节点</IonCardTitle>
+                  </IonCardHeader>
+                  <IonCardContent>
+                    {connectedNodes.length > 0 ? (
+                      <IonList>
+                        {connectedNodes.map(node => (
+                          <IonItem key={node.id}>
+                            <IonLabel>
+                              <h2>{node.label} ({node.type})</h2>
+                              <p>ID: {node.id}</p>
+                              <p>角色: {node.id === selectedEdge.source_id ? '源节点' : '目标节点'}</p>
+                            </IonLabel>
+                          </IonItem>
+                        ))}
+                      </IonList>
+                    ) : (
+                      <IonItem>
+                        <IonLabel>没有找到关联节点</IonLabel>
+                      </IonItem>
+                    )}
+                  </IonCardContent>
+                </IonCard>
+              </div>
+            )}
+          </IonContent>
+        </IonModal>
         
         {/* 消息提示 */}
         <IonToast
