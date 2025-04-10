@@ -160,7 +160,7 @@ Graph.registerEdge(
     connector: {
       name: 'rounded',
       args: {
-        radius: 8,
+        radius: 10, // 增加弯曲的半径
       },
     },
     router: {
@@ -395,7 +395,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         connector: {
           name: 'rounded',
           args: {
-            radius: 8,
+            radius: 10,
           },
         },
         validateConnection: () => false, // Prevent interactive connections
@@ -531,13 +531,7 @@ const GraphView: React.FC<GraphViewProps> = ({
       else if (isLeftType) relationQuadrant = 'left';
       else if (isRightType) relationQuadrant = 'right';
       else {
-        // 未配置的关系类型
-        // 根据未配置关系类型的自动分配规则确定
-        if (quadrantConfig[QuadrantPosition.TOP].length === 0) relationQuadrant = 'top';
-        else if (quadrantConfig[QuadrantPosition.BOTTOM].length === 0) relationQuadrant = 'bottom';
-        else if (quadrantConfig[QuadrantPosition.LEFT].length === 0) relationQuadrant = 'left';
-        else if (quadrantConfig[QuadrantPosition.RIGHT].length === 0) relationQuadrant = 'right';
-        else relationQuadrant = 'top'; // 默认分配给top
+        relationQuadrant = quadrantConfig.unconfiguredTypesPosition
       }
       
       // 中心节点特殊处理
