@@ -26,8 +26,9 @@ import {
 } from '@ionic/react';
 import { refreshOutline, arrowBack, save, refresh, bookmarkOutline } from 'ionicons/icons';
 import GraphView from '../components/GraphView';
+import RelationshipConfig from '../components/RelationshipConfig';
 import { useLocation } from 'react-router-dom';
-import { GraphData, GraphNode, GraphEdge, CommonRelationshipTypes, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, QuadrantPosition } from '../models/GraphNode';
+import { GraphData, GraphNode, GraphEdge, CommonRelationshipTypes, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, QuadrantPosition, RelationshipTypeConfig, defaultRelationshipTypeConfig } from '../models/GraphNode';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import { ConfigService } from '../services/ConfigService';
 import './GraphViewDemo.css';
@@ -89,6 +90,9 @@ const GraphViewDemo: React.FC = () => {
   const [quadrantConfig, setQuadrantConfig] = useState<QuadrantConfig>(ConfigService.loadQuadrantConfig());
   const [depthConfig, setDepthConfig] = useState<DepthConfig>(ConfigService.loadDepthConfig());
   const [viewConfig, setViewConfig] = useState<ViewConfig>(ConfigService.loadViewConfig());
+  const [relationshipTypeConfig, setRelationshipTypeConfig] = useState<RelationshipTypeConfig>(
+    quadrantConfig.relationshipTypeConfig || defaultRelationshipTypeConfig
+  );
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   
@@ -487,18 +491,38 @@ const GraphViewDemo: React.FC = () => {
     ConfigService.saveQuadrantConfig(newConfig);
   };
 
+  // 当关系类型配置变化时，更新四象限配置中的关系类型配置
+  useEffect(() => {
+    const updatedQuadrantConfig = {
+      ...quadrantConfig,
+      relationshipTypeConfig: relationshipTypeConfig
+    };
+    setQuadrantConfig(updatedQuadrantConfig);
+    
+    // 保存更新后的配置
+    ConfigService.saveQuadrantConfig(updatedQuadrantConfig);
+  }, [relationshipTypeConfig]);
+
+  // 处理关系类型相对性配置更新
+  const handleRelationshipTypeConfigChange = (newConfig: RelationshipTypeConfig) => {
+    setRelationshipTypeConfig(newConfig);
+    
+    // 显示提示
+    setToastMessage('关系相对性配置已更新');
+    setShowToast(true);
+  };
+
   // 重置所有配置到默认值
   const handleResetAllConfigs = () => {
     showConfirmDialog(
       '重置所有配置',
-      '确定要将所有配置重置为默认值吗？这将丢失您的自定义设置。',
+      '确定要重置所有配置为默认值吗？这将恢复默认的四象限布局、深度和视图设置。',
       () => {
-        // 重置配置
-        ConfigService.resetAllConfigs();
-        // 应用默认配置
+        // 重置所有配置
         setQuadrantConfig({ ...defaultQuadrantConfig });
         setDepthConfig({ ...defaultDepthConfig });
         setViewConfig({ ...defaultViewConfig });
+        setRelationshipTypeConfig({ ...defaultRelationshipTypeConfig });
         // 显示提示
         setToastMessage('所有配置已重置为默认值');
         setShowToast(true);
@@ -648,6 +672,11 @@ const GraphViewDemo: React.FC = () => {
                   注意：每个关系组可以包含多种关系类型。未分配到任何关系组的关系类型将会显示在指定的未分配关系组位置，若未指定则自动分配到未被配置的关系组中。
                 </p>
               </div>
+              
+              <RelationshipConfig 
+                relationshipConfig={relationshipTypeConfig}
+                onConfigChange={handleRelationshipTypeConfigChange}
+              />
               
               <h4>深度配置</h4>
               <p className="description-text">
