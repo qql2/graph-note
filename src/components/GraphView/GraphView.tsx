@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Graph } from '@antv/x6';
-import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, RelationshipType } from '../../models/GraphNode';
+import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, RelationshipType, GraphEdge } from '../../models/GraphNode';
 import { GraphLayoutService } from '../../services/GraphLayoutService';
 import ContextMenu from '../ContextMenu';
 import { pencil, trash, copy, add } from 'ionicons/icons';
@@ -196,13 +196,6 @@ const GraphView: React.FC<GraphViewProps> = ({
     type: ''
   });
 
-  // 在组件内部添加状态以跟踪当前正在编辑的节点和边
-  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
-  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
-  const [inputValue, setInputValue] = useState<string>('');
-  // 存储所有现有的关系类型，用于自动补全
-  const [existingRelationshipLabels, setExistingRelationshipLabels] = useState<string[]>([]);
-
   // 处理缩放和重置视图的函数
   const handleZoomIn = () => {
     if (graph) {
@@ -249,24 +242,10 @@ const GraphView: React.FC<GraphViewProps> = ({
         label: '编辑节点',
         icon: pencil,
         onClick: () => {
-          // 找到节点并设置为编辑状态
-          const nodeCell = graph?.getCellById(nodeId);
-          if (nodeCell) {
-            setEditingNodeId(nodeId);
-            setInputValue(node.attrs.label.text);
-            
-            // 为了让用户看到编辑状态，更新节点样式
-            nodeCell.setAttrs({
-              label: {
-                text: node.attrs.label.text,
-                fill: '#333', // 改变文字颜色
-                class: 'editing-node'
-              },
-              body: {
-                stroke: '#1a73e8', // 增加边框高亮
-                strokeWidth: 2,
-              }
-            });
+          // 暂时使用 prompt，实际项目中应该用更好的 UI
+          const newLabel = prompt('编辑节点名称:', node.attrs.label.text);
+          if (newLabel !== null && newLabel.trim() !== '') {
+            onEditNode(nodeId, newLabel.trim());
           }
         }
       });
@@ -355,44 +334,14 @@ const GraphView: React.FC<GraphViewProps> = ({
         label: '编辑关系',
         icon: pencil,
         onClick: () => {
-          // 设置编辑状态并记录当前标签值
-          setEditingEdgeId(edge.id);
-          
-          // 获取边的数据
-          const edgeData = edge.getData();
-          const relationshipType = edgeData?.relationshipType as keyof typeof relationshipToSimpleLabel;
-          
-          // 根据当前视图配置获取正确的标签
-          let currentLabel = '';
-          
-          if (relationshipType) {
-            if (viewConfig.showRelationshipLabels === RelationshipLabelMode.SIMPLE) {
-              // 简短模式使用简短标签
-              currentLabel = relationshipType in relationshipToSimpleLabel ? 
-                relationshipToSimpleLabel[relationshipType] : 
-                relationshipType as string;
-            } else if (viewConfig.showRelationshipLabels === RelationshipLabelMode.FULL) {
-              // 完整模式使用完整关系名称
-              currentLabel = relationshipType as string;
-            }
-          }
-          
-          // 如果存在标签，优先使用边上显示的标签
-          if (edge.labels && edge.labels.length > 0 && edge.labels[0].attrs.text.text) {
-            currentLabel = edge.labels[0].attrs.text.text;
-          }
-          
-          setInputValue(currentLabel);
-          
-          // 高亮显示正在编辑的边
-          const edgeCell = graph?.getCellById(edge.id);
-          if (edgeCell) {
-            edgeCell.setAttrs({
-              line: {
-                strokeWidth: 3,
-                stroke: '#1a73e8',
-              }
-            });
+          // 获取当前显示的标签
+          const currentLabel = edge.getLabels()?.[0]?.attrs?.text?.text || edge.data.relationshipType;
+          // 提示用户输入新的标签
+          const newLabel = prompt('编辑关系名称:', currentLabel);
+          if (newLabel !== null && newLabel.trim() !== '') {
+            // 将新标签传递给 onEditEdge 回调
+            // 在上层组件中，应该将此值保存到边的 properties.shortLabel 中
+            onEditEdge(edgeId, newLabel.trim());
           }
         }
       });
@@ -619,7 +568,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     };
 
     // 获取关系类型的显示标签
-    const getRelationshipLabel = (edge: { relationshipType: RelationshipType; properties?: Record<string, any> }) => {
+    const getRelationshipLabel = (edge: GraphEdge) => {
       if (viewConfig.showRelationshipLabels === RelationshipLabelMode.NONE) {
         return null;
       } 
@@ -627,8 +576,8 @@ const GraphView: React.FC<GraphViewProps> = ({
       // 如果是简洁模式
       if (viewConfig.showRelationshipLabels === RelationshipLabelMode.SIMPLE) {
         // 如果边的属性中有 shortLabel，优先使用
-        if (edge.properties && 'shortLabel' in edge.properties) {
-          return edge.properties.shortLabel;
+        if (edge.metadata && 'shortLabel' in edge.metadata) {
+          return edge.metadata.shortLabel;
         }
         // 否则使用默认的简短标签映射
         return relationshipToSimpleLabel[edge.relationshipType] || '';
@@ -717,224 +666,10 @@ const GraphView: React.FC<GraphViewProps> = ({
     // Center the view
     graph.centerContent();
 
-    // 在图表初始化时收集所有现有的关系类型标签
-    const relationshipLabels = new Set<string>();
-    graphData.edges.forEach(edge => {
-      // 添加关系类型的全名
-      relationshipLabels.add(edge.relationshipType);
-      
-      // 如果存在自定义关系标签，也添加它们
-      if (edge.metadata?.label) {
-        relationshipLabels.add(edge.metadata.label);
-      }
-    });
-    setExistingRelationshipLabels(Array.from(relationshipLabels));
-    
-    // 监听图表的点击事件，用于处理编辑状态
-    graph.on('blank:click', () => {
-      // 当点击空白区域时，如果有正在编辑的节点或边，保存并退出编辑状态
-      if (editingNodeId) {
-        handleNodeEditComplete();
-      }
-      if (editingEdgeId) {
-        handleEdgeEditComplete();
-      }
-    });
-    
-    // 监听键盘事件
-    document.addEventListener('keydown', handleKeyDown);
-
-  }, [graph, graphData, centralNodeId, quadrantConfig, depthConfig, viewConfig, editingNodeId, editingEdgeId, inputValue]);
-
-  // 处理键盘事件
-  const handleKeyDown = (e: KeyboardEvent) => {
-    // 按下回车键确认编辑
-    if (e.key === 'Enter') {
-      if (editingNodeId) {
-        handleNodeEditComplete();
-      }
-      if (editingEdgeId) {
-        handleEdgeEditComplete();
-      }
-    }
-    // 按下Escape键取消编辑
-    else if (e.key === 'Escape') {
-      if (editingNodeId) {
-        setEditingNodeId(null);
-        // 恢复原始样式
-        const node = graph?.getCellById(editingNodeId);
-        if (node) {
-          node.setAttrs({
-            label: {
-              fill: '#fff',
-              class: ''
-            },
-            body: {
-              strokeWidth: 1,
-            }
-          });
-        }
-      }
-      if (editingEdgeId) {
-        setEditingEdgeId(null);
-        // 恢复原始样式
-        const edge = graph?.getCellById(editingEdgeId);
-        if (edge) {
-          edge.setAttrs({
-            line: {
-              strokeWidth: 2,
-            }
-          });
-        }
-      }
-    }
-  };
-
-  // 处理节点编辑完成
-  const handleNodeEditComplete = () => {
-    if (editingNodeId && inputValue.trim() !== '' && onEditNode) {
-      onEditNode(editingNodeId, inputValue.trim());
-      setEditingNodeId(null);
-    }
-  };
-
-  // 处理边编辑完成
-  const handleEdgeEditComplete = () => {
-    if (editingEdgeId && inputValue.trim() !== '' && onEditEdge) {
-      // 获取当前边对象
-      const edge = graph?.getCellById(editingEdgeId);
-      if (edge) {
-        // 根据当前显示模式调整保存的值
-        let relationshipValue = inputValue.trim();
-        const relationshipData = edge.getData();
-        
-        // 如果当前是简短模式，并且用户输入的是完整关系名称，则需要转换
-        if (viewConfig.showRelationshipLabels === RelationshipLabelMode.SIMPLE) {
-          // 尝试将用户输入映射到简短关系标签
-          // 检查是否是一个完整的关系类型名称
-          const relationshipType = Object.values(RelationshipType).find(
-            type => type.toLowerCase() === relationshipValue.toLowerCase()
-          );
-          
-          if (relationshipType) {
-            // 使用简短标签
-            relationshipValue = relationshipToSimpleLabel[relationshipType];
-          }
-        } 
-        // 如果当前是完整模式，并且用户输入的是简短标签，则需要转换
-        else if (viewConfig.showRelationshipLabels === RelationshipLabelMode.FULL) {
-          // 检查是否是一个简短标签
-          const entries = Object.entries(relationshipToSimpleLabel);
-          for (const [fullType, shortLabel] of entries) {
-            if (shortLabel.toLowerCase() === relationshipValue.toLowerCase()) {
-              // 使用完整关系名称
-              relationshipValue = fullType;
-              break;
-            }
-          }
-        }
-        
-        // 将处理后的值传递给回调
-        onEditEdge(editingEdgeId, relationshipValue);
-        setEditingEdgeId(null);
-      }
-    }
-  };
-
-  // 添加处理输入值变化的函数
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
-  };
-
-  // 在渲染部分之前，添加关系自动补全列表的状态
-  const [showAutoComplete, setShowAutoComplete] = useState(false);
-
-  // 添加过滤关系标签的函数
-  const getFilteredRelationships = () => {
-    if (!inputValue) return existingRelationshipLabels;
-    
-    return existingRelationshipLabels.filter(label => 
-      label.toLowerCase().includes(inputValue.toLowerCase())
-    );
-  };
+  }, [graph, graphData, centralNodeId, quadrantConfig, depthConfig, viewConfig]);
 
   return (
     <div className="graph-view-container">
-      {/* 添加节点编辑输入框 */}
-      {editingNodeId && (
-        <div className="node-editor" 
-             style={{ 
-               position: 'absolute', 
-               zIndex: 1000,
-               left: '50%',
-               top: '50%',
-               transform: 'translate(-50%, -50%)'
-             }}>
-          <input
-            type="text"
-            value={inputValue}
-            onChange={handleInputChange}
-            autoFocus
-            className="node-editor-input"
-            onBlur={handleNodeEditComplete}
-          />
-        </div>
-      )}
-      
-      {/* 添加关系编辑输入框 */}
-      {editingEdgeId && (
-        <div className="edge-editor" 
-             style={{ 
-               position: 'absolute', 
-               zIndex: 1000,
-               left: '50%',
-               top: '50%',
-               transform: 'translate(-50%, -50%)'
-             }}>
-          <div className="autocomplete-container">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => {
-                handleInputChange(e);
-                // 只有当不是简洁模式时才显示自动补全
-                if (viewConfig.showRelationshipLabels !== RelationshipLabelMode.SIMPLE) {
-                  setShowAutoComplete(true);
-                }
-              }}
-              autoFocus
-              className="edge-editor-input"
-              onBlur={() => {
-                // 延迟隐藏自动完成，以便用户可以点击选项
-                setTimeout(() => {
-                  setShowAutoComplete(false);
-                }, 200);
-              }}
-            />
-            
-            {/* 关系自动补全下拉列表 - 只在非简洁模式下显示 */}
-            {showAutoComplete && viewConfig.showRelationshipLabels !== RelationshipLabelMode.SIMPLE && (
-              <div className="autocomplete-dropdown">
-                {getFilteredRelationships().map((label, index) => (
-                  <div 
-                    key={index} 
-                    className="autocomplete-item"
-                    onClick={() => {
-                      setInputValue(label);
-                      setShowAutoComplete(false);
-                      // 自动保存
-                      setTimeout(handleEdgeEditComplete, 100);
-                    }}
-                  >
-                    {label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      
       <div className="graph-view-controls">
         <button className="graph-view-control-button" onClick={handleZoomIn} title="放大">+</button>
         <button className="graph-view-control-button" onClick={handleZoomOut} title="缩小">-</button>
