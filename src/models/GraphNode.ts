@@ -23,6 +23,12 @@ export enum RelationshipLabelMode {
   FULL = 'full', // 完整显示关系名称
 }
 
+// 关系类型相对性定义
+export interface RelationshipTypeConfig {
+  // 关系类型到其相对/反转类型的映射
+  oppositeTypes: Record<string, string>;
+}
+
 // Graph node model
 export interface GraphNode {
   id: string;
@@ -62,6 +68,7 @@ export interface QuadrantConfig {
   [QuadrantPosition.LEFT]: string[];
   [QuadrantPosition.RIGHT]: string[];
   unconfiguredTypesPosition: QuadrantPosition;  // 明确指定未分配关系类型显示的位置
+  relationshipTypeConfig: RelationshipTypeConfig; // 添加关系类型相对性配置
 }
 
 // 深度配置，控制各关系类型的最大深度
@@ -74,6 +81,16 @@ export interface ViewConfig {
   showRelationshipLabels: RelationshipLabelMode; // 是否在连线上显示关系类型
 }
 
+// 默认关系类型相对性配置
+export const defaultRelationshipTypeConfig: RelationshipTypeConfig = {
+  oppositeTypes: {
+    [CommonRelationshipTypes.FATHER]: CommonRelationshipTypes.CHILD,
+    [CommonRelationshipTypes.CHILD]: CommonRelationshipTypes.FATHER,
+    [CommonRelationshipTypes.BASE]: CommonRelationshipTypes.BUILD,
+    [CommonRelationshipTypes.BUILD]: CommonRelationshipTypes.BASE,
+  }
+};
+
 // 默认关系组配置
 export const defaultQuadrantConfig: QuadrantConfig = {
   [QuadrantPosition.TOP]: [CommonRelationshipTypes.FATHER],
@@ -81,6 +98,7 @@ export const defaultQuadrantConfig: QuadrantConfig = {
   [QuadrantPosition.LEFT]: [CommonRelationshipTypes.BASE],
   [QuadrantPosition.RIGHT]: [CommonRelationshipTypes.BUILD],
   unconfiguredTypesPosition: QuadrantPosition.LEFT, // 默认未指定关系组用于未配置的关系类型
+  relationshipTypeConfig: defaultRelationshipTypeConfig, // 使用默认关系类型相对性配置
 };
 
 // 默认深度配置，最大深度为3
