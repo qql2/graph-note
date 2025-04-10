@@ -54,34 +54,34 @@ const convertDbDataToGraphData = (
   }));
 
   const edges: GraphEdge[] = dbEdges.map(dbEdge => {
-    // 根据边的类型映射到我们定义的关系类型
-    let relationshipType: RelationshipType;
-    
     // 调试边类型映射
     console.log('处理边：', dbEdge.id, '类型：', dbEdge.type, 
                 '源节点：', dbEdge.source_id || dbEdge.sourceId, 
                 '目标节点：', dbEdge.target_id || dbEdge.targetId);
     
-    switch ((dbEdge.type || '').toLowerCase()) {
-      case 'father':
-      case 'parent':
-        relationshipType = RelationshipType.FATHER;
-        break;
-      case 'child':
-        relationshipType = RelationshipType.CHILD;
-        break;
-      case 'base':
-      case 'foundation':
-        relationshipType = RelationshipType.BASE;
-        break;
-      case 'build':
-      case 'derived':
-        relationshipType = RelationshipType.BUILD;
-        break;
-      default:
-        // 默认关系类型，根据数据库中看到的实际类型调整
-        console.log('未知边类型:', dbEdge.type, '默认设为BUILD');
-        relationshipType = RelationshipType.BUILD;
+    // 直接使用数据库中的关系类型，不再强制映射
+    // 注意：如果数据库中的类型为空，默认使用'build'类型
+    const edgeType = (dbEdge.type || 'build').toLowerCase();
+    
+    // 检查这个类型是否是我们预定义的类型之一
+    let relationshipType: RelationshipType;
+    
+    // 尝试将数据库中的类型映射到预定义的枚举值
+    if (Object.values(RelationshipType).includes(edgeType as RelationshipType)) {
+      relationshipType = edgeType as RelationshipType;
+    } else {
+      // 如果不是预定义的类型，记录日志并使用默认值
+      console.log('未知边类型:', edgeType, '将使用原始类型:', edgeType);
+      
+      // 由于TypeScript的限制，我们需要将非预定义类型转为预定义类型之一
+      // 这里默认使用BUILD类型，但在界面上可以显示原始类型名称
+      relationshipType = RelationshipType.BUILD;
+      
+      // 将原始类型存储在metadata中以便后续可以使用
+      if (!dbEdge.properties) {
+        dbEdge.properties = {};
+      }
+      dbEdge.properties.originalType = edgeType;
     }
 
     // 处理可能不同的字段名
@@ -324,13 +324,26 @@ const GraphViewDemo: React.FC = () => {
       setLoading(true);
       const db = graphDatabaseService.getDatabase();
       
+      // 检查是否需要创建自定义关系
+      let actualRelationType = relationType;
+      let isCustomType = false;
+      
+      // 如果用户选择了自定义关系（通过菜单时实际传的是BUILD类型）
+      if (relationType === RelationshipType.BUILD) {
+        const customType = prompt('请输入自定义关系类型名称:');
+        if (customType && customType.trim() !== '') {
+          actualRelationType = customType.trim() as RelationshipType;
+          isCustomType = true;
+        }
+      }
+      
       // 创建新节点
       const newNodeId = await db.addNode({
         type: 'knowledge',
-        label: `新${relationType}节点`,
+        label: `新${isCustomType ? actualRelationType : relationType}节点`,
         properties: {
           created_at: new Date().toISOString(),
-          description: `从节点 ${sourceNodeId} 创建的 ${relationType} 关系节点`
+          description: `从节点 ${sourceNodeId} 创建的 ${isCustomType ? actualRelationType : relationType} 关系节点`
         }
       });
       
@@ -338,13 +351,13 @@ const GraphViewDemo: React.FC = () => {
       await db.addEdge({
         source_id: sourceNodeId,
         target_id: newNodeId,
-        type: relationType,
+        type: actualRelationType,
         properties: {
           created_at: new Date().toISOString()
         }
       });
       
-      setToastMessage(`已创建 ${relationType} 关系和新节点`);
+      setToastMessage(`已创建 ${isCustomType ? actualRelationType : relationType} 关系和新节点`);
       setShowToast(true);
       
       // 重新加载数据
@@ -402,14 +415,14 @@ const GraphViewDemo: React.FC = () => {
     [RelationshipType.FATHER]: '父节点关系',
     [RelationshipType.CHILD]: '子节点关系',
     [RelationshipType.BASE]: '基础关系',
-    [RelationshipType.BUILD]: '构建关系'
+    [RelationshipType.BUILD]: '构建关系（或自定义关系）'
   };
 
   // 关系标签模式的中文名称
   const labelModeNames = {
     [RelationshipLabelMode.NONE]: '不显示',
-    [RelationshipLabelMode.SIMPLE]: '简洁显示（F/C/Ba/Bu）',
-    [RelationshipLabelMode.FULL]: '完整显示（father/child/base/build）'
+    [RelationshipLabelMode.SIMPLE]: '简洁显示（缩写）',
+    [RelationshipLabelMode.FULL]: '完整显示'
   };
 
   return (
