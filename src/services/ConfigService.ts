@@ -8,7 +8,8 @@ export class ConfigService {
   private static readonly STORAGE_KEYS = {
     QUADRANT_CONFIG: 'graphNote_quadrantConfig',
     DEPTH_CONFIG: 'graphNote_depthConfig',
-    VIEW_CONFIG: 'graphNote_viewConfig'
+    VIEW_CONFIG: 'graphNote_viewConfig',
+    CENTRAL_NODE_ID: 'graphNote_centralNodeId'
   };
 
   /**
@@ -124,6 +125,35 @@ export class ConfigService {
   }
 
   /**
+   * 保存当前聚焦的节点ID
+   * @param nodeId 当前聚焦的节点ID
+   */
+  static saveCentralNodeId(nodeId: string): void {
+    if (!this.isLocalStorageAvailable()) return;
+    try {
+      localStorage.setItem(this.STORAGE_KEYS.CENTRAL_NODE_ID, nodeId);
+    } catch (e) {
+      console.error('保存聚焦节点ID失败:', e);
+    }
+  }
+
+  /**
+   * 加载上次聚焦的节点ID
+   * @returns 保存的节点ID，如果没有则返回空字符串
+   */
+  static loadCentralNodeId(): string {
+    if (!this.isLocalStorageAvailable()) return '';
+    
+    try {
+      const savedId = localStorage.getItem(this.STORAGE_KEYS.CENTRAL_NODE_ID);
+      return savedId || '';
+    } catch (e) {
+      console.error('加载聚焦节点ID失败:', e);
+      return '';
+    }
+  }
+
+  /**
    * 重置所有配置为默认值
    */
   static resetAllConfigs(): void {
@@ -132,6 +162,7 @@ export class ConfigService {
       localStorage.removeItem(this.STORAGE_KEYS.QUADRANT_CONFIG);
       localStorage.removeItem(this.STORAGE_KEYS.DEPTH_CONFIG);
       localStorage.removeItem(this.STORAGE_KEYS.VIEW_CONFIG);
+      localStorage.removeItem(this.STORAGE_KEYS.CENTRAL_NODE_ID);
     } catch (e) {
       console.error('重置配置失败:', e);
     }

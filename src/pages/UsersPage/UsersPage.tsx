@@ -88,7 +88,7 @@ const UsersPage: React.FC = () => {
             })
             .catch ((error) => {
               const msg = `Error open database:: ${error}`;
-              console.log(`msg`);
+              ;
               Toast.show({
                 text: `${msg}`,
                 duration: 'long'
