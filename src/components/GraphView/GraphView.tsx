@@ -282,18 +282,12 @@ const GraphView: React.FC<GraphViewProps> = ({
         onClick: () => onCreateRelation(nodeId, RelationshipType.BUILD)
       });
       
-      // 添加自定义关系（实际实现中需要弹出输入框）
+      // 添加自定义关系
       menuItems.push({
         id: 'create-custom',
         label: '添加自定义关系',
         icon: add,
-        onClick: () => {
-          const customType = prompt('请输入自定义关系名称:');
-          if (customType && customType.trim() !== '') {
-            // 这里需要根据实际实现处理自定义关系的创建
-            alert(`暂不支持自定义关系类型: ${customType}`);
-          }
-        }
+        onClick: () => onCreateRelation(nodeId, RelationshipType.BUILD)
       });
     }
     
@@ -573,18 +567,27 @@ const GraphView: React.FC<GraphViewProps> = ({
         return null;
       } 
       
+      // 首先检查是否有原始类型存储在metadata中
+      const originalType = edge.metadata?.originalType;
+      
       // 如果是简洁模式
       if (viewConfig.showRelationshipLabels === RelationshipLabelMode.SIMPLE) {
         // 如果边的属性中有 shortLabel，优先使用
         if (edge.metadata && 'shortLabel' in edge.metadata) {
           return edge.metadata.shortLabel;
         }
+        
+        // 如果有原始类型，为其创建简短标签（取首字母）
+        if (originalType) {
+          return originalType.substring(0, 1).toUpperCase();
+        }
+        
         // 否则使用默认的简短标签映射
         return relationshipToSimpleLabel[edge.relationshipType] || '';
       } 
       
-      // 完整模式
-      return edge.relationshipType;
+      // 完整模式 - 优先使用原始类型
+      return originalType || edge.relationshipType;
     };
 
     // Create edges between nodes
@@ -628,6 +631,7 @@ const GraphView: React.FC<GraphViewProps> = ({
           },
           data: {
             relationshipType: edgeData.relationshipType,
+            originalType: edgeData.metadata?.originalType,
           },
         };
         
