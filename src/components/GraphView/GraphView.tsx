@@ -511,72 +511,6 @@ const GraphView: React.FC<GraphViewProps> = ({
       });
     });
 
-    // 确定边的源节点和目标节点的连接点
-    const determineConnectionPoints = (sourceId: string, targetId: string, edgeType: string) => {
-      const sourceQuadrant = nodeQuadrantMap.get(sourceId) || 'center';
-      const targetQuadrant = nodeQuadrantMap.get(targetId) || 'center';
-      const sourceDepth = nodeDepthMap.get(sourceId) || 0;
-      const targetDepth = nodeDepthMap.get(targetId) || 0;
-      
-      // 确定关系类型属于哪个象限
-      const isTopType = quadrantConfig[QuadrantPosition.TOP].includes(edgeType);
-      const isBottomType = quadrantConfig[QuadrantPosition.BOTTOM].includes(edgeType);
-      const isLeftType = quadrantConfig[QuadrantPosition.LEFT].includes(edgeType);
-      const isRightType = quadrantConfig[QuadrantPosition.RIGHT].includes(edgeType);
-      
-      // 确定关系类型的象限
-      let relationQuadrant = '';
-      if (isTopType) relationQuadrant = 'top';
-      else if (isBottomType) relationQuadrant = 'bottom';
-      else if (isLeftType) relationQuadrant = 'left';
-      else if (isRightType) relationQuadrant = 'right';
-      else {
-        relationQuadrant = quadrantConfig.unconfiguredTypesPosition
-      }
-      
-      // 中心节点特殊处理
-      if (sourceId === centralNodeId) {
-        // 中心节点 -> 其他节点，根据关系类型的象限决定
-        if (relationQuadrant === 'top') return { source: 'top', target: 'bottom' };
-        if (relationQuadrant === 'bottom') return { source: 'bottom', target: 'top' };
-        if (relationQuadrant === 'left') return { source: 'left', target: 'right' };
-        if (relationQuadrant === 'right') return { source: 'right', target: 'left' };
-      } else if (targetId === centralNodeId) {
-        // 其他节点 -> 中心节点，根据关系类型的象限决定
-        if (relationQuadrant === 'top') return { source: 'bottom', target: 'top' };
-        if (relationQuadrant === 'bottom') return { source: 'top', target: 'bottom' };
-        if (relationQuadrant === 'left') return { source: 'right', target: 'left' };
-        if (relationQuadrant === 'right') return { source: 'left', target: 'right' };
-      }
-      
-      // 处理同象限不同深度的节点
-      if (sourceQuadrant === targetQuadrant) {
-        if (sourceQuadrant === 'top') {
-          return sourceDepth < targetDepth 
-            ? { source: 'top', target: 'bottom' }     // 浅层 -> 深层
-            : { source: 'bottom', target: 'top' };    // 深层 -> 浅层
-        }
-        if (sourceQuadrant === 'bottom') {
-          return sourceDepth < targetDepth 
-            ? { source: 'bottom', target: 'top' }     // 浅层 -> 深层
-            : { source: 'top', target: 'bottom' };    // 深层 -> 浅层
-        }
-        if (sourceQuadrant === 'left') {
-          return sourceDepth < targetDepth 
-            ? { source: 'left', target: 'right' }     // 浅层 -> 深层
-            : { source: 'right', target: 'left' };    // 深层 -> 浅层
-        }
-        if (sourceQuadrant === 'right') {
-          return sourceDepth < targetDepth 
-            ? { source: 'right', target: 'left' }     // 浅层 -> 深层
-            : { source: 'left', target: 'right' };    // 深层 -> 浅层
-        }
-      }
-      
-      // 跨象限连接的默认规则
-      return { source: 'center', target: 'center' };
-    };
-
     // 获取关系类型的显示标签
     const getRelationshipLabel = (edge: GraphEdge) => {
       if (viewConfig.showRelationshipLabels === RelationshipLabelMode.NONE) {
@@ -610,7 +544,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         let edgeColor;
         
         // 确定关系类型所属的关系组
-        const relationType = edgeData.relationshipType;
+        const relationType = GraphLayoutService.getOppositeRelationType(edgeData.relationshipType, quadrantConfig);
         
         // 检查关系类型属于哪个关系组
         const isTopType = quadrantConfig[QuadrantPosition.TOP].includes(relationType);
@@ -628,27 +562,23 @@ const GraphView: React.FC<GraphViewProps> = ({
         } else if (isRightType) {
           edgeColor = 'var(--ion-color-danger, #F44336)'; // 红色 - 右侧
         } else {
-          // 未配置到任何关系组的关系类型，自动分配
-          // 寻找未配置的关系组
-          if (quadrantConfig[QuadrantPosition.TOP].length === 0) {
-            edgeColor = 'var(--ion-color-success, #4CAF50)'; // 分配到上方关系组
-          } else if (quadrantConfig[QuadrantPosition.BOTTOM].length === 0) {
-            edgeColor = 'var(--ion-color-primary, #2196F3)'; // 分配到下方关系组
-          } else if (quadrantConfig[QuadrantPosition.LEFT].length === 0) {
-            edgeColor = 'var(--ion-color-tertiary, #9C27B0)'; // 分配到左侧关系组
-          } else if (quadrantConfig[QuadrantPosition.RIGHT].length === 0) {
-            edgeColor = 'var(--ion-color-danger, #F44336)'; // 分配到右侧关系组
-          } else {
-            // 所有关系组都已配置，使用默认颜色
-            edgeColor = 'var(--ion-color-medium, #607D8B)';
-          }
+          // 未配置到任何关系组的关系类型，使用默认颜色
+          edgeColor = 'var(--ion-color-medium, #607D8B)';
         }
         
-        // 确定连接点
-        const { source: sourcePort, target: targetPort } = determineConnectionPoints(
+        // 确定是否是从中心节点直接连出的边
+        const isDirectFromCentral = edgeData.source === centralNodeId;
+        
+        // 确定连接点，使用 GraphLayoutService 的方法
+        const { source: sourcePort, target: targetPort } = GraphLayoutService.determineConnectionPoints(
           edgeData.source, 
           edgeData.target,
-          edgeData.relationshipType
+          edgeData.relationshipType,
+          centralNodeId,
+          nodeQuadrantMap,
+          nodeDepthMap,
+          quadrantConfig,
+          isDirectFromCentral
         );
         
         // 获取关系类型标签
@@ -674,6 +604,7 @@ const GraphView: React.FC<GraphViewProps> = ({
           data: {
             relationshipType: edgeData.relationshipType,
             originalType: edgeData.metadata?.originalType,
+            isInbound: edgeData.target === centralNodeId && edgeData.source !== centralNodeId
           },
         };
         
