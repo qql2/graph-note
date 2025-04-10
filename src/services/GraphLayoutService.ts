@@ -1,4 +1,4 @@
-import { GraphData, GraphNode, GraphEdge, QuadrantConfig, RelationshipType, DepthConfig, defaultDepthConfig } from '../models/GraphNode';
+import { GraphData, GraphNode, GraphEdge, QuadrantConfig, CommonRelationshipTypes, DepthConfig, defaultDepthConfig, QuadrantPosition } from '../models/GraphNode';
 
 /**
  * Graph Layout Service - Handles the layout calculations for displaying nodes in quadrants
@@ -44,13 +44,27 @@ export class GraphLayoutService {
       };
     }
 
+    // 创建所有已分配的关系类型列表
+    const assignedRelationshipTypes = [
+      ...config[QuadrantPosition.TOP],
+      ...config[QuadrantPosition.BOTTOM],
+      ...config[QuadrantPosition.LEFT],
+      ...config[QuadrantPosition.RIGHT]
+    ];
+
     // 使用Map存储节点及其层级关系，value是[节点, 层级深度]
-    const relatedNodesMap = {
-      [RelationshipType.FATHER]: new Map<string, [GraphNode, number]>(),
-      [RelationshipType.CHILD]: new Map<string, [GraphNode, number]>(),
-      [RelationshipType.BASE]: new Map<string, [GraphNode, number]>(),
-      [RelationshipType.BUILD]: new Map<string, [GraphNode, number]>(),
-    };
+    // 为每种关系类型创建一个Map
+    const relatedNodesMap = new Map<string, Map<string, [GraphNode, number]>>();
+
+    // 确保常见关系类型的Map存在
+    [
+      CommonRelationshipTypes.FATHER,
+      CommonRelationshipTypes.CHILD,
+      CommonRelationshipTypes.BASE,
+      CommonRelationshipTypes.BUILD
+    ].forEach(type => {
+      relatedNodesMap.set(type, new Map<string, [GraphNode, number]>());
+    });
 
     // 使用一个Set来记录已经处理过的节点和边，避免循环依赖
     const processedNodes = new Set<string>();
@@ -69,8 +83,12 @@ export class GraphLayoutService {
           
           const relatedNode = graphData.nodes.find(node => node.id === edge.target);
           if (relatedNode) {
+            // 确保这种关系类型的Map存在
+            if (!relatedNodesMap.has(edge.relationshipType)) {
+              relatedNodesMap.set(edge.relationshipType, new Map<string, [GraphNode, number]>());
+            }
             // 将直接关系节点添加为第1层
-            relatedNodesMap[edge.relationshipType].set(relatedNode.id, [relatedNode, 1]);
+            relatedNodesMap.get(edge.relationshipType)?.set(relatedNode.id, [relatedNode, 1]);
           }
         } 
         // 处理入站关系（源节点 -> 当前节点）
@@ -80,24 +98,30 @@ export class GraphLayoutService {
           processedEdges.add(edgeKey);
           
           // 反转关系类型
-          let invertedRelationship: RelationshipType;
+          let invertedRelationship: string;
           
-          if (edge.relationshipType === RelationshipType.FATHER) {
-            invertedRelationship = RelationshipType.CHILD;
-          } else if (edge.relationshipType === RelationshipType.CHILD) {
-            invertedRelationship = RelationshipType.FATHER;
-          } else if (edge.relationshipType === RelationshipType.BASE) {
-            invertedRelationship = RelationshipType.BUILD;
-          } else if (edge.relationshipType === RelationshipType.BUILD) {
-            invertedRelationship = RelationshipType.BASE;
+          // 标准关系类型的反转规则
+          if (edge.relationshipType === CommonRelationshipTypes.FATHER) {
+            invertedRelationship = CommonRelationshipTypes.CHILD;
+          } else if (edge.relationshipType === CommonRelationshipTypes.CHILD) {
+            invertedRelationship = CommonRelationshipTypes.FATHER;
+          } else if (edge.relationshipType === CommonRelationshipTypes.BASE) {
+            invertedRelationship = CommonRelationshipTypes.BUILD;
+          } else if (edge.relationshipType === CommonRelationshipTypes.BUILD) {
+            invertedRelationship = CommonRelationshipTypes.BASE;
           } else {
+            // 自定义关系类型使用相同类型作为反转类型
             invertedRelationship = edge.relationshipType;
           }
           
           const relatedNode = graphData.nodes.find(node => node.id === edge.source);
           if (relatedNode) {
+            // 确保这种反转关系类型的Map存在
+            if (!relatedNodesMap.has(invertedRelationship)) {
+              relatedNodesMap.set(invertedRelationship, new Map<string, [GraphNode, number]>());
+            }
             // 将直接关系节点添加为第1层
-            relatedNodesMap[invertedRelationship].set(relatedNode.id, [relatedNode, 1]);
+            relatedNodesMap.get(invertedRelationship)?.set(relatedNode.id, [relatedNode, 1]);
           }
         }
       });
@@ -106,7 +130,7 @@ export class GraphLayoutService {
     // 递归查找相同类型的关系，并记录层级
     const findSameTypeRelationships = (
       nodeId: string,
-      relationshipType: RelationshipType,
+      relationshipType: string,
       currentDepth: number,
       maxDepth: number,
       visited = new Set<string>()
@@ -133,16 +157,16 @@ export class GraphLayoutService {
         // 入站关系：当前节点作为目标节点
         else if (edge.target === nodeId) {
           // 计算反转关系类型
-          let invertedType: RelationshipType;
+          let invertedType: string;
           
-          if (edge.relationshipType === RelationshipType.FATHER) {
-            invertedType = RelationshipType.CHILD;
-          } else if (edge.relationshipType === RelationshipType.CHILD) {
-            invertedType = RelationshipType.FATHER;
-          } else if (edge.relationshipType === RelationshipType.BASE) {
-            invertedType = RelationshipType.BUILD;
-          } else if (edge.relationshipType === RelationshipType.BUILD) {
-            invertedType = RelationshipType.BASE;
+          if (edge.relationshipType === CommonRelationshipTypes.FATHER) {
+            invertedType = CommonRelationshipTypes.CHILD;
+          } else if (edge.relationshipType === CommonRelationshipTypes.CHILD) {
+            invertedType = CommonRelationshipTypes.FATHER;
+          } else if (edge.relationshipType === CommonRelationshipTypes.BASE) {
+            invertedType = CommonRelationshipTypes.BUILD;
+          } else if (edge.relationshipType === CommonRelationshipTypes.BUILD) {
+            invertedType = CommonRelationshipTypes.BASE;
           } else {
             invertedType = edge.relationshipType;
           }
@@ -165,12 +189,15 @@ export class GraphLayoutService {
             
             // 只有当这个节点不存在，或者存在但层级更大时才更新
             // 这确保节点总是以最短路径的层级被记录
-            const existingInfo = relatedNodesMap[relationshipType].get(nextNodeId);
-            if (!existingInfo || existingInfo[1] > nextDepth) {
-              relatedNodesMap[relationshipType].set(nextNodeId, [nextNode, nextDepth]);
-              
-              // 递归查找，层级递增
-              findSameTypeRelationships(nextNodeId, relationshipType, nextDepth, maxDepth, new Set(visited));
+            const nodesMap = relatedNodesMap.get(relationshipType);
+            if (nodesMap) {
+              const existingInfo = nodesMap.get(nextNodeId);
+              if (!existingInfo || existingInfo[1] > nextDepth) {
+                nodesMap.set(nextNodeId, [nextNode, nextDepth]);
+                
+                // 递归查找，层级递增
+                findSameTypeRelationships(nextNodeId, relationshipType, nextDepth, maxDepth, new Set(visited));
+              }
             }
           }
         }
@@ -181,21 +208,24 @@ export class GraphLayoutService {
     collectDirectRelationships(centralNodeId);
     
     // 然后对每种关系类型进行递归查找
-    Object.values(RelationshipType).forEach(type => {
+    for (const [type, nodesMap] of relatedNodesMap.entries()) {
       // 获取当前已收集的这种类型的直接关系节点
-      const directRelationNodes = Array.from(relatedNodesMap[type].entries());
+      const directRelationNodes = Array.from(nodesMap.entries());
+      
+      // 获取此关系类型的最大深度，如果没有配置则默认为3
+      const maxDepth = depthConfig[type] || 3;
       
       // 对每个直接关系节点，递归查找相同类型的关系
-      // 这样能保证只递归查找相同类型的关系，例如父节点的父节点，或子节点的子节点
       directRelationNodes.forEach(([nodeId, [node, depth]]) => {
-        if (depthConfig[type] > 1) { // 如果深度 > 1，才需要递归
-          findSameTypeRelationships(nodeId, type, depth, depthConfig[type]);
+        if (maxDepth > 1) { // 如果深度 > 1，才需要递归
+          findSameTypeRelationships(nodeId, type, depth, maxDepth);
         }
       });
-    });
+    }
 
     // 将Map转换为按层级排序的数组
-    const createSortedNodeArray = (nodesMap: Map<string, [GraphNode, number]>) => {
+    const createSortedNodeArray = (nodesMap: Map<string, [GraphNode, number]> | undefined) => {
+      if (!nodesMap) return [];
       return Array.from(nodesMap.values())
         .sort((a, b) => a[1] - b[1])  // 按层级排序
         .map(([node, depth]) => ({
@@ -204,13 +234,76 @@ export class GraphLayoutService {
         }));
     };
     
+    // 处理未配置的关系类型 - 将其自动分配到对应象限
+    // 创建象限对应的节点数组
+    const topNodes: any[] = [];
+    const bottomNodes: any[] = [];
+    const leftNodes: any[] = [];
+    const rightNodes: any[] = [];
+    
+    // 处理关系类型的分配
+    relatedNodesMap.forEach((nodesMap, type) => {
+      // 检查该类型是否被配置到任何关系组
+      const isAssigned = assignedRelationshipTypes.includes(type);
+      
+      // 如果没有被配置，则根据配置进行分配
+      if (!isAssigned) {
+        // 如果指定了未配置关系类型的显示位置，使用该位置
+        if (config.unconfiguredTypesPosition) {
+          // 根据指定的位置分配
+          if (config.unconfiguredTypesPosition === QuadrantPosition.TOP) {
+            topNodes.push(...createSortedNodeArray(nodesMap));
+          } else if (config.unconfiguredTypesPosition === QuadrantPosition.BOTTOM) {
+            bottomNodes.push(...createSortedNodeArray(nodesMap));
+          } else if (config.unconfiguredTypesPosition === QuadrantPosition.LEFT) {
+            leftNodes.push(...createSortedNodeArray(nodesMap));
+          } else if (config.unconfiguredTypesPosition === QuadrantPosition.RIGHT) {
+            rightNodes.push(...createSortedNodeArray(nodesMap));
+          }
+        } else {
+          // 未指定位置，使用以前的自动分配逻辑
+          // 检查每个关系组是否为空
+          if (config[QuadrantPosition.TOP].length === 0) {
+            // 添加到上方关系组
+            topNodes.push(...createSortedNodeArray(nodesMap));
+          } else if (config[QuadrantPosition.BOTTOM].length === 0) {
+            // 添加到下方关系组
+            bottomNodes.push(...createSortedNodeArray(nodesMap));
+          } else if (config[QuadrantPosition.LEFT].length === 0) {
+            // 添加到左侧关系组
+            leftNodes.push(...createSortedNodeArray(nodesMap));
+          } else if (config[QuadrantPosition.RIGHT].length === 0) {
+            // 添加到右侧关系组
+            rightNodes.push(...createSortedNodeArray(nodesMap));
+          } else {
+            // 所有关系组都已配置，添加到top关系组
+            topNodes.push(...createSortedNodeArray(nodesMap));
+          }
+        }
+      } else {
+        // 如果已配置，则根据配置添加
+        if (config[QuadrantPosition.TOP].includes(type)) {
+          topNodes.push(...createSortedNodeArray(nodesMap));
+        }
+        if (config[QuadrantPosition.BOTTOM].includes(type)) {
+          bottomNodes.push(...createSortedNodeArray(nodesMap));
+        }
+        if (config[QuadrantPosition.LEFT].includes(type)) {
+          leftNodes.push(...createSortedNodeArray(nodesMap));
+        }
+        if (config[QuadrantPosition.RIGHT].includes(type)) {
+          rightNodes.push(...createSortedNodeArray(nodesMap));
+        }
+      }
+    });
+    
     return {
       centralNode,
       quadrants: {
-        top: createSortedNodeArray(relatedNodesMap[config.top]),
-        bottom: createSortedNodeArray(relatedNodesMap[config.bottom]),
-        left: createSortedNodeArray(relatedNodesMap[config.left]),
-        right: createSortedNodeArray(relatedNodesMap[config.right])
+        top: topNodes,
+        bottom: bottomNodes,
+        left: leftNodes,
+        right: rightNodes
       }
     };
   }
