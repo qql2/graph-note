@@ -24,7 +24,7 @@ import {
   IonMenuButton,
   IonAlert
 } from '@ionic/react';
-import { refreshOutline, arrowBack, save, refresh } from 'ionicons/icons';
+import { refreshOutline, arrowBack, save, refresh, bookmarkOutline } from 'ionicons/icons';
 import GraphView from '../components/GraphView';
 import { useLocation } from 'react-router-dom';
 import { GraphData, GraphNode, GraphEdge, CommonRelationshipTypes, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, QuadrantPosition } from '../models/GraphNode';
@@ -37,14 +37,14 @@ const convertDbDataToGraphData = (
   dbNodes: any[], 
   dbEdges: any[]
 ): GraphData => {
-  console.log('开始数据转换，节点：', dbNodes.length, '边：', dbEdges.length);
+  ;
   
   // 调试原始数据结构
   if (dbNodes.length > 0) {
-    console.log('节点示例：', dbNodes[0]);
+    ;
   }
   if (dbEdges.length > 0) {
-    console.log('边示例：', dbEdges[0]);
+    ;
   }
   
   const nodes: GraphNode[] = dbNodes.map(dbNode => ({
@@ -76,7 +76,7 @@ const convertDbDataToGraphData = (
     };
   });
 
-  console.log('转换完成，GraphNode:', nodes.length, 'GraphEdge:', edges.length);
+  ;
   return { nodes, edges };
 };
 
@@ -122,7 +122,7 @@ const GraphViewDemo: React.FC = () => {
       setError(null);
       
       // 初始化数据库 - 使用与GraphDBDemo相同的数据库名称
-      console.log('正在初始化数据库...');
+      ;
       await graphDatabaseService.initialize({
         dbName: 'graph_demo', // 改为与GraphDBDemo相同的数据库名称
         version: 1,
@@ -132,37 +132,48 @@ const GraphViewDemo: React.FC = () => {
       const db = graphDatabaseService.getDatabase();
       
       // 获取所有节点和边
-      console.log('正在获取节点和边...');
+      ;
       const dbNodes = await db.getNodes();
       const dbEdges = await db.getEdges();
       
-      console.log('从数据库获取到的节点:', dbNodes.length, dbNodes);
-      console.log('从数据库获取到的边:', dbEdges.length, dbEdges);
+      ;
+      ;
       
       // 转换数据格式
       const convertedData = convertDbDataToGraphData(dbNodes, dbEdges);
-      console.log('转换后的数据:', convertedData);
+      ;
       setGraphData(convertedData);
       
       // 收集所有关系类型
       updateKnownRelationshipTypes(convertedData.edges);
       
+      // 尝试获取上次保存的节点ID
+      const savedNodeId = ConfigService.loadCentralNodeId();
+      
       // 从URL获取节点ID
       const urlNodeId = getNodeIdFromUrl();
       
-      // 优先使用URL中的节点ID，如果存在且在图中
+      // 优先级顺序: URL参数 > 上次保存的节点 > 第一个节点
       if (urlNodeId && convertedData.nodes.some(node => node.id === urlNodeId)) {
+        // 如果URL中指定了节点，并且该节点存在于图中
         setCentralNodeId(urlNodeId);
-        console.log('从URL设置中心节点:', urlNodeId);
+        // 同时更新保存的节点ID，以便下次访问
+        ConfigService.saveCentralNodeId(urlNodeId);
         setToastMessage(`正在查看节点: ${urlNodeId}`);
         setShowToast(true);
+      } 
+      else if (savedNodeId && convertedData.nodes.some(node => node.id === savedNodeId)) {
+        // 否则尝试恢复上次查看的节点
+        setCentralNodeId(savedNodeId);
+        setToastMessage(`继续查看节点: ${savedNodeId}`);
+        setShowToast(true);
       }
-      // 否则如果有节点，则设置第一个节点为中心节点
       else if (convertedData.nodes.length > 0) {
-        setCentralNodeId(convertedData.nodes[0].id);
-        console.log('设置中心节点:', convertedData.nodes[0].id);
+        // 如果没有保存的节点或者保存的节点不存在，则使用第一个节点
+        const firstNodeId = convertedData.nodes[0].id;
+        setCentralNodeId(firstNodeId);
+        ConfigService.saveCentralNodeId(firstNodeId);
       } else {
-        console.log('没有找到节点，无法设置中心节点');
       }
       
     } catch (err) {
@@ -186,6 +197,8 @@ const GraphViewDemo: React.FC = () => {
   // 处理节点点击，改变中心节点
   const handleNodeClick = (nodeId: string) => {
     setCentralNodeId(nodeId);
+    // 保存当前聚焦节点
+    ConfigService.saveCentralNodeId(nodeId);
     setToastMessage(`正在查看节点: ${nodeId}`);
     setShowToast(true);
   };
@@ -360,6 +373,8 @@ const GraphViewDemo: React.FC = () => {
       
       // 将新节点设为中心节点
       setCentralNodeId(newNodeId);
+      // 保存当前聚焦节点
+      ConfigService.saveCentralNodeId(newNodeId);
     } catch (error) {
       console.error('创建关系失败:', error);
       setToastMessage(`创建关系失败: ${error instanceof Error ? error.message : String(error)}`);
@@ -415,7 +430,10 @@ const GraphViewDemo: React.FC = () => {
   // 刷新视图，返回到第一个节点
   const handleReset = () => {
     if (graphData.nodes.length > 0) {
-      setCentralNodeId(graphData.nodes[0].id);
+      const firstNodeId = graphData.nodes[0].id;
+      setCentralNodeId(firstNodeId);
+      // 更新保存的节点ID
+      ConfigService.saveCentralNodeId(firstNodeId);
     }
   };
   
@@ -697,6 +715,13 @@ const GraphViewDemo: React.FC = () => {
                 >
                   重置所有配置
                 </IonButton>
+              </div>
+              
+              <div className="node-position-saved">
+                <p>
+                  <IonIcon icon={bookmarkOutline} />
+                  当前节点位置已自动保存，下次访问将从此节点继续
+                </p>
               </div>
             </div>
             

@@ -39,7 +39,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
           }
           // 减少输出,只保留edges相关的日志
           if (sql.includes("relationships") || sql.includes("relationship_properties")) {
-            console.log("query sql", sql, params);
+            ;
           }
           return await this.connection.query(sql, params);
         },
@@ -49,7 +49,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
           }
           // 减少输出,只保留edges相关的日志
           if (sql.includes("relationships") || sql.includes("relationship_properties")) {
-            console.log("run sql", sql, params);
+            ;
           }
           await this.connection.run(sql, params, false);
         },
@@ -183,7 +183,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
           result = await operation();
         } catch (error) {
           // 如果执行失败，回滚事务
-          console.log("Operation failed, rolling back transaction:", error);
+          ;
           await this.connection.rollbackTransaction();
           this.isInTransaction = false;
           throw error;
@@ -191,9 +191,9 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
         // 提交事务
         try {
-          console.log("Committing transaction");
+          ;
           await this.connection.commitTransaction();
-          console.log("Transaction committed successfully");
+          ;
         } catch (error: any) {
           if(error.message && error.message.includes('no transaction is active')){
             console.warn('Transaction has been ended unexpectedly, but operation was successful');
@@ -213,7 +213,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
         try {
           // TODO (AI切勿擅自修改) 未来将persistData移出事务API, 需要设计一个API, 为所有修改操作自动调用持久化
           await this.persistData();
-          console.log("Data persisted successfully");
+          ;
         } catch (persistError) {
           console.error("Error persisting data:", persistError);
           // 保存数据失败不应该影响操作的结果

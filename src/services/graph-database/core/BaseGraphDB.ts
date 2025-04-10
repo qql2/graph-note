@@ -258,7 +258,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       }
 
       // 添加日志以便调试
-      console.log(`Deleting node with ID: ${id}, mode: ${mode}`);
+      ;
 
       if (mode === DeleteMode.CASCADE) {
         // 级联删除模式：删除所有相关数据
@@ -277,7 +277,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
           });
         }
         
-        console.log(`Found ${edgeIds.length} related edges to delete`);
+        ;
 
         // 2. 删除与节点相关的所有边的属性
         for (const edgeId of edgeIds) {
@@ -286,7 +286,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
              WHERE relationship_id = ?`,
             [edgeId]
           );
-          console.log(`Deleted properties for edge: ${edgeId}`);
+          ;
         }
 
         // 3. 删除与节点相关的所有边
@@ -294,20 +294,20 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
           "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
           [id, id]
         );
-        console.log(`Deleted all edges connected to node: ${id}`);
+        ;
 
         // 4. 删除节点的属性
         await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
-        console.log(`Deleted properties for node: ${id}`);
+        ;
 
         // 5. 删除节点本身
         await db.run("DELETE FROM nodes WHERE id = ?", [id]);
-        console.log(`Deleted node: ${id}`);
+        ;
       } else {
         // 保留关联数据模式：只删除节点本身和它的属性
         // 1. 删除节点的属性
         await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
-        console.log(`Deleted properties for node: ${id}`);
+        ;
 
         // 2. 将相关边的源节点或目标节点设为 NULL
         await db.run(
@@ -322,11 +322,11 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
            WHERE target_id = ?`,
           [id]
         );
-        console.log(`Updated relationships connected to node: ${id}`);
+        ;
 
         // 3. 删除节点本身
         await db.run("DELETE FROM nodes WHERE id = ?", [id]);
-        console.log(`Deleted node: ${id}`);
+        ;
       }
     };
 
@@ -416,7 +416,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     const id = edge.id || uuidv4();
     const now = new Date().toISOString();
     
-    console.log("Adding edge with data:", { id, ...edge, created_at: now });
+    ;
 
     // 创建添加边的操作
     const addEdgeOperation = async (db: SQLiteEngine): Promise<string> => {
@@ -430,7 +430,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         if (!sourceExistsResult?.values || sourceExistsResult.values.length === 0) {
           throw new NodeNotFoundError(edge.source_id);
         }
-        console.log(`Source node ${edge.source_id} exists`);
+        ;
       }
       
       if (edge.target_id) {
@@ -442,7 +442,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         if (!targetExistsResult?.values || targetExistsResult.values.length === 0) {
           throw new NodeNotFoundError(edge.target_id);
         }
-        console.log(`Target node ${edge.target_id} exists`);
+        ;
       }
 
       // 插入边基本信息
@@ -451,7 +451,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
          VALUES (?, ?, ?, ?, ?)`,
         [id, edge.source_id, edge.target_id, edge.type, now]
       );
-      console.log(`Edge ${id} inserted into relationships table`);
+      ;
 
       // 插入边属性
       if (edge.properties) {
@@ -461,7 +461,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
              VALUES (?, ?, ?)`,
             [id, key, JSON.stringify(value)]
           );
-          console.log(`Property ${key}=${JSON.stringify(value)} added to edge ${id}`);
+          ;
         }
       }
 
@@ -471,7 +471,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     try {
       // 如果已经在事务中，直接执行操作
       if (this.inTransaction) {
-        console.log("Already in transaction, executing operation directly");
+        ;
         try {
           return await addEdgeOperation(this.db);
         } catch (error) {
@@ -484,13 +484,13 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       }
 
       // 否则，使用事务执行操作
-      console.log("Starting new transaction for addEdge");
+      ;
       // TODO: 这里只要在事务中执行就会导致事务提交失败
       return await this.db.transaction(async () => {
         try {
           const result = await addEdgeOperation(this.db!);
           // 不需要调用persistData，因为withTransaction会自动处理
-          console.log(`Edge ${result} added successfully`);
+          ;
           return result;
         } catch (error) {
           console.error("Error in addEdge transaction:", error);
@@ -640,18 +640,18 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         throw new EdgeNotFoundError(id);
       }
 
-      console.log(`Deleting edge with ID: ${id}`);
+      ;
 
       // 删除边属性
       await db.run(
         "DELETE FROM relationship_properties WHERE relationship_id = ?", 
         [id]
       );
-      console.log(`Deleted properties for edge: ${id}`);
+      ;
       
       // 删除边
       await db.run("DELETE FROM relationships WHERE id = ?", [id]);
-      console.log(`Deleted edge: ${id}`);
+      ;
     };
 
     try {
@@ -675,23 +675,23 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
     try {
-      console.log("Fetching edges from database");
+      ;
       // 获取所有边基本信息
       const edgesResult = await this.db.query("SELECT * FROM relationships");
       
-      console.log("Edges query result:", edgesResult);
+      ;
       
       if (!edgesResult?.values || edgesResult.values.length === 0) {
-        console.log("No edges found in database");
+        ;
         return [];
       }
 
-      console.log(`Found ${edgesResult.values.length} edges in database`);
+      ;
       
       const edges: GraphEdge[] = [];
       
       for (const edgeRow of edgesResult.values) {
-        console.log("Processing edge row:", edgeRow);
+        ;
         
         // 确保初始化边属性对象
         const edge: GraphEdge = {
@@ -703,7 +703,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
           properties: {} // 确保一定有properties对象
         };
 
-        console.log("Created edge object:", edge);
+        ;
 
         // 获取边属性
         const propsResult = await this.db.query(
@@ -711,7 +711,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
           [edge.id]
         );
         
-        console.log(`Properties for edge ${edge.id}:`, propsResult);
+        ;
         
         if (propsResult?.values && propsResult.values.length > 0) {
           for (const propRow of propsResult.values) {
@@ -734,15 +734,15 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
               edge.properties![key] = rawValue;
             }
             
-            console.log(`Added property ${key} to edge ${edge.id}`);
+            ;
           }
         }
 
         edges.push(edge);
-        console.log(`Added edge to result array: ${edge.id}`);
+        ;
       }
 
-      console.log(`Returning ${edges.length} edges`);
+      ;
       return edges;
     } catch (error) {
       console.error("Error in getEdges:", error);

@@ -184,6 +184,28 @@
   color: var(--ion-color-success);
 }
 
+/* 节点位置保存提示样式 */
+.node-position-saved {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: rgba(var(--ion-color-primary-rgb), 0.1);
+  border-radius: 8px;
+  border-left: 4px solid var(--ion-color-primary);
+}
+
+.node-position-saved p {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--ion-color-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.node-position-saved ion-icon {
+  font-size: 1.2em;
+}
+
 /* 重置按钮样式 */
 .reset-config-button {
   --background: transparent;

@@ -29,7 +29,7 @@ if (platform !== "web") {
         rootRender();
       })
       .catch ((err) => {
-        console.log(`Error: ${err}`);
+        ;
         throw new Error(`Error: ${err}`)
       });
   });
