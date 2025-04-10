@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Graph } from '@antv/x6';
-import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, RelationshipType, GraphEdge } from '../../models/GraphNode';
+import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, GraphEdge, CommonRelationshipTypes, QuadrantPosition } from '../../models/GraphNode';
 import { GraphLayoutService } from '../../services/GraphLayoutService';
 import ContextMenu from '../ContextMenu';
 import { pencil, trash, copy, add } from 'ionicons/icons';
@@ -18,15 +18,15 @@ interface GraphViewProps {
   onDeleteNode?: (nodeId: string) => void;
   onEditEdge?: (edgeId: string, label: string) => void;
   onDeleteEdge?: (edgeId: string) => void;
-  onCreateRelation?: (sourceNodeId: string, relationType: RelationshipType) => void;
+  onCreateRelation?: (sourceNodeId: string, relationType: string) => void;
 }
 
 // 关系类型到简短标签的映射
-const relationshipToSimpleLabel = {
-  [RelationshipType.FATHER]: 'F',
-  [RelationshipType.CHILD]: 'C',
-  [RelationshipType.BASE]: 'Ba',
-  [RelationshipType.BUILD]: 'Bu',
+const relationshipToSimpleLabel: Record<string, string> = {
+  [CommonRelationshipTypes.FATHER]: 'F',
+  [CommonRelationshipTypes.CHILD]: 'C',
+  [CommonRelationshipTypes.BASE]: 'Ba',
+  [CommonRelationshipTypes.BUILD]: 'Bu',
 };
 
 // 定义菜单项接口
@@ -258,28 +258,28 @@ const GraphView: React.FC<GraphViewProps> = ({
         id: 'create-father',
         label: '添加父节点关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, RelationshipType.FATHER)
+        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.FATHER)
       });
       
       menuItems.push({
         id: 'create-child',
         label: '添加子节点关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, RelationshipType.CHILD)
+        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.CHILD)
       });
       
       menuItems.push({
         id: 'create-base',
         label: '添加基础关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, RelationshipType.BASE)
+        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.BASE)
       });
       
       menuItems.push({
         id: 'create-build',
         label: '添加构建关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, RelationshipType.BUILD)
+        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.BUILD)
       });
       
       // 添加自定义关系
@@ -287,7 +287,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         id: 'create-custom',
         label: '添加自定义关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, RelationshipType.BUILD)
+        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.BUILD)
       });
     }
     
@@ -512,25 +512,47 @@ const GraphView: React.FC<GraphViewProps> = ({
     });
 
     // 确定边的源节点和目标节点的连接点
-    const determineConnectionPoints = (sourceId: string, targetId: string) => {
+    const determineConnectionPoints = (sourceId: string, targetId: string, edgeType: string) => {
       const sourceQuadrant = nodeQuadrantMap.get(sourceId) || 'center';
       const targetQuadrant = nodeQuadrantMap.get(targetId) || 'center';
       const sourceDepth = nodeDepthMap.get(sourceId) || 0;
       const targetDepth = nodeDepthMap.get(targetId) || 0;
       
+      // 确定关系类型属于哪个象限
+      const isTopType = quadrantConfig[QuadrantPosition.TOP].includes(edgeType);
+      const isBottomType = quadrantConfig[QuadrantPosition.BOTTOM].includes(edgeType);
+      const isLeftType = quadrantConfig[QuadrantPosition.LEFT].includes(edgeType);
+      const isRightType = quadrantConfig[QuadrantPosition.RIGHT].includes(edgeType);
+      
+      // 确定关系类型的象限
+      let relationQuadrant = '';
+      if (isTopType) relationQuadrant = 'top';
+      else if (isBottomType) relationQuadrant = 'bottom';
+      else if (isLeftType) relationQuadrant = 'left';
+      else if (isRightType) relationQuadrant = 'right';
+      else {
+        // 未配置的关系类型
+        // 根据未配置关系类型的自动分配规则确定
+        if (quadrantConfig[QuadrantPosition.TOP].length === 0) relationQuadrant = 'top';
+        else if (quadrantConfig[QuadrantPosition.BOTTOM].length === 0) relationQuadrant = 'bottom';
+        else if (quadrantConfig[QuadrantPosition.LEFT].length === 0) relationQuadrant = 'left';
+        else if (quadrantConfig[QuadrantPosition.RIGHT].length === 0) relationQuadrant = 'right';
+        else relationQuadrant = 'top'; // 默认分配给top
+      }
+      
       // 中心节点特殊处理
       if (sourceId === centralNodeId) {
-        // 中心节点 -> 其他节点
-        if (targetQuadrant === 'top') return { source: 'top', target: 'bottom' };
-        if (targetQuadrant === 'bottom') return { source: 'bottom', target: 'top' };
-        if (targetQuadrant === 'left') return { source: 'left', target: 'right' };
-        if (targetQuadrant === 'right') return { source: 'right', target: 'left' };
+        // 中心节点 -> 其他节点，根据关系类型的象限决定
+        if (relationQuadrant === 'top') return { source: 'top', target: 'bottom' };
+        if (relationQuadrant === 'bottom') return { source: 'bottom', target: 'top' };
+        if (relationQuadrant === 'left') return { source: 'left', target: 'right' };
+        if (relationQuadrant === 'right') return { source: 'right', target: 'left' };
       } else if (targetId === centralNodeId) {
-        // 其他节点 -> 中心节点
-        if (sourceQuadrant === 'top') return { source: 'bottom', target: 'top' };
-        if (sourceQuadrant === 'bottom') return { source: 'top', target: 'bottom' };
-        if (sourceQuadrant === 'left') return { source: 'right', target: 'left' };
-        if (sourceQuadrant === 'right') return { source: 'left', target: 'right' };
+        // 其他节点 -> 中心节点，根据关系类型的象限决定
+        if (relationQuadrant === 'top') return { source: 'bottom', target: 'top' };
+        if (relationQuadrant === 'bottom') return { source: 'top', target: 'bottom' };
+        if (relationQuadrant === 'left') return { source: 'right', target: 'left' };
+        if (relationQuadrant === 'right') return { source: 'left', target: 'right' };
       }
       
       // 处理同象限不同深度的节点
@@ -567,9 +589,6 @@ const GraphView: React.FC<GraphViewProps> = ({
         return null;
       } 
       
-      // 首先检查是否有原始类型存储在metadata中
-      const originalType = edge.metadata?.originalType;
-      
       // 如果是简洁模式
       if (viewConfig.showRelationshipLabels === RelationshipLabelMode.SIMPLE) {
         // 如果边的属性中有 shortLabel，优先使用
@@ -577,17 +596,13 @@ const GraphView: React.FC<GraphViewProps> = ({
           return edge.metadata.shortLabel;
         }
         
-        // 如果有原始类型，为其创建简短标签（取首字母）
-        if (originalType) {
-          return originalType.substring(0, 1).toUpperCase();
-        }
-        
-        // 否则使用默认的简短标签映射
-        return relationshipToSimpleLabel[edge.relationshipType] || '';
+        // 使用关系类型的简短标签，如果没有预定义则使用首字母
+        return relationshipToSimpleLabel[edge.relationshipType] || 
+               edge.relationshipType.substring(0, 1).toUpperCase();
       } 
       
-      // 完整模式 - 优先使用原始类型
-      return originalType || edge.relationshipType;
+      // 完整模式直接显示关系类型
+      return edge.relationshipType;
     };
 
     // Create edges between nodes
@@ -597,16 +612,49 @@ const GraphView: React.FC<GraphViewProps> = ({
       const targetExists = nodes.some(node => node.id === edgeData.target);
       
       if (sourceExists && targetExists) {
-        const edgeColor = edgeData.relationshipType === quadrantConfig.top ? 'var(--ion-color-success, #4CAF50)' :
-                         edgeData.relationshipType === quadrantConfig.bottom ? 'var(--ion-color-primary, #2196F3)' :
-                         edgeData.relationshipType === quadrantConfig.left ? 'var(--ion-color-tertiary, #9C27B0)' :
-                         edgeData.relationshipType === quadrantConfig.right ? 'var(--ion-color-danger, #F44336)' :
-                         'var(--ion-color-medium, #607D8B)';
+        // 确定边的颜色
+        let edgeColor;
+        
+        // 确定关系类型所属的关系组
+        const relationType = edgeData.relationshipType;
+        
+        // 检查关系类型属于哪个关系组
+        const isTopType = quadrantConfig[QuadrantPosition.TOP].includes(relationType);
+        const isBottomType = quadrantConfig[QuadrantPosition.BOTTOM].includes(relationType);
+        const isLeftType = quadrantConfig[QuadrantPosition.LEFT].includes(relationType);
+        const isRightType = quadrantConfig[QuadrantPosition.RIGHT].includes(relationType);
+        
+        // 如果关系类型已被明确配置到某个关系组，使用对应的颜色
+        if (isTopType) {
+          edgeColor = 'var(--ion-color-success, #4CAF50)'; // 绿色 - 上方
+        } else if (isBottomType) {
+          edgeColor = 'var(--ion-color-primary, #2196F3)'; // 蓝色 - 下方
+        } else if (isLeftType) {
+          edgeColor = 'var(--ion-color-tertiary, #9C27B0)'; // 紫色 - 左侧
+        } else if (isRightType) {
+          edgeColor = 'var(--ion-color-danger, #F44336)'; // 红色 - 右侧
+        } else {
+          // 未配置到任何关系组的关系类型，自动分配
+          // 寻找未配置的关系组
+          if (quadrantConfig[QuadrantPosition.TOP].length === 0) {
+            edgeColor = 'var(--ion-color-success, #4CAF50)'; // 分配到上方关系组
+          } else if (quadrantConfig[QuadrantPosition.BOTTOM].length === 0) {
+            edgeColor = 'var(--ion-color-primary, #2196F3)'; // 分配到下方关系组
+          } else if (quadrantConfig[QuadrantPosition.LEFT].length === 0) {
+            edgeColor = 'var(--ion-color-tertiary, #9C27B0)'; // 分配到左侧关系组
+          } else if (quadrantConfig[QuadrantPosition.RIGHT].length === 0) {
+            edgeColor = 'var(--ion-color-danger, #F44336)'; // 分配到右侧关系组
+          } else {
+            // 所有关系组都已配置，使用默认颜色
+            edgeColor = 'var(--ion-color-medium, #607D8B)';
+          }
+        }
         
         // 确定连接点
         const { source: sourcePort, target: targetPort } = determineConnectionPoints(
           edgeData.source, 
-          edgeData.target
+          edgeData.target,
+          edgeData.relationshipType
         );
         
         // 获取关系类型标签

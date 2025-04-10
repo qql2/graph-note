@@ -24,11 +24,12 @@ import {
   IonMenuButton,
   IonAlert
 } from '@ionic/react';
-import { refreshOutline, arrowBack } from 'ionicons/icons';
+import { refreshOutline, arrowBack, save, refresh } from 'ionicons/icons';
 import GraphView from '../components/GraphView';
 import { useLocation } from 'react-router-dom';
-import { GraphData, GraphNode, GraphEdge, RelationshipType, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode } from '../models/GraphNode';
+import { GraphData, GraphNode, GraphEdge, CommonRelationshipTypes, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, QuadrantPosition } from '../models/GraphNode';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
+import { ConfigService } from '../services/ConfigService';
 import './GraphViewDemo.css';
 
 // 转换数据库数据到我们的GraphView组件格式
@@ -59,34 +60,12 @@ const convertDbDataToGraphData = (
                 '源节点：', dbEdge.source_id || dbEdge.sourceId, 
                 '目标节点：', dbEdge.target_id || dbEdge.targetId);
     
-    // 直接使用数据库中的关系类型，不再强制映射
-    // 注意：如果数据库中的类型为空，默认使用'build'类型
-    const edgeType = (dbEdge.type || 'build').toLowerCase();
-    
-    // 检查这个类型是否是我们预定义的类型之一
-    let relationshipType: RelationshipType;
-    
-    // 尝试将数据库中的类型映射到预定义的枚举值
-    if (Object.values(RelationshipType).includes(edgeType as RelationshipType)) {
-      relationshipType = edgeType as RelationshipType;
-    } else {
-      // 如果不是预定义的类型，记录日志并使用默认值
-      console.log('未知边类型:', edgeType, '将使用原始类型:', edgeType);
-      
-      // 由于TypeScript的限制，我们需要将非预定义类型转为预定义类型之一
-      // 这里默认使用BUILD类型，但在界面上可以显示原始类型名称
-      relationshipType = RelationshipType.BUILD;
-      
-      // 将原始类型存储在metadata中以便后续可以使用
-      if (!dbEdge.properties) {
-        dbEdge.properties = {};
-      }
-      dbEdge.properties.originalType = edgeType;
-    }
-
     // 处理可能不同的字段名
     const sourceId = dbEdge.source_id || dbEdge.sourceId;
     const targetId = dbEdge.target_id || dbEdge.targetId;
+    
+    // 直接使用数据库中的关系类型，默认为'build'
+    const relationshipType = (dbEdge.type || 'build').toLowerCase();
     
     return {
       id: dbEdge.id || '',
@@ -107,9 +86,9 @@ const GraphViewDemo: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [graphData, setGraphData] = useState<GraphData>({nodes: [], edges: []});
   const [centralNodeId, setCentralNodeId] = useState<string>('');
-  const [quadrantConfig, setQuadrantConfig] = useState<QuadrantConfig>(defaultQuadrantConfig);
-  const [depthConfig, setDepthConfig] = useState<DepthConfig>(defaultDepthConfig);
-  const [viewConfig, setViewConfig] = useState<ViewConfig>(defaultViewConfig);
+  const [quadrantConfig, setQuadrantConfig] = useState<QuadrantConfig>(ConfigService.loadQuadrantConfig());
+  const [depthConfig, setDepthConfig] = useState<DepthConfig>(ConfigService.loadDepthConfig());
+  const [viewConfig, setViewConfig] = useState<ViewConfig>(ConfigService.loadViewConfig());
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   
@@ -121,6 +100,14 @@ const GraphViewDemo: React.FC = () => {
   const [alertHeader, setAlertHeader] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
   const [confirmHandler, setConfirmHandler] = useState<() => void>(() => {});
+
+  // 存储已知的所有关系类型
+  const [knownRelationshipTypes, setKnownRelationshipTypes] = useState<string[]>([
+    CommonRelationshipTypes.FATHER,
+    CommonRelationshipTypes.CHILD,
+    CommonRelationshipTypes.BASE,
+    CommonRelationshipTypes.BUILD
+  ]);
 
   // 从URL参数获取节点ID
   const getNodeIdFromUrl = () => {
@@ -156,6 +143,9 @@ const GraphViewDemo: React.FC = () => {
       const convertedData = convertDbDataToGraphData(dbNodes, dbEdges);
       console.log('转换后的数据:', convertedData);
       setGraphData(convertedData);
+      
+      // 收集所有关系类型
+      updateKnownRelationshipTypes(convertedData.edges);
       
       // 从URL获取节点ID
       const urlNodeId = getNodeIdFromUrl();
@@ -319,7 +309,7 @@ const GraphViewDemo: React.FC = () => {
   };
 
   // 处理创建关系
-  const handleCreateRelation = async (sourceNodeId: string, relationType: RelationshipType) => {
+  const handleCreateRelation = async (sourceNodeId: string, relationType: string) => {
     try {
       setLoading(true);
       const db = graphDatabaseService.getDatabase();
@@ -328,11 +318,11 @@ const GraphViewDemo: React.FC = () => {
       let actualRelationType = relationType;
       let isCustomType = false;
       
-      // 如果用户选择了自定义关系（通过菜单时实际传的是BUILD类型）
-      if (relationType === RelationshipType.BUILD) {
+      // 如果用户选择了自定义关系（通过菜单时实际传的是build）
+      if (relationType === CommonRelationshipTypes.BUILD) {
         const customType = prompt('请输入自定义关系类型名称:');
         if (customType && customType.trim() !== '') {
-          actualRelationType = customType.trim() as RelationshipType;
+          actualRelationType = customType.trim();
           isCustomType = true;
         }
       }
@@ -360,6 +350,11 @@ const GraphViewDemo: React.FC = () => {
       setToastMessage(`已创建 ${isCustomType ? actualRelationType : relationType} 关系和新节点`);
       setShowToast(true);
       
+      // 更新已知关系类型列表
+      if (isCustomType && !knownRelationshipTypes.includes(actualRelationType)) {
+        setKnownRelationshipTypes([...knownRelationshipTypes, actualRelationType]);
+      }
+      
       // 重新加载数据
       await loadGraphData();
       
@@ -374,21 +369,48 @@ const GraphViewDemo: React.FC = () => {
     }
   };
 
-  // 处理象限配置更改
-  const handleQuadrantChange = (position: keyof QuadrantConfig, value: RelationshipType) => {
-    setQuadrantConfig({
+  // 处理关系组配置更改
+  const handleQuadrantChange = (position: QuadrantPosition, value: string[]) => {
+    const newConfig = {
       ...quadrantConfig,
       [position]: value
-    });
+    };
+    setQuadrantConfig(newConfig);
+    // 保存到本地存储
+    ConfigService.saveQuadrantConfig(newConfig);
   };
   
   // 处理深度配置更改
-  const handleDepthChange = (relationshipType: RelationshipType, value: number) => {
-    setDepthConfig({
+  const handleDepthChange = (relationshipType: string, value: number) => {
+    const newConfig = {
       ...depthConfig,
       [relationshipType]: value
-    });
+    };
+    setDepthConfig(newConfig);
+    // 保存到本地存储
+    ConfigService.saveDepthConfig(newConfig);
   };
+
+  // 加载数据时，更新已知的关系类型列表
+  const updateKnownRelationshipTypes = (edges: GraphEdge[]) => {
+    const relationshipTypes = new Set<string>(knownRelationshipTypes);
+    
+    edges.forEach(edge => {
+      if (edge.relationshipType) {
+        relationshipTypes.add(edge.relationshipType);
+      }
+    });
+    
+    // 更新为已知关系类型列表
+    setKnownRelationshipTypes(Array.from(relationshipTypes));
+  };
+
+  // 加载数据时调用此函数
+  useEffect(() => {
+    if (graphData.edges.length > 0) {
+      updateKnownRelationshipTypes(graphData.edges);
+    }
+  }, [graphData]);
 
   // 刷新视图，返回到第一个节点
   const handleReset = () => {
@@ -404,25 +426,66 @@ const GraphViewDemo: React.FC = () => {
   
   // 处理关系标签显示方式变更
   const handleRelationshipLabelModeChange = (value: RelationshipLabelMode) => {
-    setViewConfig({
+    const newConfig = {
       ...viewConfig,
       showRelationshipLabels: value
-    });
+    };
+    setViewConfig(newConfig);
+    // 保存到本地存储
+    ConfigService.saveViewConfig(newConfig);
   };
 
   // 关系类型的中文名称映射
-  const relationshipTypeNames = {
-    [RelationshipType.FATHER]: '父节点关系',
-    [RelationshipType.CHILD]: '子节点关系',
-    [RelationshipType.BASE]: '基础关系',
-    [RelationshipType.BUILD]: '构建关系（或自定义关系）'
+  const getRelationshipTypeName = (type: string) => {
+    switch (type) {
+      case CommonRelationshipTypes.FATHER:
+        return '父节点关系';
+      case CommonRelationshipTypes.CHILD:
+        return '子节点关系';
+      case CommonRelationshipTypes.BASE:
+        return '基础关系';
+      case CommonRelationshipTypes.BUILD:
+        return '构建关系';
+      default:
+        return `自定义关系: ${type}`;
+    }
   };
 
   // 关系标签模式的中文名称
   const labelModeNames = {
     [RelationshipLabelMode.NONE]: '不显示',
-    [RelationshipLabelMode.SIMPLE]: '简洁显示（缩写）',
+    [RelationshipLabelMode.SIMPLE]: '简洁显示（首字母）',
     [RelationshipLabelMode.FULL]: '完整显示'
+  };
+
+  // 处理未分配关系类型显示位置更改
+  const handleUnconfiguredPositionChange = (position: QuadrantPosition) => {
+    const newConfig = {
+      ...quadrantConfig,
+      unconfiguredTypesPosition: position
+    };
+    setQuadrantConfig(newConfig);
+    // 保存到本地存储
+    ConfigService.saveQuadrantConfig(newConfig);
+  };
+
+  // 重置所有配置到默认值
+  const handleResetAllConfigs = () => {
+    showConfirmDialog(
+      '重置所有配置',
+      '确定要将所有配置重置为默认值吗？这将丢失您的自定义设置。',
+      () => {
+        // 重置配置
+        ConfigService.resetAllConfigs();
+        // 应用默认配置
+        setQuadrantConfig({ ...defaultQuadrantConfig });
+        setDepthConfig({ ...defaultDepthConfig });
+        setViewConfig({ ...defaultViewConfig });
+        // 显示提示
+        setToastMessage('所有配置已重置为默认值');
+        setShowToast(true);
+      }
+    );
   };
 
   return (
@@ -441,6 +504,9 @@ const GraphViewDemo: React.FC = () => {
             </IonButton>
             <IonButton onClick={handleReset} disabled={loading}>
               <IonIcon icon={refreshOutline} />
+            </IonButton>
+            <IonButton onClick={handleResetAllConfigs} title="重置所有配置" className="reset-config-button">
+              <IonIcon icon={refresh} />
             </IonButton>
             <IonMenuButton />
           </IonButtons>
@@ -480,59 +546,89 @@ const GraphViewDemo: React.FC = () => {
         ) : (
           <>
             <div className="graph-controls">
-              <h4>象限配置</h4>
+              <h4>关系组配置</h4>
               <div className="quadrant-config">
                 <IonItem>
-                  <IonLabel>上方</IonLabel>
+                  <IonLabel>上方关系组</IonLabel>
                   <IonSelect 
-                    value={quadrantConfig.top} 
-                    onIonChange={e => handleQuadrantChange('top', e.detail.value as RelationshipType)}
+                    value={quadrantConfig[QuadrantPosition.TOP]} 
+                    onIonChange={e => handleQuadrantChange(QuadrantPosition.TOP, e.detail.value as string[])}
+                    multiple={true}
+                    placeholder="选择上方关系类型"
                   >
-                    <IonSelectOption value={RelationshipType.FATHER}>父节点关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.CHILD}>子节点关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.BASE}>基础关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.BUILD}>构建关系</IonSelectOption>
+                    {knownRelationshipTypes.map(type => (
+                      <IonSelectOption key={type} value={type}>
+                        {getRelationshipTypeName(type)}
+                      </IonSelectOption>
+                    ))}
                   </IonSelect>
                 </IonItem>
                 
                 <IonItem>
-                  <IonLabel>下方</IonLabel>
+                  <IonLabel>下方关系组</IonLabel>
                   <IonSelect 
-                    value={quadrantConfig.bottom} 
-                    onIonChange={e => handleQuadrantChange('bottom', e.detail.value as RelationshipType)}
+                    value={quadrantConfig[QuadrantPosition.BOTTOM]} 
+                    onIonChange={e => handleQuadrantChange(QuadrantPosition.BOTTOM, e.detail.value as string[])}
+                    multiple={true}
+                    placeholder="选择下方关系类型"
                   >
-                    <IonSelectOption value={RelationshipType.FATHER}>父节点关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.CHILD}>子节点关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.BASE}>基础关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.BUILD}>构建关系</IonSelectOption>
+                    {knownRelationshipTypes.map(type => (
+                      <IonSelectOption key={type} value={type}>
+                        {getRelationshipTypeName(type)}
+                      </IonSelectOption>
+                    ))}
                   </IonSelect>
                 </IonItem>
                 
                 <IonItem>
-                  <IonLabel>左侧</IonLabel>
+                  <IonLabel>左侧关系组</IonLabel>
                   <IonSelect 
-                    value={quadrantConfig.left} 
-                    onIonChange={e => handleQuadrantChange('left', e.detail.value as RelationshipType)}
+                    value={quadrantConfig[QuadrantPosition.LEFT]} 
+                    onIonChange={e => handleQuadrantChange(QuadrantPosition.LEFT, e.detail.value as string[])}
+                    multiple={true}
+                    placeholder="选择左侧关系类型"
                   >
-                    <IonSelectOption value={RelationshipType.FATHER}>父节点关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.CHILD}>子节点关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.BASE}>基础关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.BUILD}>构建关系</IonSelectOption>
+                    {knownRelationshipTypes.map(type => (
+                      <IonSelectOption key={type} value={type}>
+                        {getRelationshipTypeName(type)}
+                      </IonSelectOption>
+                    ))}
                   </IonSelect>
                 </IonItem>
                 
                 <IonItem>
-                  <IonLabel>右侧</IonLabel>
+                  <IonLabel>右侧关系组</IonLabel>
                   <IonSelect 
-                    value={quadrantConfig.right} 
-                    onIonChange={e => handleQuadrantChange('right', e.detail.value as RelationshipType)}
+                    value={quadrantConfig[QuadrantPosition.RIGHT]} 
+                    onIonChange={e => handleQuadrantChange(QuadrantPosition.RIGHT, e.detail.value as string[])}
+                    multiple={true}
+                    placeholder="选择右侧关系类型"
                   >
-                    <IonSelectOption value={RelationshipType.FATHER}>父节点关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.CHILD}>子节点关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.BASE}>基础关系</IonSelectOption>
-                    <IonSelectOption value={RelationshipType.BUILD}>构建关系</IonSelectOption>
+                    {knownRelationshipTypes.map(type => (
+                      <IonSelectOption key={type} value={type}>
+                        {getRelationshipTypeName(type)}
+                      </IonSelectOption>
+                    ))}
                   </IonSelect>
                 </IonItem>
+                
+                <IonItem>
+                  <IonLabel>未分配关系类型显示位置</IonLabel>
+                  <IonSelect 
+                    value={quadrantConfig.unconfiguredTypesPosition} 
+                    onIonChange={e => handleUnconfiguredPositionChange(e.detail.value as QuadrantPosition)}
+                    placeholder="选择未分配关系类型的显示位置"
+                  >
+                    <IonSelectOption value={QuadrantPosition.TOP}>上方关系组</IonSelectOption>
+                    <IonSelectOption value={QuadrantPosition.BOTTOM}>下方关系组</IonSelectOption>
+                    <IonSelectOption value={QuadrantPosition.LEFT}>左侧关系组</IonSelectOption>
+                    <IonSelectOption value={QuadrantPosition.RIGHT}>右侧关系组</IonSelectOption>
+                  </IonSelect>
+                </IonItem>
+                
+                <p className="description-text">
+                  注意：每个关系组可以包含多种关系类型。未分配到任何关系组的关系类型将会显示在指定的未分配关系组位置，若未指定则自动分配到未被配置的关系组中。
+                </p>
               </div>
               
               <h4>深度配置</h4>
@@ -541,25 +637,28 @@ const GraphViewDemo: React.FC = () => {
                 每层节点会按层级排列，如父节点的父节点会显示在父节点的更上方区域。
               </p>
               <div className="depth-config">
-                {Object.values(RelationshipType).map(type => (
+                {knownRelationshipTypes.map(type => (
                   <IonItem key={type}>
                     <IonLabel>
-                      {relationshipTypeNames[type]}
+                      {getRelationshipTypeName(type)}
                       <p className="relation-description">
-                        {type === RelationshipType.FATHER && '递归显示上层父节点（层级越深越靠上）'}
-                        {type === RelationshipType.CHILD && '递归显示下层子节点（层级越深越靠下）'}
-                        {type === RelationshipType.BASE && '递归显示基础关系节点（层级越深越靠左）'}
-                        {type === RelationshipType.BUILD && '递归显示构建关系节点（层级越深越靠右）'}
+                        {type === CommonRelationshipTypes.FATHER && '递归显示上层父节点（层级越深越靠上）'}
+                        {type === CommonRelationshipTypes.CHILD && '递归显示下层子节点（层级越深越靠下）'}
+                        {type === CommonRelationshipTypes.BASE && '递归显示基础关系节点（层级越深越靠左）'}
+                        {type === CommonRelationshipTypes.BUILD && '递归显示构建关系节点（层级越深越靠右）'}
+                        {![CommonRelationshipTypes.FATHER, CommonRelationshipTypes.CHILD, 
+                           CommonRelationshipTypes.BASE, CommonRelationshipTypes.BUILD].includes(type) && 
+                           '递归显示自定义关系节点（根据所在关系组决定位置）'}
                       </p>
                     </IonLabel>
                     <div className="depth-slider">
-                      <span className="depth-value">{depthConfig[type]}</span>
+                      <span className="depth-value">{depthConfig[type] || 3}</span>
                       <IonRange
                         min={1}
                         max={5}
                         step={1}
                         snaps={true}
-                        value={depthConfig[type]}
+                        value={depthConfig[type] || 3}
                         onIonChange={e => handleDepthChange(type, e.detail.value as number)}
                       />
                     </div>
@@ -586,6 +685,18 @@ const GraphViewDemo: React.FC = () => {
                     ))}
                   </IonRadioGroup>
                 </IonList>
+              </div>
+              
+              <div className="config-actions">
+                <p className="config-note">所有配置已自动保存</p>
+                <IonButton 
+                  size="small" 
+                  fill="clear" 
+                  className="reset-config-button"
+                  onClick={handleResetAllConfigs}
+                >
+                  重置所有配置
+                </IonButton>
               </div>
             </div>
             

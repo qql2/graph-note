@@ -1,17 +1,25 @@
 // Graph Node Model
 
-// Relationship types as specified in the design
-export enum RelationshipType {
-  FATHER = 'father',
-  CHILD = 'child',
-  BASE = 'base',
-  BUILD = 'build',
+// 关系组位置枚举
+export enum QuadrantPosition {
+  TOP = 'top',
+  BOTTOM = 'bottom',
+  LEFT = 'left',
+  RIGHT = 'right',
 }
+
+// 常见的关系类型常量，用于参考，但系统应该支持任意关系类型
+export const CommonRelationshipTypes = {
+  FATHER: 'father',
+  CHILD: 'child',
+  BASE: 'base',
+  BUILD: 'build',
+};
 
 // 关系类型的显示方式
 export enum RelationshipLabelMode {
   NONE = 'none', // 不显示关系标签
-  SIMPLE = 'simple', // 简单显示（F/C/B/B）
+  SIMPLE = 'simple', // 简单显示（首字母）
   FULL = 'full', // 完整显示关系名称
 }
 
@@ -36,7 +44,7 @@ export interface GraphEdge {
   id: string;
   source: string; // Source node ID
   target: string; // Target node ID
-  relationshipType: RelationshipType;
+  relationshipType: string; // 使用字符串表示关系类型，直接对应数据库中的类型
   // Additional properties like creation date, description, etc.
   metadata?: Record<string, any>;
 }
@@ -47,20 +55,18 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
-// Configuration for the quadrant layout
+// 配置关系组布局
 export interface QuadrantConfig {
-  top: RelationshipType;
-  bottom: RelationshipType;
-  left: RelationshipType; 
-  right: RelationshipType;
+  [QuadrantPosition.TOP]: string[];
+  [QuadrantPosition.BOTTOM]: string[];
+  [QuadrantPosition.LEFT]: string[];
+  [QuadrantPosition.RIGHT]: string[];
+  unconfiguredTypesPosition: QuadrantPosition;  // 明确指定未分配关系类型显示的位置
 }
 
-// 深度配置，控制每种关系类型的最大深度
+// 深度配置，控制各关系类型的最大深度
 export interface DepthConfig {
-  [RelationshipType.FATHER]: number;
-  [RelationshipType.CHILD]: number;
-  [RelationshipType.BASE]: number;
-  [RelationshipType.BUILD]: number;
+  [relationshipType: string]: number;
 }
 
 // 视图配置
@@ -68,23 +74,24 @@ export interface ViewConfig {
   showRelationshipLabels: RelationshipLabelMode; // 是否在连线上显示关系类型
 }
 
-// Default quadrant configuration
+// 默认关系组配置
 export const defaultQuadrantConfig: QuadrantConfig = {
-  top: RelationshipType.FATHER,
-  bottom: RelationshipType.CHILD,
-  left: RelationshipType.BASE,
-  right: RelationshipType.BUILD,
+  [QuadrantPosition.TOP]: [CommonRelationshipTypes.FATHER],
+  [QuadrantPosition.BOTTOM]: [CommonRelationshipTypes.CHILD],
+  [QuadrantPosition.LEFT]: [CommonRelationshipTypes.BASE],
+  [QuadrantPosition.RIGHT]: [CommonRelationshipTypes.BUILD],
+  unconfiguredTypesPosition: QuadrantPosition.LEFT, // 默认未指定关系组用于未配置的关系类型
 };
 
 // 默认深度配置，最大深度为3
 export const defaultDepthConfig: DepthConfig = {
-  [RelationshipType.FATHER]: 3,
-  [RelationshipType.CHILD]: 3,
-  [RelationshipType.BASE]: 3,
-  [RelationshipType.BUILD]: 3,
+  [CommonRelationshipTypes.FATHER]: 3,
+  [CommonRelationshipTypes.CHILD]: 3,
+  [CommonRelationshipTypes.BASE]: 3,
+  [CommonRelationshipTypes.BUILD]: 3,
 };
 
 // 默认视图配置
 export const defaultViewConfig: ViewConfig = {
   showRelationshipLabels: RelationshipLabelMode.SIMPLE, // 默认使用简洁模式显示关系标签
-}; 
+};
