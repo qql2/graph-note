@@ -1,0 +1,38 @@
+.node-edit-modal {
+  --width: 320px;
+  --height: 230px;
+  --min-height: 230px;
+  --border-radius: 12px;
+  --box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.node-edit-modal ion-toolbar {
+  --background: var(--ion-color-light, #f4f5f8);
+}
+
+.node-edit-modal ion-title {
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.node-edit-modal ion-item {
+  margin-top: 15px;
+}
+
+.node-edit-modal ion-label {
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+
+.node-edit-modal ion-input {
+  --padding-start: 10px;
+  --background: var(--ion-color-light-shade, #e0e0e0);
+  border-radius: 8px;
+}
+
+.node-edit-modal ion-content {
+  --padding-top: 15px;
+  --padding-bottom: 15px;
+  --padding-start: 15px;
+  --padding-end: 15px;
+} 

@@ -57,9 +57,6 @@ const convertDbDataToGraphData = (
 
   const edges: GraphEdge[] = dbEdges.map(dbEdge => {
     // 调试边类型映射
-    console.log('处理边：', dbEdge.id, '类型：', dbEdge.type, 
-                '源节点：', dbEdge.source_id || dbEdge.sourceId, 
-                '目标节点：', dbEdge.target_id || dbEdge.targetId);
     
     // 处理可能不同的字段名
     const sourceId = dbEdge.source_id || dbEdge.sourceId;
@@ -274,15 +271,26 @@ const GraphViewDemo: React.FC = () => {
   };
 
   // 处理编辑关系
-  const handleEditEdge = async (edgeId: string, newLabel: string) => {
+  const handleEditEdge = async (edgeId: string, newLabel: string, isSimpleLabel?: boolean) => {
     try {
       setLoading(true);
       const db = graphDatabaseService.getDatabase();
       
-      // 更新边
-      await db.updateEdge(edgeId, { type: newLabel });
+      // 根据标签模式更新不同的属性
+      if (isSimpleLabel === true) {
+        // 更新边的 properties.shortLabel 属性
+        await db.updateEdge(edgeId, { 
+          properties: { 
+            shortLabel: newLabel 
+          } 
+        });
+        setToastMessage(`关系标签已更新: ${newLabel}`);
+      } else {
+        // 更新边的类型属性
+        await db.updateEdge(edgeId, { type: newLabel });
+        setToastMessage(`关系类型已更新: ${newLabel}`);
+      }
       
-      setToastMessage(`关系已更新: ${newLabel}`);
       setShowToast(true);
       
       // 重新加载数据
