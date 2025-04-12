@@ -13,6 +13,7 @@ import graphDatabaseService from './services/graph-database/GraphDatabaseService
 import UsersPage from './pages/UsersPage/UsersPage';
 import GraphDBDemo from './pages/GraphDBDemo';
 import GraphViewDemo from './pages/GraphViewDemo';
+import SearchPage from './pages/SearchPage';
 import AppMenu from './components/AppMenu/AppMenu';
 
 /* Core CSS required for Ionic components to work properly */
@@ -124,6 +125,11 @@ const App: React.FC = () => {
     }
   };
 
+  // 搜索节点和关系
+  const handleSearch = () => {
+    window.location.href = '/search';
+  };
+
   return (
     <SqliteServiceContext.Provider value={SqliteService}>
       <DbVersionServiceContext.Provider value={DbVersionService}>
@@ -131,7 +137,7 @@ const App: React.FC = () => {
           <AppInitializer>
             <IonApp>
               <IonReactRouter>
-                <AppMenu onCreateNode={handleCreateNode} />
+                <AppMenu onCreateNode={handleCreateNode} onSearch={handleSearch} />
                 <IonRouterOutlet id="main-content">
                   <Route exact path="/home">
                     <Home />
@@ -142,6 +148,7 @@ const App: React.FC = () => {
                   <Route path="/users" component={UsersPage} />
                   <Route path="/graph-demo" component={GraphDBDemo} />
                   <Route path="/graph-view-demo" component={GraphViewDemo} />
+                  <Route path="/search" component={SearchPage} />
                 </IonRouterOutlet>
               </IonReactRouter>
             </IonApp>

@@ -23,6 +23,18 @@ import {
 
 // TODO: 嵌套事务的处理交给transaction Service
 
+// 新增导入搜索相关类型
+import {
+  NodeSearchCriteria,
+  EdgeSearchCriteria,
+  FullTextSearchOptions,
+  SearchResult,
+  PropertyFilter,
+  FilterOperator,
+  SortCriteria,
+  SortDirection
+} from "../../../models/SearchTypes";
+
 export abstract class BaseGraphDB implements GraphDatabaseInterface {
   protected db: SQLiteEngine | null = null;
   protected config: DatabaseConfig | null = null;
@@ -1292,5 +1304,545 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     }
 
     return result.values[0] as GraphNode;
+  }
+
+  // 搜索节点
+  async searchNodes(criteria: NodeSearchCriteria): Promise<{ nodes: GraphNode[]; totalCount: number }> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+
+    try {
+      return await this.withTransaction(async () => {
+        // 构建基本查询
+        let query = `
+          SELECT n.id, n.type, n.label, n.created_at, n.updated_at
+          FROM nodes n
+          WHERE 1=1
+        `;
+        let countQuery = `SELECT COUNT(*) as count FROM nodes n WHERE 1=1`;
+        
+        const params: any[] = [];
+        const conditions: string[] = [];
+        
+        // 添加ID过滤
+        if (criteria.ids && criteria.ids.length > 0) {
+          conditions.push(`n.id IN (${criteria.ids.map(() => '?').join(', ')})`);
+          params.push(...criteria.ids);
+        }
+        
+        // 添加类型过滤
+        if (criteria.types && criteria.types.length > 0) {
+          conditions.push(`n.type IN (${criteria.types.map(() => '?').join(', ')})`);
+          params.push(...criteria.types);
+        }
+        
+        // 添加标签过滤
+        if (criteria.labels && criteria.labels.length > 0) {
+          conditions.push(`n.label IN (${criteria.labels.map(() => '?').join(', ')})`);
+          params.push(...criteria.labels);
+        }
+        
+        // 添加标签包含过滤
+        if (criteria.labelContains) {
+          conditions.push(`n.label LIKE ?`);
+          params.push(`%${criteria.labelContains}%`);
+        }
+        
+        // 添加时间范围过滤
+        if (criteria.createdAfter) {
+          conditions.push(`n.created_at >= ?`);
+          params.push(criteria.createdAfter.toISOString());
+        }
+        
+        if (criteria.createdBefore) {
+          conditions.push(`n.created_at <= ?`);
+          params.push(criteria.createdBefore.toISOString());
+        }
+        
+        if (criteria.updatedAfter) {
+          conditions.push(`n.updated_at >= ?`);
+          params.push(criteria.updatedAfter.toISOString());
+        }
+        
+        if (criteria.updatedBefore) {
+          conditions.push(`n.updated_at <= ?`);
+          params.push(criteria.updatedBefore.toISOString());
+        }
+        
+        // 添加属性过滤
+        if (criteria.properties && criteria.properties.length > 0) {
+          for (let i = 0; i < criteria.properties.length; i++) {
+            const prop = criteria.properties[i];
+            const propAlias = `p${i}`;
+            
+            // 根据操作符构建不同的条件
+            let propCondition: string;
+            switch (prop.operator) {
+              case FilterOperator.EXISTS:
+                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ?)`;
+                params.push(prop.key);
+                break;
+              case FilterOperator.NOT_EXISTS:
+                propCondition = `NOT EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ?)`;
+                params.push(prop.key);
+                break;
+              case FilterOperator.EQUALS:
+                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value = ?)`;
+                params.push(prop.key, JSON.stringify(prop.value));
+                break;
+              case FilterOperator.NOT_EQUALS:
+                propCondition = `NOT EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value = ?)`;
+                params.push(prop.key, JSON.stringify(prop.value));
+                break;
+              case FilterOperator.CONTAINS:
+                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
+                params.push(prop.key, `%${JSON.stringify(prop.value).slice(1, -1)}%`);
+                break;
+              case FilterOperator.STARTS_WITH:
+                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
+                params.push(prop.key, `${JSON.stringify(prop.value).slice(1, -1)}%`);
+                break;
+              case FilterOperator.ENDS_WITH:
+                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
+                params.push(prop.key, `%${JSON.stringify(prop.value).slice(1, -1)}`);
+                break;
+              // 其他数值比较操作符
+              case FilterOperator.GREATER_THAN:
+              case FilterOperator.GREATER_THAN_OR_EQUAL:
+              case FilterOperator.LESS_THAN:
+              case FilterOperator.LESS_THAN_OR_EQUAL:
+                const opMap: Record<string, string> = {
+                  [FilterOperator.GREATER_THAN]: '>',
+                  [FilterOperator.GREATER_THAN_OR_EQUAL]: '>=',
+                  [FilterOperator.LESS_THAN]: '<',
+                  [FilterOperator.LESS_THAN_OR_EQUAL]: '<='
+                };
+                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND CAST(JSON_EXTRACT(${propAlias}.value, '$') AS NUMERIC) ${opMap[prop.operator]} ?)`;
+                params.push(prop.key, prop.value);
+                break;
+              default:
+                // 跳过不支持的操作符
+                continue;
+            }
+            conditions.push(propCondition);
+          }
+        }
+        
+        // 添加所有条件到查询
+        if (conditions.length > 0) {
+          const whereClause = conditions.join(' AND ');
+          query += ` AND ${whereClause}`;
+          countQuery += ` AND ${whereClause}`;
+        }
+        
+        // 添加排序
+        if (criteria.sortBy) {
+          query += ` ORDER BY n.${criteria.sortBy.field} ${criteria.sortBy.direction}`;
+        } else {
+          // 默认按创建时间排序
+          query += ` ORDER BY n.created_at DESC`;
+        }
+        
+        // 添加分页
+        if (criteria.limit) {
+          query += ` LIMIT ?`;
+          params.push(criteria.limit);
+          
+          if (criteria.offset) {
+            query += ` OFFSET ?`;
+            params.push(criteria.offset);
+          }
+        }
+        
+        // 执行查询
+        const result = await this.db!.query(query, params);
+        const nodes = result.values || [];
+        
+        // 查询总数
+        const countResult = await this.db!.query(countQuery, params.slice(0, params.length - (criteria.limit ? (criteria.offset ? 2 : 1) : 0)));
+        const totalCount = countResult.values?.[0]?.count || 0;
+        
+        // 获取节点属性
+        const nodeObjects: GraphNode[] = [];
+        for (const node of nodes) {
+          const properties = await this.getNodeProperties(node.id);
+          nodeObjects.push({
+            ...node,
+            properties
+          });
+        }
+        
+        return { nodes: nodeObjects, totalCount };
+      });
+    } catch (error) {
+      throw new DatabaseError(`Failed to search nodes: ${error}`, error as Error);
+    }
+  }
+
+  // 搜索关系
+  async searchEdges(criteria: EdgeSearchCriteria): Promise<{ edges: GraphEdge[]; totalCount: number }> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+    
+    try {
+      return await this.withTransaction(async () => {
+        // 构建基本查询
+        let query = `
+          SELECT e.id, e.source_id, e.target_id, e.type, e.created_at
+          FROM relationships e
+          WHERE 1=1
+        `;
+        let countQuery = `SELECT COUNT(*) as count FROM relationships e WHERE 1=1`;
+        
+        const params: any[] = [];
+        const conditions: string[] = [];
+        const joins: string[] = [];
+        
+        // 添加ID过滤
+        if (criteria.ids && criteria.ids.length > 0) {
+          conditions.push(`e.id IN (${criteria.ids.map(() => '?').join(', ')})`);
+          params.push(...criteria.ids);
+        }
+        
+        // 添加类型过滤 - 精确匹配
+        if (criteria.types && criteria.types.length > 0) {
+          conditions.push(`e.type IN (${criteria.types.map(() => '?').join(', ')})`);
+          params.push(...criteria.types);
+        }
+        
+        // 添加类型关键字模糊匹配
+        if (criteria.typeContains) {
+          conditions.push(`e.type LIKE ?`);
+          params.push(`%${criteria.typeContains}%`);
+        }
+        
+        // 添加源节点ID过滤
+        if (criteria.sourceIds && criteria.sourceIds.length > 0) {
+          conditions.push(`e.source_id IN (${criteria.sourceIds.map(() => '?').join(', ')})`);
+          params.push(...criteria.sourceIds);
+        }
+        
+        // 添加目标节点ID过滤
+        if (criteria.targetIds && criteria.targetIds.length > 0) {
+          conditions.push(`e.target_id IN (${criteria.targetIds.map(() => '?').join(', ')})`);
+          params.push(...criteria.targetIds);
+        }
+        
+        // 添加时间范围过滤
+        if (criteria.createdAfter) {
+          conditions.push(`e.created_at >= ?`);
+          params.push(criteria.createdAfter.toISOString());
+        }
+        
+        if (criteria.createdBefore) {
+          conditions.push(`e.created_at <= ?`);
+          params.push(criteria.createdBefore.toISOString());
+        }
+        
+        // 添加源节点条件
+        if (criteria.sourceNodeCriteria) {
+          joins.push(`JOIN nodes source_node ON e.source_id = source_node.id`);
+          
+          if (criteria.sourceNodeCriteria.types && criteria.sourceNodeCriteria.types.length > 0) {
+            conditions.push(`source_node.type IN (${criteria.sourceNodeCriteria.types.map(() => '?').join(', ')})`);
+            params.push(...criteria.sourceNodeCriteria.types);
+          }
+          
+          if (criteria.sourceNodeCriteria.labels && criteria.sourceNodeCriteria.labels.length > 0) {
+            conditions.push(`source_node.label IN (${criteria.sourceNodeCriteria.labels.map(() => '?').join(', ')})`);
+            params.push(...criteria.sourceNodeCriteria.labels);
+          }
+          
+          if (criteria.sourceNodeCriteria.labelContains) {
+            conditions.push(`source_node.label LIKE ?`);
+            params.push(`%${criteria.sourceNodeCriteria.labelContains}%`);
+          }
+        }
+        
+        // 添加目标节点条件
+        if (criteria.targetNodeCriteria) {
+          joins.push(`JOIN nodes target_node ON e.target_id = target_node.id`);
+          
+          if (criteria.targetNodeCriteria.types && criteria.targetNodeCriteria.types.length > 0) {
+            conditions.push(`target_node.type IN (${criteria.targetNodeCriteria.types.map(() => '?').join(', ')})`);
+            params.push(...criteria.targetNodeCriteria.types);
+          }
+          
+          if (criteria.targetNodeCriteria.labels && criteria.targetNodeCriteria.labels.length > 0) {
+            conditions.push(`target_node.label IN (${criteria.targetNodeCriteria.labels.map(() => '?').join(', ')})`);
+            params.push(...criteria.targetNodeCriteria.labels);
+          }
+          
+          if (criteria.targetNodeCriteria.labelContains) {
+            conditions.push(`target_node.label LIKE ?`);
+            params.push(`%${criteria.targetNodeCriteria.labelContains}%`);
+          }
+        }
+        
+        // 添加属性过滤
+        if (criteria.properties && criteria.properties.length > 0) {
+          for (let i = 0; i < criteria.properties.length; i++) {
+            const prop = criteria.properties[i];
+            const propAlias = `ep${i}`;
+            
+            // 根据操作符构建不同的条件
+            let propCondition: string;
+            switch (prop.operator) {
+              case FilterOperator.EXISTS:
+                propCondition = `EXISTS (SELECT 1 FROM relationship_properties ${propAlias} WHERE ${propAlias}.relationship_id = e.id AND ${propAlias}.key = ?)`;
+                params.push(prop.key);
+                break;
+              case FilterOperator.NOT_EXISTS:
+                propCondition = `NOT EXISTS (SELECT 1 FROM relationship_properties ${propAlias} WHERE ${propAlias}.relationship_id = e.id AND ${propAlias}.key = ?)`;
+                params.push(prop.key);
+                break;
+              case FilterOperator.EQUALS:
+                propCondition = `EXISTS (SELECT 1 FROM relationship_properties ${propAlias} WHERE ${propAlias}.relationship_id = e.id AND ${propAlias}.key = ? AND ${propAlias}.value = ?)`;
+                params.push(prop.key, JSON.stringify(prop.value));
+                break;
+              case FilterOperator.NOT_EQUALS:
+                propCondition = `NOT EXISTS (SELECT 1 FROM relationship_properties ${propAlias} WHERE ${propAlias}.relationship_id = e.id AND ${propAlias}.key = ? AND ${propAlias}.value = ?)`;
+                params.push(prop.key, JSON.stringify(prop.value));
+                break;
+              case FilterOperator.GREATER_THAN:
+              case FilterOperator.GREATER_THAN_OR_EQUAL:
+              case FilterOperator.LESS_THAN:
+              case FilterOperator.LESS_THAN_OR_EQUAL:
+                const opMap: Record<string, string> = {
+                  [FilterOperator.GREATER_THAN]: '>',
+                  [FilterOperator.GREATER_THAN_OR_EQUAL]: '>=',
+                  [FilterOperator.LESS_THAN]: '<',
+                  [FilterOperator.LESS_THAN_OR_EQUAL]: '<='
+                };
+                propCondition = `EXISTS (SELECT 1 FROM relationship_properties ${propAlias} WHERE ${propAlias}.relationship_id = e.id AND ${propAlias}.key = ? AND CAST(JSON_EXTRACT(${propAlias}.value, '$') AS NUMERIC) ${opMap[prop.operator]} ?)`;
+                params.push(prop.key, prop.value);
+                break;
+              case FilterOperator.CONTAINS:
+                propCondition = `EXISTS (SELECT 1 FROM relationship_properties ${propAlias} WHERE ${propAlias}.relationship_id = e.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
+                params.push(prop.key, `%${JSON.stringify(prop.value).slice(1, -1)}%`);
+                break;
+              case FilterOperator.STARTS_WITH:
+                propCondition = `EXISTS (SELECT 1 FROM relationship_properties ${propAlias} WHERE ${propAlias}.relationship_id = e.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
+                params.push(prop.key, `${JSON.stringify(prop.value).slice(1, -1)}%`);
+                break;
+              case FilterOperator.ENDS_WITH:
+                propCondition = `EXISTS (SELECT 1 FROM relationship_properties ${propAlias} WHERE ${propAlias}.relationship_id = e.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
+                params.push(prop.key, `%${JSON.stringify(prop.value).slice(1, -1)}`);
+                break;
+              default:
+                // 跳过不支持的操作符
+                continue;
+            }
+            conditions.push(propCondition);
+          }
+        }
+        
+        // 添加连接到查询
+        if (joins.length > 0) {
+          const joinClause = joins.join(' ');
+          query = query.replace('WHERE', `${joinClause} WHERE`);
+          countQuery = countQuery.replace('WHERE', `${joinClause} WHERE`);
+        }
+        
+        // 添加所有条件到查询
+        if (conditions.length > 0) {
+          const whereClause = conditions.join(' AND ');
+          query += ` AND ${whereClause}`;
+          countQuery += ` AND ${whereClause}`;
+        }
+        
+        // 添加排序
+        if (criteria.sortBy) {
+          query += ` ORDER BY e.${criteria.sortBy.field} ${criteria.sortBy.direction}`;
+        } else {
+          // 默认按创建时间排序
+          query += ` ORDER BY e.created_at DESC`;
+        }
+        
+        // 添加分页
+        if (criteria.limit) {
+          query += ` LIMIT ?`;
+          params.push(criteria.limit);
+          
+          if (criteria.offset) {
+            query += ` OFFSET ?`;
+            params.push(criteria.offset);
+          }
+        }
+        
+        // 执行查询
+        const result = await this.db!.query(query, params);
+        const edges = result.values || [];
+        
+        // 查询总数
+        const countResult = await this.db!.query(countQuery, params.slice(0, params.length - (criteria.limit ? (criteria.offset ? 2 : 1) : 0)));
+        const totalCount = countResult.values?.[0]?.count || 0;
+        
+        // 获取关系属性
+        const edgeObjects: GraphEdge[] = [];
+        for (const edge of edges) {
+          const properties = await this.getEdgeProperties(edge.id);
+          edgeObjects.push({
+            ...edge,
+            properties
+          });
+        }
+        
+        return { edges: edgeObjects, totalCount };
+      });
+    } catch (error) {
+      throw new DatabaseError(`Failed to search edges: ${error}`, error as Error);
+    }
+  }
+
+  // 全文搜索
+  async fullTextSearch(query: string, options?: FullTextSearchOptions): Promise<SearchResult> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+    
+    const opts = {
+      includeTitles: true,
+      includeProperties: true,
+      caseSensitive: false,
+      limit: 100,
+      offset: 0,
+      ...options
+    };
+    
+    try {
+      return await this.withTransaction(async () => {
+        const searchPattern = opts.caseSensitive ? query : query.toLowerCase();
+        const likePattern = `%${searchPattern}%`;
+        
+        // 节点搜索
+        let nodeQuery = `SELECT n.id FROM nodes n WHERE 0=0`;
+        const nodeParams: any[] = [];
+        
+        if (opts.includeTitles) {
+          nodeQuery += ` OR ${opts.caseSensitive ? 'n.label' : 'LOWER(n.label)'} LIKE ?`;
+          nodeParams.push(likePattern);
+        }
+        
+        // 属性搜索
+        if (opts.includeProperties) {
+          nodeQuery += ` OR EXISTS (
+            SELECT 1 FROM node_properties np 
+            WHERE np.node_id = n.id AND ${opts.caseSensitive ? 'np.value' : 'LOWER(np.value)'} LIKE ?
+          )`;
+          nodeParams.push(likePattern);
+        }
+        
+        nodeQuery += ` LIMIT ? OFFSET ?`;
+        nodeParams.push(opts.limit, opts.offset);
+        
+        // 边搜索
+        let edgeQuery = `SELECT e.id FROM relationships e WHERE 0=0`;
+        const edgeParams: any[] = [];
+        
+        // 类型匹配搜索
+        if (opts.includeTitles) {
+          edgeQuery += ` OR ${opts.caseSensitive ? 'e.type' : 'LOWER(e.type)'} LIKE ?`;
+          edgeParams.push(likePattern);
+        }
+        
+        // 属性搜索
+        if (opts.includeProperties) {
+          edgeQuery += ` OR EXISTS (
+            SELECT 1 FROM relationship_properties ep 
+            WHERE ep.relationship_id = e.id AND ${opts.caseSensitive ? 'ep.value' : 'LOWER(ep.value)'} LIKE ?
+          )`;
+          edgeParams.push(likePattern);
+        }
+        
+        edgeQuery += ` LIMIT ? OFFSET ?`;
+        edgeParams.push(opts.limit, opts.offset);
+        
+        // 执行查询
+        const nodeResult = await this.db!.query(nodeQuery, nodeParams);
+        const edgeResult = await this.db!.query(edgeQuery, edgeParams);
+        
+        const nodeIds = (nodeResult.values || []).map((row: any) => row.id);
+        const edgeIds = (edgeResult.values || []).map((row: any) => row.id);
+        
+        // 获取完整节点和边数据
+        const nodes: GraphNode[] = [];
+        for (const id of nodeIds) {
+          try {
+            const node = await this.getNode(id);
+            nodes.push(node);
+          } catch (e) {
+            // 忽略不存在的节点
+          }
+        }
+        
+        const edges: GraphEdge[] = [];
+        for (const id of edgeIds) {
+          try {
+            const edge = await this.getEdge(id);
+            edges.push(edge);
+          } catch (e) {
+            // 忽略不存在的边
+          }
+        }
+        
+        // 计算总数
+        const nodeTotalQuery = `SELECT COUNT(*) as count FROM (${nodeQuery.split('LIMIT')[0]}) as subquery`;
+        const edgeTotalQuery = `SELECT COUNT(*) as count FROM (${edgeQuery.split('LIMIT')[0]}) as subquery`;
+        
+        const nodeTotalResult = await this.db!.query(nodeTotalQuery, nodeParams.slice(0, nodeParams.length - 2));
+        const edgeTotalResult = await this.db!.query(edgeTotalQuery, edgeParams.slice(0, edgeParams.length - 2));
+        
+        const totalNodeCount = nodeTotalResult.values?.[0]?.count || 0;
+        const totalEdgeCount = edgeTotalResult.values?.[0]?.count || 0;
+        
+        return {
+          nodes,
+          edges,
+          totalNodeCount,
+          totalEdgeCount
+        };
+      });
+    } catch (error) {
+      throw new DatabaseError(`Failed to perform full text search: ${error}`, error as Error);
+    }
+  }
+
+  // 辅助方法：获取节点属性
+  private async getNodeProperties(nodeId: string): Promise<Record<string, any>> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+    
+    const result = await this.db.query(
+      `SELECT key, value FROM node_properties WHERE node_id = ?`,
+      [nodeId]
+    );
+    
+    const properties: Record<string, any> = {};
+    for (const row of result.values || []) {
+      try {
+        properties[row.key] = JSON.parse(row.value);
+      } catch (e) {
+        properties[row.key] = row.value;
+      }
+    }
+    
+    return properties;
+  }
+  
+  // 辅助方法：获取关系属性
+  private async getEdgeProperties(edgeId: string): Promise<Record<string, any>> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+    
+    const result = await this.db.query(
+      `SELECT key, value FROM relationship_properties WHERE relationship_id = ?`,
+      [edgeId]
+    );
+    
+    const properties: Record<string, any> = {};
+    for (const row of result.values || []) {
+      try {
+        properties[row.key] = JSON.parse(row.value);
+      } catch (e) {
+        properties[row.key] = row.value;
+      }
+    }
+    
+    return properties;
   }
 } 

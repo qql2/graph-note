@@ -6,9 +6,10 @@ import DataManagement from '../DataManagement';
 
 interface AppMenuProps {
   onCreateNode?: () => void; // Add callback for creating a new node
+  onSearch?: () => void; // Add callback for searching nodes and edges
 }
 
-const AppMenu: FC<AppMenuProps> = ({ onCreateNode }) => {
+const AppMenu: FC<AppMenuProps> = ({ onCreateNode, onSearch }) => {
   const closeMenu = () => {
     const menu = document.querySelector('ion-menu');
     menu!.close();
@@ -18,6 +19,13 @@ const AppMenu: FC<AppMenuProps> = ({ onCreateNode }) => {
     closeMenu();
     if (onCreateNode) {
       onCreateNode();
+    }
+  };
+
+  const handleSearch = () => {
+    closeMenu();
+    if (onSearch) {
+      onSearch();
     }
   };
 
@@ -32,6 +40,9 @@ const AppMenu: FC<AppMenuProps> = ({ onCreateNode }) => {
         <IonList>
           <IonItem onClick={handleCreateNode}>
             <IonButton size="default" expand="full">创建独立节点</IonButton>
+          </IonItem>
+          <IonItem onClick={handleSearch}>
+            <IonButton size="default" expand="full">搜索节点和关系</IonButton>
           </IonItem>
           <IonItem onClick={closeMenu}>
             <IonButton size="default" routerLink="/users" expand="full">Managing Users</IonButton>
