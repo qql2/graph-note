@@ -104,4 +104,14 @@ export interface GraphDatabaseInterface {
   createBackup(): Promise<string>;
   restoreFromBackup(backupId: string): Promise<void>;
   listBackups(): Promise<string[]>;
+  
+  // 新增搜索相关方法
+  searchNodes(criteria: any): Promise<{ nodes: GraphNode[]; totalCount: number }>;
+  searchEdges(criteria: any): Promise<{ edges: GraphEdge[]; totalCount: number }>;
+  fullTextSearch(query: string, options?: any): Promise<{
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    totalNodeCount: number;
+    totalEdgeCount: number;
+  }>;
 } 
