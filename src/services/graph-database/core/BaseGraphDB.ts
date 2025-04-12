@@ -6,6 +6,11 @@ import {
   DatabaseConfig,
   SQLiteEngine,
   DeleteMode,
+  Operation,
+  ExportOptions,
+  ImportMode,
+  ImportResult,
+  ValidationResult
 } from "./types";
 import { DATABASE_SCHEMA } from "./schema";
 import {
@@ -26,6 +31,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   // 抽象方法：由具体平台实现
   protected abstract createEngine(config: DatabaseConfig): Promise<SQLiteEngine>;
   protected abstract persistData(): Promise<void>;
+  protected abstract getEngine(): Promise<SQLiteEngine>;
 
   async initialize(config: DatabaseConfig): Promise<void> {
     if (this.initialized) return;
@@ -940,5 +946,351 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
   async listBackups(): Promise<string[]> {
     throw new DatabaseError("List backups method must be implemented by the platform-specific class");
+  }
+
+  // 清空数据库方法
+  public async clear(): Promise<void> {
+    const db = this.db;
+    if (!db) throw new DatabaseError("Database not initialized");
+    try {
+      await db.beginTransaction();
+      
+      // 先清空边属性表
+      await db.run('DELETE FROM relationship_properties');
+      
+      // 再清空边表
+      await db.run('DELETE FROM relationships');
+      
+      // 清空节点属性表
+      await db.run('DELETE FROM node_properties');
+      
+      // 最后清空节点表
+      await db.run('DELETE FROM nodes');
+      
+      await db.commitTransaction();
+    } catch (error) {
+      await db.rollbackTransaction();
+      throw error;
+    }
+  }
+
+  // 导出数据为JSON
+  public async exportToJson(options?: ExportOptions): Promise<string> {
+    const prettyPrint = options?.prettyPrint ?? true;
+    const includeMetadata = options?.includeMetadata ?? true;
+    
+    // 获取所有节点和边
+    const nodes = await this.getNodes();
+    const edges = await this.getEdges();
+    
+    // 构建导出数据
+    const exportData: any = {
+      data: {
+        nodes,
+        edges
+      }
+    };
+    
+    // 添加元数据
+    if (includeMetadata) {
+      exportData.metadata = {
+        version: "1.0",
+        created_at: new Date().toISOString(),
+      };
+    }
+    
+    // 转换为JSON字符串
+    return JSON.stringify(exportData, null, prettyPrint ? 2 : undefined);
+  }
+  
+  // 验证导入数据
+  public async validateImportData(jsonData: string): Promise<ValidationResult> {
+    try {
+      // 解析JSON数据
+      const parsedData = JSON.parse(jsonData);
+      
+      // 检查基本结构
+      if (!parsedData.data || !Array.isArray(parsedData.data.nodes) || !Array.isArray(parsedData.data.edges)) {
+        return {
+          valid: false,
+          nodeCount: 0,
+          edgeCount: 0,
+          errors: ["Invalid data structure: missing 'data.nodes' or 'data.edges' arrays"]
+        };
+      }
+      
+      // 提取版本信息
+      const version = parsedData.metadata?.version;
+      
+      // 计算节点和边的数量
+      const nodeCount = parsedData.data.nodes.length;
+      const edgeCount = parsedData.data.edges.length;
+      
+      // 验证节点数据
+      const nodeErrors: string[] = [];
+      parsedData.data.nodes.forEach((node: any, index: number) => {
+        if (!node.type || !node.label) {
+          nodeErrors.push(`Node at index ${index} is missing required fields (type or label)`);
+        }
+      });
+      
+      // 验证边数据
+      const edgeErrors: string[] = [];
+      parsedData.data.edges.forEach((edge: any, index: number) => {
+        if (!edge.source_id || !edge.target_id || !edge.type) {
+          edgeErrors.push(`Edge at index ${index} is missing required fields (source_id, target_id, or type)`);
+        }
+      });
+      
+      const errors = [...nodeErrors, ...edgeErrors];
+      
+      return {
+        valid: errors.length === 0,
+        version,
+        nodeCount,
+        edgeCount,
+        errors
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        nodeCount: 0,
+        edgeCount: 0,
+        errors: [`Invalid JSON format: ${(error as Error).message}`]
+      };
+    }
+  }
+  
+  // 获取单个边的方法
+  public async getEdge(id: string): Promise<GraphEdge> {
+    const db = this.db;
+    if (!db) throw new DatabaseError("Database not initialized");
+    const result = await db.query(
+      'SELECT * FROM relationships WHERE id = ?',
+      [id]
+    );
+
+    if (!result.values || result.values.length === 0) {
+      throw new Error(`Edge with id ${id} not found`);
+    }
+
+    // 获取基本边信息
+    const edge: GraphEdge = result.values[0] as GraphEdge;
+    
+    // 获取边的属性
+    const propsResult = await db.query(
+      "SELECT key, value FROM relationship_properties WHERE relationship_id = ?",
+      [id]
+    );
+    
+    // 初始化属性对象
+    edge.properties = {};
+    
+    if (propsResult?.values && propsResult.values.length > 0) {
+      for (const propRow of propsResult.values) {
+        let key: string;
+        let rawValue: string;
+        
+        if (Array.isArray(propRow)) {
+          key = propRow[0];
+          rawValue = propRow[1];
+        } else {
+          key = propRow.key;
+          rawValue = propRow.value;
+        }
+        
+        try {
+          edge.properties[key] = JSON.parse(rawValue);
+        } catch (e) {
+          edge.properties[key] = rawValue;
+        }
+      }
+    }
+
+    return edge;
+  }
+
+  // 从JSON导入数据方法中修改边导入部分
+  public async importFromJson(jsonData: string, mode: ImportMode): Promise<ImportResult> {
+    // 解析JSON数据
+    let parsedData;
+    try {
+      parsedData = JSON.parse(jsonData);
+    } catch (error) {
+      return {
+        success: false,
+        nodesImported: 0,
+        edgesImported: 0,
+        errors: [`Invalid JSON format: ${(error as Error).message}`]
+      };
+    }
+    
+    // 验证数据结构
+    if (!parsedData.data || !Array.isArray(parsedData.data.nodes) || !Array.isArray(parsedData.data.edges)) {
+      return {
+        success: false,
+        nodesImported: 0,
+        edgesImported: 0,
+        errors: ["Invalid data structure: missing 'data.nodes' or 'data.edges' arrays"]
+      };
+    }
+    
+    const db = this.db;
+    if (!db) throw new DatabaseError("Database not initialized");
+    const errors: string[] = [];
+    const importedNodeIds: string[] = [];
+    
+    try {
+      await db.beginTransaction();
+      
+      // 如果是替换模式，先清空数据库
+      if (mode === ImportMode.REPLACE) {
+        // 清空边表
+        await db.run('DELETE FROM relationship_properties');
+        await db.run('DELETE FROM relationships');
+        // 清空节点表
+        await db.run('DELETE FROM node_properties');
+        await db.run('DELETE FROM nodes');
+      }
+      
+      // 导入节点
+      for (const node of parsedData.data.nodes) {
+        try {
+          // 处理ID冲突
+          if (mode === ImportMode.MERGE && node.id) {
+            // 检查节点是否已存在
+            try {
+              await this.getNode(node.id);
+              // 如果存在则更新
+              await this.updateNode(node.id, {
+                label: node.label,
+                type: node.type,
+                properties: node.properties
+              });
+              importedNodeIds.push(node.id);
+            } catch {
+              // 不存在则添加
+              const newId = await this.addNode({
+                id: node.id,
+                label: node.label,
+                type: node.type,
+                properties: node.properties
+              });
+              importedNodeIds.push(newId);
+            }
+          } else {
+            // 替换模式或无ID的合并模式直接添加
+            const newNode = {
+              id: node.id, // 如果提供了ID则使用，否则会自动生成
+              label: node.label,
+              type: node.type,
+              properties: node.properties
+            };
+            const newId = await this.addNode(newNode);
+            importedNodeIds.push(newId);
+          }
+        } catch (error) {
+          errors.push(`Failed to import node ${node.id || 'unknown'}: ${(error as Error).message}`);
+        }
+      }
+      
+      // 导入边 - 修改这部分添加外键约束检查
+      const importedEdgeIds: string[] = [];
+      
+      // 创建一个已导入节点ID的集合，用于快速查找
+      const importedNodesSet = new Set(importedNodeIds);
+      
+      // 检查所有需要导入的边，确保引用的节点都存在
+      for (const edge of parsedData.data.edges) {
+        try {
+          // 检查源节点和目标节点是否存在
+          const sourceExists = edge.source_id ? importedNodesSet.has(edge.source_id) : true;
+          const targetExists = edge.target_id ? importedNodesSet.has(edge.target_id) : true;
+          
+          if (!sourceExists) {
+            errors.push(`Failed to import edge ${edge.id || 'unknown'}: Source node ${edge.source_id} does not exist`);
+            continue;
+          }
+          
+          if (!targetExists) {
+            errors.push(`Failed to import edge ${edge.id || 'unknown'}: Target node ${edge.target_id} does not exist`);
+            continue;
+          }
+          
+          // 处理ID冲突
+          if (mode === ImportMode.MERGE && edge.id) {
+            // 检查边是否已存在
+            try {
+              await this.getEdge(edge.id);
+              // 如果存在则更新
+              await this.updateEdge(edge.id, {
+                source_id: edge.source_id,
+                target_id: edge.target_id,
+                type: edge.type,
+                properties: edge.properties
+              });
+              importedEdgeIds.push(edge.id);
+            } catch {
+              // 不存在则添加
+              const newId = await this.addEdge({
+                id: edge.id,
+                source_id: edge.source_id,
+                target_id: edge.target_id,
+                type: edge.type,
+                properties: edge.properties
+              });
+              importedEdgeIds.push(newId);
+            }
+          } else {
+            // 替换模式或无ID的合并模式直接添加
+            const newEdge = {
+              id: edge.id, // 如果提供了ID则使用，否则会自动生成
+              source_id: edge.source_id,
+              target_id: edge.target_id,
+              type: edge.type,
+              properties: edge.properties
+            };
+            
+            const newId = await this.addEdge(newEdge);
+            importedEdgeIds.push(newId);
+          }
+        } catch (error) {
+          errors.push(`Failed to import edge ${edge.id || 'unknown'}: ${(error as Error).message}`);
+        }
+      }
+      
+      await db.commitTransaction();
+      
+      return {
+        success: errors.length === 0,
+        nodesImported: importedNodeIds.length,
+        edgesImported: importedEdgeIds.length,
+        errors
+      };
+    } catch (error) {
+      await db.rollbackTransaction();
+      return {
+        success: false,
+        nodesImported: 0,
+        edgesImported: 0,
+        errors: [`Transaction failed: ${(error as Error).message}`]
+      };
+    }
+  }
+
+  // 获取单个节点的方法
+  public async getNode(id: string): Promise<GraphNode> {
+    const db = this.db
+    if (!db) throw new DatabaseError("Database not initialized");
+    const result = await db.query(
+      'SELECT * FROM nodes WHERE id = ?',
+      [id]
+    );
+
+    if (!result.values || result.values.length === 0) {
+      throw new Error(`Node with id ${id} not found`);
+    }
+
+    return result.values[0] as GraphNode;
   }
 } 
