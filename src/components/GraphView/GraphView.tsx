@@ -3,6 +3,8 @@ import { Graph } from '@antv/x6';
 import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, GraphEdge, CommonRelationshipTypes, QuadrantPosition } from '../../models/GraphNode';
 import { GraphLayoutService } from '../../services/GraphLayoutService';
 import ContextMenu from '../ContextMenu';
+import NodeEditModal from '../NodeEditModal';
+import EdgeEditModal from '../EdgeEditModal';
 import { pencil, trash, copy, add } from 'ionicons/icons';
 import './GraphView.css';
 
@@ -16,7 +18,7 @@ interface GraphViewProps {
   onNodeClick?: (nodeId: string) => void;
   onEditNode?: (nodeId: string, label: string) => void;
   onDeleteNode?: (nodeId: string) => void;
-  onEditEdge?: (edgeId: string, label: string) => void;
+  onEditEdge?: (edgeId: string, label: string, isSimpleLabel?: boolean) => void;
   onDeleteEdge?: (edgeId: string) => void;
   onCreateRelation?: (sourceNodeId: string, relationType: string) => void;
 }
@@ -196,6 +198,35 @@ const GraphView: React.FC<GraphViewProps> = ({
     type: ''
   });
 
+  // 节点编辑模态框状态
+  const [nodeEditModal, setNodeEditModal] = useState({
+    isOpen: false,
+    nodeId: '',
+    nodeLabel: ''
+  });
+
+  // 边编辑模态框状态
+  const [edgeEditModal, setEdgeEditModal] = useState({
+    isOpen: false,
+    edgeId: '',
+    relationshipType: '',
+    edge: {} as GraphEdge 
+  });
+
+  // 缓存当前存在的所有关系类型
+  const [existingRelationshipTypes, setExistingRelationshipTypes] = useState<string[]>([]);
+
+  // 在组件加载时收集所有现有的关系类型
+  useEffect(() => {
+    if (graphData && graphData.edges) {
+      const relationshipTypes = new Set<string>();
+      graphData.edges.forEach(edge => {
+        relationshipTypes.add(edge.relationshipType);
+      });
+      setExistingRelationshipTypes(Array.from(relationshipTypes));
+    }
+  }, [graphData]);
+
   // 处理缩放和重置视图的函数
   const handleZoomIn = () => {
     if (graph) {
@@ -242,11 +273,12 @@ const GraphView: React.FC<GraphViewProps> = ({
         label: '编辑节点',
         icon: pencil,
         onClick: () => {
-          // 暂时使用 prompt，实际项目中应该用更好的 UI
-          const newLabel = prompt('编辑节点名称:', node.attrs.label.text);
-          if (newLabel !== null && newLabel.trim() !== '') {
-            onEditNode(nodeId, newLabel.trim());
-          }
+          // 打开节点编辑模态框
+          setNodeEditModal({
+            isOpen: true,
+            nodeId: nodeId,
+            nodeLabel: node.attrs.label.text
+          });
         }
       });
     }
@@ -321,6 +353,8 @@ const GraphView: React.FC<GraphViewProps> = ({
     const edgeId = edge.id;
     const menuItems: MenuItem[] = [];
     
+    const edgeData = graphData.edges.find(e => e.id === edgeId) as GraphEdge;
+
     // 编辑边菜单项
     if (onEditEdge) {
       menuItems.push({
@@ -329,14 +363,14 @@ const GraphView: React.FC<GraphViewProps> = ({
         icon: pencil,
         onClick: () => {
           // 获取当前显示的标签
-          const currentLabel = edge.getLabels()?.[0]?.attrs?.text?.text || edge.data.relationshipType;
-          // 提示用户输入新的标签
-          const newLabel = prompt('编辑关系名称:', currentLabel);
-          if (newLabel !== null && newLabel.trim() !== '') {
-            // 将新标签传递给 onEditEdge 回调
-            // 在上层组件中，应该将此值保存到边的 properties.shortLabel 中
-            onEditEdge(edgeId, newLabel.trim());
-          }
+          const currentLabel = edge.data.relationshipType || '';
+          // 打开边编辑模态框
+          setEdgeEditModal({
+            isOpen: true,
+            edgeId: edgeId,
+            relationshipType: currentLabel,
+            edge: edgeData
+          });
         }
       });
     }
@@ -526,7 +560,8 @@ const GraphView: React.FC<GraphViewProps> = ({
         
         // 使用关系类型的简短标签，如果没有预定义则使用首字母
         return relationshipToSimpleLabel[edge.relationshipType] || 
-               edge.relationshipType.substring(0, 1).toUpperCase();
+               edge.relationshipType.substring(0, 
+                 edge.relationshipType.charAt(0).toLowerCase() === 'b' ? 2 : 1).toUpperCase();
       } 
       
       // 完整模式直接显示关系类型
@@ -661,6 +696,35 @@ const GraphView: React.FC<GraphViewProps> = ({
         items={contextMenu.items}
         onClose={closeContextMenu}
         navbarHeight={navbarHeight} // 传入导航栏高度
+      />
+
+      {/* 节点编辑模态框 */}
+      <NodeEditModal
+        isOpen={nodeEditModal.isOpen}
+        onClose={() => setNodeEditModal(prev => ({ ...prev, isOpen: false }))}
+        nodeId={nodeEditModal.nodeId}
+        nodeLabel={nodeEditModal.nodeLabel}
+        onSave={(nodeId, newLabel) => {
+          if (onEditNode) {
+            onEditNode(nodeId, newLabel);
+          }
+        }}
+      />
+
+      {/* 边编辑模态框 */}
+      <EdgeEditModal
+        isOpen={edgeEditModal.isOpen}
+        onClose={() => setEdgeEditModal(prev => ({ ...prev, isOpen: false }))}
+        edgeId={edgeEditModal.edgeId}
+        relationshipType={edgeEditModal.relationshipType}
+        existingEdges={graphData.edges}
+        labelMode={viewConfig.showRelationshipLabels}
+        onSave={(edgeId, newRelationshipType, isSimpleLabel) => {
+          if (onEditEdge) {
+            // 根据标签类型传递不同的参数，让父组件处理保存逻辑
+            onEditEdge(edgeId, newRelationshipType, isSimpleLabel);
+          }
+        }}
       />
     </div>
   );
