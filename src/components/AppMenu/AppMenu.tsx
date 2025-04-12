@@ -1,7 +1,8 @@
 import React, { FC } from 'react';
 import './AppMenu.css';
 import { IonMenu, IonHeader, IonToolbar, IonTitle, IonContent,
-         IonList, IonItem, IonButton} from '@ionic/react';
+         IonList, IonItem, IonButton, IonLabel} from '@ionic/react';
+import DataManagement from '../DataManagement';
 
 interface AppMenuProps {
   onCreateNode?: () => void; // Add callback for creating a new node
@@ -41,6 +42,13 @@ const AppMenu: FC<AppMenuProps> = ({ onCreateNode }) => {
           <IonItem onClick={closeMenu}>
             <IonButton size="default" routerLink="/graph-view-demo" expand="full">Graph View Demo</IonButton>
           </IonItem>
+          {/* 数据导入导出部分 */}
+          <IonItem>
+            <IonLabel>数据管理</IonLabel>
+          </IonItem>
+          <div style={{ padding: '0 16px' }}>
+            <DataManagement />
+          </div>
           {/* ... other menu items */}
         </IonList>
       </IonContent>

@@ -16,6 +16,35 @@ export interface GraphEdge {
   created_at?: string;
 }
 
+// 导出选项接口
+export interface ExportOptions {
+  prettyPrint?: boolean;
+  includeMetadata?: boolean;
+}
+
+// 导入模式枚举
+export enum ImportMode {
+  REPLACE = "replace",
+  MERGE = "merge"
+}
+
+// 导入结果接口
+export interface ImportResult {
+  success: boolean;
+  nodesImported: number;
+  edgesImported: number;
+  errors: string[];
+}
+
+// 验证结果接口
+export interface ValidationResult {
+  valid: boolean;
+  version?: string;
+  nodeCount: number;
+  edgeCount: number;
+  errors: string[];
+}
+
 export interface DatabaseConfig {
   storage_path?: string;
   verbose?: boolean;
@@ -54,9 +83,11 @@ export interface GraphDatabaseInterface {
   updateNode(id: string, updates: Partial<GraphNode>): Promise<void>;
   deleteNode(id: string, mode?: DeleteMode): Promise<void>;
   getNodes(): Promise<GraphNode[]>;
+  getNode(id: string): Promise<GraphNode>;
   addEdge(edge: Omit<GraphEdge, "created_at">): Promise<string>;
   deleteEdge(id: string): Promise<void>;
   getEdges(): Promise<GraphEdge[]>;
+  getEdge(id: string): Promise<GraphEdge>;
   updateEdge(id: string, updates: Partial<GraphEdge>): Promise<void>;
   findPath(
     startId: string,
@@ -64,6 +95,10 @@ export interface GraphDatabaseInterface {
     maxDepth?: number
   ): Promise<GraphEdge[]>;
   findConnectedNodes(nodeId: string, depth?: number): Promise<GraphNode[]>;
+  exportToJson(options?: ExportOptions): Promise<string>;
+  importFromJson(jsonData: string, mode: ImportMode): Promise<ImportResult>;
+  validateImportData(jsonData: string): Promise<ValidationResult>;
+  clear(): Promise<void>;
   exportData(): Promise<Uint8Array>;
   importData(data: Uint8Array): Promise<void>;
   createBackup(): Promise<string>;

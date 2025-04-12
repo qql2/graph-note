@@ -25,6 +25,7 @@ const AppInitializer: FC<AppInitializerProps> = ({ children }) => {
           text: `${msg}`,
           duration: 'long'
         });           
+        console.error(error);
       }  
     };
     if(ref.current === false) {
