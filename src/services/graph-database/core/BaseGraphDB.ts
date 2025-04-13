@@ -1692,9 +1692,13 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       throw new DatabaseError(`Failed to search edges: ${error}`, error as Error);
     }
   }
-
   // 全文搜索
-  async fullTextSearch(query: string, options?: FullTextSearchOptions): Promise<SearchResult> {
+  async fullTextSearch(query: string, options?: FullTextSearchOptions): Promise<{ 
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    totalNodeCount: number;
+    totalEdgeCount: number;
+  }> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     
     const opts = {
@@ -1716,7 +1720,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         const nodeParams: any[] = [];
         
         if (opts.includeTitles) {
-          nodeQuery += ` OR ${opts.caseSensitive ? 'n.label' : 'LOWER(n.label)'} LIKE ?`;
+          nodeQuery += ` AND ${opts.caseSensitive ? 'n.label' : 'LOWER(n.label)'} LIKE ?`;
           nodeParams.push(likePattern);
         }
         
@@ -1738,7 +1742,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         
         // 类型匹配搜索
         if (opts.includeTitles) {
-          edgeQuery += ` OR ${opts.caseSensitive ? 'e.type' : 'LOWER(e.type)'} LIKE ?`;
+          edgeQuery += ` AND ${opts.caseSensitive ? 'e.type' : 'LOWER(e.type)'} LIKE ?`;
           edgeParams.push(likePattern);
         }
         
