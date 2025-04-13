@@ -10,13 +10,15 @@ export interface SearchResultsProps {
   onSelectNode?: (node: GraphNode) => void;
   onSelectEdge?: (edge: GraphEdge) => void;
   onClear?: () => void;
+  onPageChange?: (page: number, pageSize: number) => void;
 }
 
 export const SearchResults: React.FC<SearchResultsProps> = ({ 
   results, 
   onSelectNode,
   onSelectEdge,
-  onClear 
+  onClear,
+  onPageChange
 }) => {
   // 当前查看的结果类型（节点或关系）
   const [activeTab, setActiveTab] = useState<'nodes' | 'edges'>(results.nodes.length > 0 ? 'nodes' : 'edges');
@@ -32,6 +34,9 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   // 处理分页变化
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
+    if (onPageChange) {
+      onPageChange(newPage, pageSize);
+    }
   };
   
   // 处理节点选择
