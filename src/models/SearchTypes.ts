@@ -80,11 +80,12 @@ export interface CombinedSearchCriteria {
 
 // 全文搜索选项
 export interface FullTextSearchOptions {
-  includeTitles?: boolean;           // 是否包含标题
-  includeProperties?: boolean;       // 是否包含属性
-  caseSensitive?: boolean;           // 是否区分大小写
-  limit?: number;                    // 结果数量限制
-  offset?: number;                   // 分页偏移量
+  query?: string;                  // 搜索查询
+  includeTitles?: boolean;         // 是否包含标题
+  includeProperties?: boolean;     // 是否包含属性
+  caseSensitive?: boolean;         // 是否区分大小写
+  limit?: number;                  // 结果数量限制
+  offset?: number;                 // 分页偏移量
 }
 
 // 搜索结果
