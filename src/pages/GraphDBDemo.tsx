@@ -65,30 +65,54 @@ const GraphDBDemo: React.FC = () => {
 
   // 初始化数据库
   useEffect(() => {
+    // 添加标志，防止组件卸载后仍执行操作
+    let isComponentMounted = true;
+    
     const initDB = async () => {
       try {
         setLoading(true);
+        console.log('GraphDBDemo: 正在初始化数据库...');
         await graphDatabaseService.initialize({
           dbName: 'graph_demo',
           version: 1,
           verbose: true
-        });
-        setDbInitialized(true);
-        showMessage('数据库初始化成功', 'success');
-        await fetchData();
+        }, 'GraphDBDemo');
+        
+        // 检查数据库是否初始化成功
+        if (!graphDatabaseService.isInitialized()) {
+          throw new Error('数据库初始化失败，请检查连接状态');
+        }
+        
+        console.log(`GraphDBDemo: 数据库初始化完成: ${graphDatabaseService.getCurrentDbName()}`);
+        
+        if (isComponentMounted) {
+          setDbInitialized(true);
+          showMessage('数据库初始化成功', 'success');
+          await fetchData();
+        }
       } catch (error) {
-        console.error('初始化数据库失败:', error);
-        showMessage(`初始化数据库失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        console.error('GraphDBDemo: 初始化数据库失败:', error);
+        if (isComponentMounted) {
+          showMessage(`初始化数据库失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        }
       } finally {
-        setLoading(false);
+        if (isComponentMounted) {
+          setLoading(false);
+        }
       }
     };
 
     initDB();
 
     return () => {
-      // 组件卸载时关闭数据库连接
-      graphDatabaseService.closeDatabase();
+      // 设置组件已卸载标志
+      isComponentMounted = false;
+      
+      // 组件卸载时注销数据库使用
+      console.log('GraphDBDemo组件卸载，注销数据库使用');
+      graphDatabaseService.closeDatabase('GraphDBDemo', false).catch(err => {
+        console.error('GraphDBDemo组件卸载时注销数据库使用失败:', err);
+      });
     };
   }, []);
 
@@ -102,14 +126,52 @@ const GraphDBDemo: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const db = graphDatabaseService.getDatabase();
+      
+      // 确保数据库已初始化
+      if (!graphDatabaseService.isInitialized()) {
+        console.warn('数据库未初始化，尝试重新初始化');
+        await graphDatabaseService.initialize({
+          dbName: 'graph_demo',
+          version: 1,
+          verbose: true
+        }, 'GraphDBDemo');
+        
+        if (!graphDatabaseService.isInitialized()) {
+          throw new Error('数据库初始化失败，请刷新页面重试');
+        }
+      }
+      
+      const db = graphDatabaseService.getDatabase('GraphDBDemo');
+      console.log('正在获取节点和边数据...');
       const fetchedNodes = await db.getNodes();
-		const fetchedEdges = await db.getEdges();
+      const fetchedEdges = await db.getEdges();
+      console.log(`获取到 ${fetchedNodes.length} 个节点和 ${fetchedEdges.length} 条边`);
+      
       setNodes(fetchedNodes);
       setEdges(fetchedEdges);
     } catch (error) {
       console.error('获取数据失败:', error);
       showMessage(`获取数据失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 刷新数据 - 但不强制关闭数据库
+  const refreshData = async () => {
+    try {
+      setLoading(true);
+      console.log('GraphDBDemo开始刷新数据...');
+      
+      // 不关闭数据库，直接重新获取数据
+      // 这避免了关闭后重新连接带来的竞态问题
+      await fetchData();
+      
+      showMessage('数据已刷新', 'success');
+      console.log('GraphDBDemo数据刷新完成');
+    } catch (error) {
+      console.error('刷新数据失败:', error);
+      showMessage(`刷新数据失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -135,7 +197,7 @@ const GraphDBDemo: React.FC = () => {
         properties: parsedProperties
       };
       
-		const db = graphDatabaseService.getDatabase();
+		const db = graphDatabaseService.getDatabase('GraphDBDemo');
 		// debugger
       const nodeId = await db.addNode(node);
       
@@ -177,7 +239,7 @@ const GraphDBDemo: React.FC = () => {
         properties: parsedProperties
       };
       
-      const db = graphDatabaseService.getDatabase();
+      const db = graphDatabaseService.getDatabase('GraphDBDemo');
       const edgeId = await db.addEdge(edge);
       
       showMessage(`边添加成功，ID: ${edgeId}`, 'success');
@@ -203,7 +265,7 @@ const GraphDBDemo: React.FC = () => {
   const deleteNode = async (nodeId: string) => {
     try {
       setLoading(true);
-      const db = graphDatabaseService.getDatabase();
+      const db = graphDatabaseService.getDatabase('GraphDBDemo');
       await db.deleteNode(nodeId, DeleteMode.CASCADE);
       showMessage(`节点删除成功，ID: ${nodeId}`, 'success');
       await fetchData();
@@ -219,7 +281,7 @@ const GraphDBDemo: React.FC = () => {
   const deleteEdge = async (edgeId: string) => {
     try {
       setLoading(true);
-      const db = graphDatabaseService.getDatabase();
+      const db = graphDatabaseService.getDatabase('GraphDBDemo');
       await db.deleteEdge(edgeId);
       showMessage(`边删除成功，ID: ${edgeId}`, 'success');
       await fetchData();
@@ -260,7 +322,7 @@ const GraphDBDemo: React.FC = () => {
   const getNodeDetail = async (nodeId: string) => {
     try {
       setLoading(true);
-      const db = graphDatabaseService.getDatabase();
+      const db = graphDatabaseService.getDatabase('GraphDBDemo');
       
       // 获取节点的关联节点
       const connected = await db.findConnectedNodes(nodeId, 1);
@@ -367,8 +429,8 @@ const GraphDBDemo: React.FC = () => {
         <div style={{ padding: '16px' }}>
           <IonButton 
             expand="block" 
-            onClick={fetchData} 
-            disabled={loading || !dbInitialized}
+            onClick={refreshData} 
+            disabled={loading}
           >
             刷新数据
             {loading && <IonSpinner name="crescent" />}
@@ -627,7 +689,7 @@ const GraphDBDemo: React.FC = () => {
                           }
                           try {
                             setLoading(true);
-                            const db = graphDatabaseService.getDatabase();
+                            const db = graphDatabaseService.getDatabase('GraphDBDemo');
                             const startId = nodes[0].id;
                             const endId = nodes[nodes.length - 1].id;
                             if (!startId || !endId) return;
@@ -657,7 +719,7 @@ const GraphDBDemo: React.FC = () => {
                           }
                           try {
                             setLoading(true);
-                            const db = graphDatabaseService.getDatabase();
+                            const db = graphDatabaseService.getDatabase('GraphDBDemo');
                             const nodeId = nodes[0].id;
                             if (!nodeId) return;
                             
