@@ -13,7 +13,7 @@ const DataExportButton: React.FC = () => {
     setExporting(true);
     try {
       // 获取数据库实例
-      const db = graphDatabaseService.getDatabase();
+      const db = graphDatabaseService.getDatabase('DataExportButton');
       
       // 导出数据
       const jsonData = await db.exportToJson({

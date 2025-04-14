@@ -19,7 +19,7 @@ class GraphSearchService {
    * @returns 符合条件的节点列表和总数
    */
   async searchNodes(criteria: NodeSearchCriteria): Promise<{ nodes: GraphNode[]; totalCount: number }> {
-    const db = graphDatabaseService.getDatabase();
+    const db = graphDatabaseService.getDatabase('GraphSearchService');
     const result = await db.searchNodes(criteria);
 
     // 将数据库返回的节点类型转换为应用模型节点类型
@@ -43,7 +43,7 @@ class GraphSearchService {
    * @returns 符合条件的关系列表和总数
    */
   async searchEdges(criteria: EdgeSearchCriteria): Promise<{ edges: GraphEdge[]; totalCount: number }> {
-    const db = graphDatabaseService.getDatabase();
+    const db = graphDatabaseService.getDatabase('GraphSearchService');
     const result = await db.searchEdges(criteria);
 
     // 将数据库返回的关系类型转换为应用模型关系类型
@@ -90,7 +90,7 @@ class GraphSearchService {
    * @returns 搜索结果
    */
   async fullTextSearch(query: string, options?: FullTextSearchOptions): Promise<SearchResult> {
-    const db = graphDatabaseService.getDatabase();
+    const db = graphDatabaseService.getDatabase('GraphSearchService');
     const result = await db.fullTextSearch(query, options);
 
     // 转换为应用模型格式

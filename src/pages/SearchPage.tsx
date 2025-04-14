@@ -19,7 +19,7 @@ const SearchPage: React.FC = () => {
           dbName: 'graph_demo',
           version: 1,
           verbose: true
-        });
+        }, 'SearchPage');
       } catch (error) {
         console.error('初始化数据库失败:', error);
         presentToast({
@@ -31,6 +31,14 @@ const SearchPage: React.FC = () => {
     };
 
     initDb();
+    
+    // 组件卸载时注销数据库使用
+    return () => {
+      console.log('SearchPage组件卸载，注销数据库使用');
+      graphDatabaseService.closeDatabase('SearchPage', false).catch(err => {
+        console.error('注销数据库使用失败:', err);
+      });
+    };
   }, [presentToast]);
 
   // 处理返回按钮点击

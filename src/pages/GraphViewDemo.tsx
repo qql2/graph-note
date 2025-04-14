@@ -123,26 +123,29 @@ const GraphViewDemo: React.FC = () => {
       setError(null);
       
       // 初始化数据库 - 使用与GraphDBDemo相同的数据库名称
-      ;
+      console.log('正在初始化图数据库...');
       await graphDatabaseService.initialize({
         dbName: 'graph_demo', // 改为与GraphDBDemo相同的数据库名称
         version: 1,
         verbose: true
-      });
+      }, 'GraphViewDemo');
       
-      const db = graphDatabaseService.getDatabase();
+      // 检查数据库是否已初始化
+      if (!graphDatabaseService.isInitialized()) {
+        throw new Error('数据库初始化失败，请检查连接状态');
+      }
+      console.log(`数据库初始化完成: ${graphDatabaseService.getCurrentDbName()}`);
+      
+      const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
       // 获取所有节点和边
-      ;
+      console.log('正在获取节点和边数据...');
       const dbNodes = await db.getNodes();
       const dbEdges = await db.getEdges();
-      
-      ;
-      ;
+      console.log(`获取到 ${dbNodes.length} 个节点和 ${dbEdges.length} 条边`);
       
       // 转换数据格式
       const convertedData = convertDbDataToGraphData(dbNodes, dbEdges);
-      ;
       setGraphData(convertedData);
       
       // 收集所有关系类型
@@ -175,6 +178,7 @@ const GraphViewDemo: React.FC = () => {
         setCentralNodeId(firstNodeId);
         ConfigService.saveCentralNodeId(firstNodeId);
       } else {
+        console.log('没有可显示的节点');
       }
       
     } catch (err) {
@@ -187,13 +191,58 @@ const GraphViewDemo: React.FC = () => {
   
   // 组件挂载时加载数据
   useEffect(() => {
-    loadGraphData();
+    // 添加标志，防止组件卸载后仍执行操作
+    let isComponentMounted = true;
     
-    // 组件卸载时关闭数据库
+    // 组件挂载时加载数据
+    const loadDataAndInitDb = async () => {
+      try {
+        console.log('GraphViewDemo组件挂载，开始加载数据...');
+        await loadGraphData();
+        console.log('GraphViewDemo组件数据加载完成');
+      } catch (err) {
+        console.error('GraphViewDemo组件挂载时加载数据失败:', err);
+        if (isComponentMounted) {
+          setError(`初始化失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    };
+    
+    loadDataAndInitDb();
+    
+    // 组件卸载时注销数据库使用
     return () => {
-      graphDatabaseService.closeDatabase();
+      console.log('GraphViewDemo组件卸载，注销数据库使用');
+      isComponentMounted = false;
+      
+      // 确保安全地注销数据库，但不强制关闭
+      graphDatabaseService.closeDatabase('GraphViewDemo', false)
+        .catch(err => {
+          console.error('GraphViewDemo组件卸载时注销数据库使用失败:', err);
+        });
     };
   }, []);
+
+  // 刷新数据按钮处理函数
+  const handleRefreshData = async () => {
+    try {
+      setLoading(true);
+      console.log('GraphViewDemo开始刷新数据...');
+      
+      // 不关闭数据库，而是直接重新加载数据
+      // 这避免了关闭/打开数据库的竞态条件
+      await loadGraphData();
+      
+      setToastMessage('数据已刷新');
+      setShowToast(true);
+      console.log('GraphViewDemo数据刷新完成');
+    } catch (err) {
+      console.error('刷新数据失败:', err);
+      setError(`刷新数据失败: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 处理节点点击，改变中心节点
   const handleNodeClick = (nodeId: string) => {
@@ -216,7 +265,7 @@ const GraphViewDemo: React.FC = () => {
   const handleEditNode = async (nodeId: string, newLabel: string) => {
     try {
       setLoading(true);
-      const db = graphDatabaseService.getDatabase();
+      const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
       // 更新节点
       await db.updateNode(nodeId, { label: newLabel });
@@ -243,7 +292,7 @@ const GraphViewDemo: React.FC = () => {
       async () => {
         try {
           setLoading(true);
-          const db = graphDatabaseService.getDatabase();
+          const db = graphDatabaseService.getDatabase('GraphViewDemo');
           
           // 删除节点
           await db.deleteNode(nodeId);
@@ -274,7 +323,7 @@ const GraphViewDemo: React.FC = () => {
   const handleEditEdge = async (edgeId: string, newLabel: string, isSimpleLabel?: boolean) => {
     try {
       setLoading(true);
-      const db = graphDatabaseService.getDatabase();
+      const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
       // 根据标签模式更新不同的属性
       if (isSimpleLabel === true) {
@@ -312,7 +361,7 @@ const GraphViewDemo: React.FC = () => {
       async () => {
         try {
           setLoading(true);
-          const db = graphDatabaseService.getDatabase();
+          const db = graphDatabaseService.getDatabase('GraphViewDemo');
           
           // 删除边
           await db.deleteEdge(edgeId);
@@ -337,7 +386,7 @@ const GraphViewDemo: React.FC = () => {
   const handleCreateRelation = async (sourceNodeId: string, relationType: string) => {
     try {
       setLoading(true);
-      const db = graphDatabaseService.getDatabase();
+      const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
       // 检查是否需要创建自定义关系
       let actualRelationType = relationType;
@@ -447,11 +496,6 @@ const GraphViewDemo: React.FC = () => {
       // 更新保存的节点ID
       ConfigService.saveCentralNodeId(firstNodeId);
     }
-  };
-  
-  // 刷新数据
-  const handleRefreshData = () => {
-    loadGraphData();
   };
   
   // 处理关系标签显示方式变更

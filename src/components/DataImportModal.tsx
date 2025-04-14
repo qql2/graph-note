@@ -57,7 +57,7 @@ const DataImportModal: React.FC<DataImportModalProps> = ({ isOpen, onClose }) =>
         const fileContent = await readFileContent(file);
         
         // 验证数据
-        const db = graphDatabaseService.getDatabase();
+        const db = graphDatabaseService.getDatabase('DataImportModal');
         const result = await db.validateImportData(fileContent);
         setValidationResult(result);
         
@@ -106,7 +106,7 @@ const DataImportModal: React.FC<DataImportModalProps> = ({ isOpen, onClose }) =>
       const fileContent = await readFileContent(selectedFile);
       
       // 导入数据
-      const db = graphDatabaseService.getDatabase();
+      const db = graphDatabaseService.getDatabase('DataImportModal');
       const result = await db.importFromJson(fileContent, importMode);
       
       if (result.success) {
