@@ -3,11 +3,15 @@ import { IonButtons, IonToolbar } from '@ionic/react';
 import DataExportButton from './DataExportButton';
 import DataImportButton from './DataImportButton';
 
-const DataManagement: React.FC = () => {
+interface DataManagementProps {
+  onImportSuccess?: () => void;
+}
+
+const DataManagement: React.FC<DataManagementProps> = ({ onImportSuccess }) => {
   return (
     <IonToolbar>
       <IonButtons slot="end">
-        <DataImportButton />
+        <DataImportButton onImportSuccess={onImportSuccess} />
         <DataExportButton />
       </IonButtons>
     </IonToolbar>

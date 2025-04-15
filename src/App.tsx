@@ -42,6 +42,8 @@ export const SqliteServiceContext = React.createContext(SqliteService);
 export const DbVersionServiceContext = React.createContext(DbVersionService);
 export const StorageServiceContext = React.createContext(new StorageService(SqliteService,DbVersionService));
 
+// 定义一个自定义事件名称，用于数据导入成功后通知
+export const DATA_IMPORT_SUCCESS_EVENT = 'data-import-success';
 
 setupIonicReact();
 
@@ -130,6 +132,13 @@ const App: React.FC = () => {
     window.location.href = '/search';
   };
 
+  // 处理数据导入成功
+  const handleImportSuccess = () => {
+    // 创建并分发一个自定义事件，通知GraphViewDemo页面刷新数据
+    const event = new CustomEvent(DATA_IMPORT_SUCCESS_EVENT);
+    window.dispatchEvent(event);
+  };
+
   return (
     <SqliteServiceContext.Provider value={SqliteService}>
       <DbVersionServiceContext.Provider value={DbVersionService}>
@@ -137,7 +146,11 @@ const App: React.FC = () => {
           <AppInitializer>
             <IonApp>
               <IonReactRouter>
-                <AppMenu onCreateNode={handleCreateNode} onSearch={handleSearch} />
+                <AppMenu 
+                  onCreateNode={handleCreateNode} 
+                  onSearch={handleSearch}
+                  onImportSuccess={handleImportSuccess}
+                />
                 <IonRouterOutlet id="main-content">
                   <Route exact path="/home">
                     <Home />
