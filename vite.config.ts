@@ -8,6 +8,14 @@ export default defineConfig({
     react(),
     legacy()
   ],
+  build: {
+    // 开发模式禁用压缩，启用源码映射
+    ...(process.env.NODE_ENV !== 'production' && {
+      minify: false,
+      sourcemap: true,
+      css: { minify: false }
+    })
+  },
   test: {
     globals: true,
     environment: 'jsdom',

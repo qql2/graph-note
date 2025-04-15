@@ -161,15 +161,22 @@ export class SQLiteGraphDB extends BaseGraphDB {
         throw new DatabaseError("Database connection not established");
       }
 
+      let alreadyInTransaction = false;
+      try {
+        await this.connection.beginTransaction();
+        this.isInTransaction = true;
+      } catch (error:any) {
+        if (error.message && error.message.includes('Already in transaction')) {
+          alreadyInTransaction = true;
+        }
+      }
+
       // 如果已经在事务中，直接执行操作
-      if (this.isInTransaction) {
+      if (alreadyInTransaction) {
         return await operation();
       }
 
       try {
-        // 开始事务
-        await this.connection.beginTransaction();
-        this.isInTransaction = true;
 
         // 检查事务是否真的开始了
         const transactionActive = await this.connection.isTransactionActive();
