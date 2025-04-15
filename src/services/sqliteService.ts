@@ -112,6 +112,5 @@ class SQLiteService implements ISQLiteService {
             throw new Error(`sqliteService.saveToLocalDisk: ${msg}`);
         }
     }
-    // TODO: 把这里的transaction 放到 SqliteGraphDB 中, 因为要用到dbConnection
 }
 export default new SQLiteService();

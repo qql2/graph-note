@@ -3,7 +3,11 @@ import { IonButton, IonIcon } from '@ionic/react';
 import { cloudUploadOutline } from 'ionicons/icons';
 import DataImportModal from './DataImportModal';
 
-const DataImportButton: React.FC = () => {
+interface DataImportButtonProps {
+  onImportSuccess?: () => void;
+}
+
+const DataImportButton: React.FC<DataImportButtonProps> = ({ onImportSuccess }) => {
   const [showImportModal, setShowImportModal] = useState(false);
 
   return (
@@ -19,6 +23,7 @@ const DataImportButton: React.FC = () => {
       <DataImportModal 
         isOpen={showImportModal} 
         onClose={() => setShowImportModal(false)} 
+        onImportSuccess={onImportSuccess}
       />
     </>
   );

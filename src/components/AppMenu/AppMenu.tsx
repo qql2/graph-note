@@ -7,9 +7,10 @@ import DataManagement from '../DataManagement';
 interface AppMenuProps {
   onCreateNode?: () => void; // Add callback for creating a new node
   onSearch?: () => void; // Add callback for searching nodes and edges
+  onImportSuccess?: () => void; // Add callback for import success
 }
 
-const AppMenu: FC<AppMenuProps> = ({ onCreateNode, onSearch }) => {
+const AppMenu: FC<AppMenuProps> = ({ onCreateNode, onSearch, onImportSuccess }) => {
   const closeMenu = () => {
     const menu = document.querySelector('ion-menu');
     menu!.close();
@@ -58,7 +59,7 @@ const AppMenu: FC<AppMenuProps> = ({ onCreateNode, onSearch }) => {
             <IonLabel>数据管理</IonLabel>
           </IonItem>
           <div style={{ padding: '0 16px' }}>
-            <DataManagement />
+            <DataManagement onImportSuccess={onImportSuccess} />
           </div>
           {/* ... other menu items */}
         </IonList>

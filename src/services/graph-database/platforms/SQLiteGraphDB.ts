@@ -166,7 +166,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
         await this.connection.beginTransaction();
         this.isInTransaction = true;
       } catch (error:any) {
-        if (error.message && error.message.includes('Already in transaction')) {
+        if (error.message && /Already in transaction|cannot start a transaction within a transaction/.test(error.message)) {
           alreadyInTransaction = true;
         }
       }
@@ -240,6 +240,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
     try {
       if (sqliteService.getPlatform() === "web") {
         await sqliteService.saveToStore(this.dbName);
+        console.log('平台为web, 保存到IndexedDB');
       } else {
         // electron 平台不用手动保存到本地磁盘
         // await sqliteService.saveToLocalDisk(this.dbName);

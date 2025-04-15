@@ -32,6 +32,7 @@ import { GraphData, GraphNode, GraphEdge, CommonRelationshipTypes, QuadrantConfi
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import { ConfigService } from '../services/ConfigService';
 import './GraphViewDemo.css';
+import { DATA_IMPORT_SUCCESS_EVENT } from '../App';
 
 // 转换数据库数据到我们的GraphView组件格式
 const convertDbDataToGraphData = (
@@ -189,7 +190,7 @@ const GraphViewDemo: React.FC = () => {
     }
   };
   
-  // 组件挂载时加载数据
+  // 组件挂载时加载数据，并添加导入数据成功的事件监听
   useEffect(() => {
     // 添加标志，防止组件卸载后仍执行操作
     let isComponentMounted = true;
@@ -210,11 +211,27 @@ const GraphViewDemo: React.FC = () => {
     
     loadDataAndInitDb();
     
-    // 组件卸载时注销数据库使用
+    // 添加导入数据成功事件的监听器
+    const handleImportSuccess = () => {
+      console.log('GraphViewDemo收到数据导入成功事件，开始刷新数据...');
+      loadGraphData().catch(err => {
+        console.error('数据导入成功后刷新数据失败:', err);
+        if (isComponentMounted) {
+          setError(`刷新数据失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      });
+    };
+    
+    // 注册事件监听器
+    window.addEventListener(DATA_IMPORT_SUCCESS_EVENT, handleImportSuccess);
+    
+    // 组件卸载时注销数据库使用和事件监听器
     return () => {
       console.log('GraphViewDemo组件卸载，注销数据库使用');
       isComponentMounted = false;
       
+      // 移除事件监听器
+      window.removeEventListener(DATA_IMPORT_SUCCESS_EVENT, handleImportSuccess);
       // 确保安全地注销数据库，但不强制关闭
       graphDatabaseService.closeDatabase('GraphViewDemo', false)
         .catch(err => {

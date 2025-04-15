@@ -30,9 +30,10 @@ import { ImportMode, ValidationResult } from '../services/graph-database/core/ty
 interface DataImportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onImportSuccess?: () => void;
 }
 
-const DataImportModal: React.FC<DataImportModalProps> = ({ isOpen, onClose }) => {
+const DataImportModal: React.FC<DataImportModalProps> = ({ isOpen, onClose, onImportSuccess }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -115,6 +116,10 @@ const DataImportModal: React.FC<DataImportModalProps> = ({ isOpen, onClose }) =>
           edges: result.edgesImported
         });
         setShowSuccess(true);
+        
+        if (onImportSuccess) {
+          onImportSuccess();
+        }
         
         // 清理状态并关闭对话框
         setTimeout(() => {
