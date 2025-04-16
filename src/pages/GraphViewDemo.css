@@ -4,79 +4,6 @@
   position: relative;
 }
 
-.graph-controls {
-  padding: 10px;
-  max-height: 300px;
-  overflow-y: auto;
-  background-color: var(--ion-background-color);
-  border-bottom: 1px solid var(--ion-border-color);
-}
-
-.graph-controls h4 {
-  margin-top: 16px;
-  margin-bottom: 8px;
-  color: var(--ion-text-color);
-  font-weight: 500;
-}
-
-.graph-controls .description-text {
-  font-size: 0.9em;
-  color: var(--ion-color-medium);
-  margin-bottom: 10px;
-}
-
-.relation-description {
-  font-size: 0.8em !important;
-  color: var(--ion-color-medium) !important;
-}
-
-.quadrant-config {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* 深度配置样式 */
-.depth-config {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.depth-slider {
-  display: flex;
-  align-items: center;
-  width: 60%;
-}
-
-.depth-value {
-  width: 30px;
-  text-align: center;
-  font-weight: bold;
-}
-
-/* 视图配置样式 */
-.view-config {
-  margin-bottom: 16px;
-}
-
-.view-config ion-list {
-  padding: 0;
-}
-
-.view-config ion-list-header {
-  padding-left: 8px;
-  font-size: 0.9em;
-  min-height: 30px;
-}
-
-.view-config ion-item {
-  --padding-start: 8px;
-  --inner-padding-end: 8px;
-  --min-height: 40px;
-}
-
 /* 加载状态 */
 .loading-container {
   display: flex;
@@ -120,77 +47,20 @@
   margin-top: 0;
 }
 
-/* Make the select dropdowns more compact */
-.quadrant-config ion-item {
-  --padding-start: 8px;
-  --inner-padding-end: 8px;
-  --min-height: 40px;
-}
-
-/* Style the quadrant colors in labels */
-.relationship-father {
-  color: var(--ion-color-success, #4CAF50);
-}
-
-.relationship-child {
-  color: var(--ion-color-primary, #2196F3);
-}
-
-.relationship-base {
-  color: var(--ion-color-tertiary, #9C27B0);
-}
-
-.relationship-build {
-  color: var(--ion-color-danger, #F44336);
-}
-
-/* Add a small legend for colors */
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 8px 16px;
-  margin-top: 8px;
-  font-size: 0.9em;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.legend-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-/* 配置操作区域样式 */
-.config-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 15px;
-  padding: 10px;
-  background-color: rgba(var(--ion-color-success-rgb), 0.1);
-  border-radius: 8px;
-  border-left: 4px solid var(--ion-color-success);
-}
-
-.config-note {
-  margin: 0;
-  font-size: 0.9em;
-  color: var(--ion-color-success);
-}
-
 /* 节点位置保存提示样式 */
 .node-position-saved {
-  margin-top: 15px;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
   padding: 10px;
   background-color: rgba(var(--ion-color-primary-rgb), 0.1);
   border-radius: 8px;
   border-left: 4px solid var(--ion-color-primary);
+  z-index: 10;
+  max-width: 400px;
+  margin: 0 auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .node-position-saved p {
@@ -204,39 +74,4 @@
 
 .node-position-saved ion-icon {
   font-size: 1.2em;
-}
-
-/* 重置按钮样式 */
-.reset-config-button {
-  --background: transparent;
-  --color: var(--ion-color-medium);
-  --box-shadow: none;
-  font-size: 0.9em;
-}
-
-.reset-config-button:hover {
-  --color: var(--ion-color-danger);
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .graph-controls {
-    max-height: 250px;
-  }
-  
-  .depth-slider {
-    width: 100%;
-  }
-}
-
-@media (min-width: 992px) {
-  .quadrant-config {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .depth-config {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-  }
 } 

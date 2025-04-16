@@ -1,0 +1,24 @@
+.theme-toggle-container {
+  display: inline-block;
+}
+
+.theme-toggle-button {
+  --padding-start: 8px;
+  --padding-end: 8px;
+  --box-shadow: none;
+  height: 36px;
+}
+
+.theme-toggle-button ion-icon {
+  font-size: 20px;
+}
+
+/* 当处于暗色模式时 */
+.theme-dark .theme-toggle-button ion-icon {
+  color: #ffeb3b; /* 黄色太阳/月亮 */
+}
+
+/* 当处于亮色模式时 */
+.theme-light .theme-toggle-button ion-icon {
+  color: #ff9800; /* 橙色太阳/月亮 */
+}

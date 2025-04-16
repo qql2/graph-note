@@ -24,9 +24,11 @@ import {
   IonMenuButton,
   IonAlert
 } from '@ionic/react';
-import { refreshOutline, arrowBack, save, refresh, bookmarkOutline } from 'ionicons/icons';
+import { refreshOutline, arrowBack, save, refresh, bookmarkOutline, settings } from 'ionicons/icons';
 import GraphView from '../components/GraphView';
 import RelationshipConfig from '../components/RelationshipConfig';
+import SettingsModal from '../components/SettingsModal';
+import ThemeToggle from '../components/ThemeToggle';
 import { useLocation } from 'react-router-dom';
 import { GraphData, GraphNode, GraphEdge, CommonRelationshipTypes, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, QuadrantPosition, RelationshipTypeConfig, defaultRelationshipTypeConfig } from '../models/GraphNode';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
@@ -599,6 +601,19 @@ const GraphViewDemo: React.FC = () => {
     );
   };
 
+  // 设置弹窗状态
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // 处理打开设置弹窗
+  const handleOpenSettings = () => {
+    setShowSettingsModal(true);
+  };
+
+  // 处理关闭设置弹窗
+  const handleCloseSettings = () => {
+    setShowSettingsModal(false);
+  };
+
   return (
     <IonPage>
       <IonHeader>
@@ -616,8 +631,9 @@ const GraphViewDemo: React.FC = () => {
             <IonButton onClick={handleReset} disabled={loading}>
               <IonIcon icon={refreshOutline} />
             </IonButton>
-            <IonButton onClick={handleResetAllConfigs} title="重置所有配置" className="reset-config-button">
-              <IonIcon icon={refresh} />
+            <ThemeToggle />
+            <IonButton onClick={handleOpenSettings} title="图形视图设置">
+              <IonIcon icon={settings} />
             </IonButton>
             <IonMenuButton />
           </IonButtons>
@@ -655,191 +671,22 @@ const GraphViewDemo: React.FC = () => {
             </IonCardContent>
           </IonCard>
         ) : (
-          <>
-            <div className="graph-controls">
-              <h4>关系组配置</h4>
-              <div className="quadrant-config">
-                <IonItem>
-                  <IonLabel>上方关系组</IonLabel>
-                  <IonSelect 
-                    value={quadrantConfig[QuadrantPosition.TOP]} 
-                    onIonChange={e => handleQuadrantChange(QuadrantPosition.TOP, e.detail.value as string[])}
-                    multiple={true}
-                    placeholder="选择上方关系类型"
-                  >
-                    {knownRelationshipTypes.map(type => (
-                      <IonSelectOption key={type} value={type}>
-                        {getRelationshipTypeName(type)}
-                      </IonSelectOption>
-                    ))}
-                  </IonSelect>
-                </IonItem>
-                
-                <IonItem>
-                  <IonLabel>下方关系组</IonLabel>
-                  <IonSelect 
-                    value={quadrantConfig[QuadrantPosition.BOTTOM]} 
-                    onIonChange={e => handleQuadrantChange(QuadrantPosition.BOTTOM, e.detail.value as string[])}
-                    multiple={true}
-                    placeholder="选择下方关系类型"
-                  >
-                    {knownRelationshipTypes.map(type => (
-                      <IonSelectOption key={type} value={type}>
-                        {getRelationshipTypeName(type)}
-                      </IonSelectOption>
-                    ))}
-                  </IonSelect>
-                </IonItem>
-                
-                <IonItem>
-                  <IonLabel>左侧关系组</IonLabel>
-                  <IonSelect 
-                    value={quadrantConfig[QuadrantPosition.LEFT]} 
-                    onIonChange={e => handleQuadrantChange(QuadrantPosition.LEFT, e.detail.value as string[])}
-                    multiple={true}
-                    placeholder="选择左侧关系类型"
-                  >
-                    {knownRelationshipTypes.map(type => (
-                      <IonSelectOption key={type} value={type}>
-                        {getRelationshipTypeName(type)}
-                      </IonSelectOption>
-                    ))}
-                  </IonSelect>
-                </IonItem>
-                
-                <IonItem>
-                  <IonLabel>右侧关系组</IonLabel>
-                  <IonSelect 
-                    value={quadrantConfig[QuadrantPosition.RIGHT]} 
-                    onIonChange={e => handleQuadrantChange(QuadrantPosition.RIGHT, e.detail.value as string[])}
-                    multiple={true}
-                    placeholder="选择右侧关系类型"
-                  >
-                    {knownRelationshipTypes.map(type => (
-                      <IonSelectOption key={type} value={type}>
-                        {getRelationshipTypeName(type)}
-                      </IonSelectOption>
-                    ))}
-                  </IonSelect>
-                </IonItem>
-                
-                <IonItem>
-                  <IonLabel>未分配关系类型显示位置</IonLabel>
-                  <IonSelect 
-                    value={quadrantConfig.unconfiguredTypesPosition} 
-                    onIonChange={e => handleUnconfiguredPositionChange(e.detail.value as QuadrantPosition)}
-                    placeholder="选择未分配关系类型的显示位置"
-                  >
-                    <IonSelectOption value={QuadrantPosition.TOP}>上方关系组</IonSelectOption>
-                    <IonSelectOption value={QuadrantPosition.BOTTOM}>下方关系组</IonSelectOption>
-                    <IonSelectOption value={QuadrantPosition.LEFT}>左侧关系组</IonSelectOption>
-                    <IonSelectOption value={QuadrantPosition.RIGHT}>右侧关系组</IonSelectOption>
-                  </IonSelect>
-                </IonItem>
-                
-                <p className="description-text">
-                  注意：每个关系组可以包含多种关系类型。未分配到任何关系组的关系类型将会显示在指定的未分配关系组位置，若未指定则自动分配到未被配置的关系组中。
-                </p>
-              </div>
-              
-              <RelationshipConfig 
-                relationshipConfig={relationshipTypeConfig}
-                onConfigChange={handleRelationshipTypeConfigChange}
-              />
-              
-              <h4>深度配置</h4>
-              <p className="description-text">
-                设置每种关系类型的递归深度。例如，父节点深度设为3将显示"父亲的父亲的父亲"，但不会显示父亲的其他类型关系。
-                每层节点会按层级排列，如父节点的父节点会显示在父节点的更上方区域。
-              </p>
-              <div className="depth-config">
-                {knownRelationshipTypes.map(type => (
-                  <IonItem key={type}>
-                    <IonLabel>
-                      {getRelationshipTypeName(type)}
-                      <p className="relation-description">
-                        {type === CommonRelationshipTypes.FATHER && '递归显示上层父节点（层级越深越靠上）'}
-                        {type === CommonRelationshipTypes.CHILD && '递归显示下层子节点（层级越深越靠下）'}
-                        {type === CommonRelationshipTypes.BASE && '递归显示基础关系节点（层级越深越靠左）'}
-                        {type === CommonRelationshipTypes.BUILD && '递归显示构建关系节点（层级越深越靠右）'}
-                        {![CommonRelationshipTypes.FATHER, CommonRelationshipTypes.CHILD, 
-                           CommonRelationshipTypes.BASE, CommonRelationshipTypes.BUILD].includes(type) && 
-                           '递归显示自定义关系节点（根据所在关系组决定位置）'}
-                      </p>
-                    </IonLabel>
-                    <div className="depth-slider">
-                      <span className="depth-value">{depthConfig[type] || 3}</span>
-                      <IonRange
-                        min={1}
-                        max={5}
-                        step={1}
-                        snaps={true}
-                        value={depthConfig[type] || 3}
-                        onIonChange={e => handleDepthChange(type, e.detail.value as number)}
-                      />
-                    </div>
-                  </IonItem>
-                ))}
-              </div>
-              
-              <h4>显示设置</h4>
-              <div className="view-config">
-                <IonList>
-                  <IonRadioGroup 
-                    value={viewConfig.showRelationshipLabels} 
-                    onIonChange={e => handleRelationshipLabelModeChange(e.detail.value)}
-                  >
-                    <IonListHeader>
-                      <IonLabel>关系标签显示方式</IonLabel>
-                    </IonListHeader>
-                    
-                    {Object.values(RelationshipLabelMode).map(mode => (
-                      <IonItem key={mode}>
-                        <IonLabel>{labelModeNames[mode]}</IonLabel>
-                        <IonRadio slot="start" value={mode} />
-                      </IonItem>
-                    ))}
-                  </IonRadioGroup>
-                </IonList>
-              </div>
-              
-              <div className="config-actions">
-                <p className="config-note">所有配置已自动保存</p>
-                <IonButton 
-                  size="small" 
-                  fill="clear" 
-                  className="reset-config-button"
-                  onClick={handleResetAllConfigs}
-                >
-                  重置所有配置
-                </IonButton>
-              </div>
-              
-              <div className="node-position-saved">
-                <p>
-                  <IonIcon icon={bookmarkOutline} />
-                  当前节点位置已自动保存，下次访问将从此节点继续
-                </p>
-              </div>
-            </div>
-            
-            <div className="graph-view-demo-container">
-              <GraphView 
-                graphData={graphData} 
-                centralNodeId={centralNodeId} 
-                quadrantConfig={quadrantConfig}
-                depthConfig={depthConfig}
-                viewConfig={viewConfig}
-                navbarHeight={navbarHeight}
-                onNodeClick={handleNodeClick}
-                onEditNode={handleEditNode}
-                onDeleteNode={handleDeleteNode}
-                onEditEdge={handleEditEdge}
-                onDeleteEdge={handleDeleteEdge}
-                onCreateRelation={handleCreateRelation}
-              />
-            </div>
-          </>
+          <div className="graph-view-demo-container">            
+            <GraphView 
+              graphData={graphData} 
+              centralNodeId={centralNodeId} 
+              quadrantConfig={quadrantConfig}
+              depthConfig={depthConfig}
+              viewConfig={viewConfig}
+              navbarHeight={navbarHeight}
+              onNodeClick={handleNodeClick}
+              onEditNode={handleEditNode}
+              onDeleteNode={handleDeleteNode}
+              onEditEdge={handleEditEdge}
+              onDeleteEdge={handleDeleteEdge}
+              onCreateRelation={handleCreateRelation}
+            />
+          </div>
         )}
         
         <IonToast
@@ -869,6 +716,23 @@ const GraphViewDemo: React.FC = () => {
               }
             }
           ]}
+        />
+
+        {/* 设置弹窗 */}
+        <SettingsModal
+          isOpen={showSettingsModal}
+          onClose={handleCloseSettings}
+          quadrantConfig={quadrantConfig}
+          depthConfig={depthConfig}
+          viewConfig={viewConfig}
+          relationshipTypeConfig={relationshipTypeConfig}
+          knownRelationshipTypes={knownRelationshipTypes}
+          onQuadrantChange={handleQuadrantChange}
+          onDepthChange={handleDepthChange}
+          onRelationshipLabelModeChange={handleRelationshipLabelModeChange}
+          onUnconfiguredPositionChange={handleUnconfiguredPositionChange}
+          onRelationshipTypeConfigChange={handleRelationshipTypeConfigChange}
+          onResetAllConfigs={handleResetAllConfigs}
         />
       </IonContent>
     </IonPage>
