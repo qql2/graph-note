@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Redirect, Route } from 'react-router-dom';
 import { IonApp, IonRouterOutlet, setupIonicReact, useIonAlert, useIonToast } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
@@ -9,6 +9,7 @@ import DbVersionService from './services/dbVersionService';
 import StorageService  from './services/storageService';
 import AppInitializer from './components/AppInitializer/AppInitializer';
 import graphDatabaseService from './services/graph-database/GraphDatabaseService';
+import { ThemeService } from './services/ThemeService';
 
 import UsersPage from './pages/UsersPage/UsersPage';
 import GraphDBDemo from './pages/GraphDBDemo';
@@ -50,6 +51,11 @@ setupIonicReact();
 const App: React.FC = () => {
   const [presentAlert] = useIonAlert();
   const [presentToast] = useIonToast();
+
+  // 初始化主题
+  useEffect(() => {
+    ThemeService.initTheme();
+  }, []);
 
   // Function to create a new node
   const handleCreateNode = async () => {
