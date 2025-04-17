@@ -113,6 +113,14 @@ const GraphViewDemo: React.FC = () => {
     CommonRelationshipTypes.BUILD
   ]);
 
+  // 添加数据库状态的状态
+  const [dbStatusModalOpen, setDbStatusModalOpen] = useState(false);
+  const [dbStatus, setDbStatus] = useState<any>(null);
+  
+  // 添加事务提交状态的状态
+  const [transactionResultModalOpen, setTransactionResultModalOpen] = useState(false);
+  const [transactionResult, setTransactionResult] = useState<any>(null);
+
   // 从URL参数获取节点ID
   const getNodeIdFromUrl = () => {
     const searchParams = new URLSearchParams(location.search);
@@ -126,7 +134,7 @@ const GraphViewDemo: React.FC = () => {
       setError(null);
       
       // 初始化数据库 - 使用与GraphDBDemo相同的数据库名称
-      console.log('正在初始化图数据库...');
+      console.log('[GraphViewDemo] 开始加载图数据，尝试初始化数据库');
       await graphDatabaseService.initialize({
         dbName: 'graph_demo', // 改为与GraphDBDemo相同的数据库名称
         version: 1,
@@ -135,17 +143,18 @@ const GraphViewDemo: React.FC = () => {
       
       // 检查数据库是否已初始化
       if (!graphDatabaseService.isInitialized()) {
+        console.error('[GraphViewDemo] 数据库初始化失败');
         throw new Error('数据库初始化失败，请检查连接状态');
       }
-      console.log(`数据库初始化完成: ${graphDatabaseService.getCurrentDbName()}`);
       
+      console.log('[GraphViewDemo] 数据库初始化成功，当前组件:', graphDatabaseService.getAccessingComponents());
       const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
       // 获取所有节点和边
-      console.log('正在获取节点和边数据...');
+      console.log('[GraphViewDemo] 开始从数据库获取节点和边');
       const dbNodes = await db.getNodes();
       const dbEdges = await db.getEdges();
-      console.log(`获取到 ${dbNodes.length} 个节点和 ${dbEdges.length} 条边`);
+      console.log(`[GraphViewDemo] 从数据库获取到 ${dbNodes.length} 个节点和 ${dbEdges.length} 条边`);
       
       // 转换数据格式
       const convertedData = convertDbDataToGraphData(dbNodes, dbEdges);
@@ -159,10 +168,12 @@ const GraphViewDemo: React.FC = () => {
       
       // 从URL获取节点ID
       const urlNodeId = getNodeIdFromUrl();
+      console.log(`[GraphViewDemo] 选择中心节点，URL节点ID: ${urlNodeId}, 保存的节点ID: ${savedNodeId}`);
       
       // 优先级顺序: URL参数 > 上次保存的节点 > 第一个节点
       if (urlNodeId && convertedData.nodes.some(node => node.id === urlNodeId)) {
         // 如果URL中指定了节点，并且该节点存在于图中
+        console.log(`[GraphViewDemo] 使用URL指定的节点: ${urlNodeId}`);
         setCentralNodeId(urlNodeId);
         // 同时更新保存的节点ID，以便下次访问
         ConfigService.saveCentralNodeId(urlNodeId);
@@ -171,6 +182,7 @@ const GraphViewDemo: React.FC = () => {
       } 
       else if (savedNodeId && convertedData.nodes.some(node => node.id === savedNodeId)) {
         // 否则尝试恢复上次查看的节点
+        console.log(`[GraphViewDemo] 使用保存的节点: ${savedNodeId}`);
         setCentralNodeId(savedNodeId);
         setToastMessage(`继续查看节点: ${savedNodeId}`);
         setShowToast(true);
@@ -178,14 +190,15 @@ const GraphViewDemo: React.FC = () => {
       else if (convertedData.nodes.length > 0) {
         // 如果没有保存的节点或者保存的节点不存在，则使用第一个节点
         const firstNodeId = convertedData.nodes[0].id;
+        console.log(`[GraphViewDemo] 使用第一个节点: ${firstNodeId}`);
         setCentralNodeId(firstNodeId);
         ConfigService.saveCentralNodeId(firstNodeId);
       } else {
-        console.log('没有可显示的节点');
+        console.log('[GraphViewDemo] 没有节点数据');
       }
       
     } catch (err) {
-      console.error('加载图数据失败:', err);
+      console.error('[GraphViewDemo] 加载图数据失败:', err);
       setError(`加载数据失败: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
@@ -198,11 +211,12 @@ const GraphViewDemo: React.FC = () => {
     let isComponentMounted = true;
     
     // 组件挂载时加载数据
+    console.log('[GraphViewDemo] 组件挂载，准备加载数据');
     const loadDataAndInitDb = async () => {
       try {
-        console.log('GraphViewDemo组件挂载，开始加载数据...');
+        
         await loadGraphData();
-        console.log('GraphViewDemo组件数据加载完成');
+        
       } catch (err) {
         console.error('GraphViewDemo组件挂载时加载数据失败:', err);
         if (isComponentMounted) {
@@ -215,7 +229,7 @@ const GraphViewDemo: React.FC = () => {
     
     // 添加导入数据成功事件的监听器
     const handleImportSuccess = () => {
-      console.log('GraphViewDemo收到数据导入成功事件，开始刷新数据...');
+      
       loadGraphData().catch(err => {
         console.error('数据导入成功后刷新数据失败:', err);
         if (isComponentMounted) {
@@ -223,17 +237,43 @@ const GraphViewDemo: React.FC = () => {
         }
       });
     };
+
+    // 添加检查数据库状态事件的监听器
+    const handleCheckDbStatusEvent = () => {
+      console.log('[GraphViewDemo] 收到检查数据库状态事件');
+      handleCheckDbStatus().catch(err => {
+        console.error('[GraphViewDemo] 检查数据库状态失败:', err);
+        if (isComponentMounted) {
+          setError(`检查数据库状态失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      });
+    };
+    
+    // 添加手动提交事务事件的监听器
+    const handleCommitTransactionEvent = () => {
+      console.log('[GraphViewDemo] 收到手动提交事务事件');
+      handleCommitTransaction().catch(err => {
+        console.error('[GraphViewDemo] 手动提交事务失败:', err);
+        if (isComponentMounted) {
+          setError(`手动提交事务失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      });
+    };
     
     // 注册事件监听器
     window.addEventListener(DATA_IMPORT_SUCCESS_EVENT, handleImportSuccess);
+    window.addEventListener('check-db-status-event', handleCheckDbStatusEvent);
+    window.addEventListener('commit-transaction-event', handleCommitTransactionEvent);
     
     // 组件卸载时注销数据库使用和事件监听器
     return () => {
-      console.log('GraphViewDemo组件卸载，注销数据库使用');
+      
       isComponentMounted = false;
       
       // 移除事件监听器
       window.removeEventListener(DATA_IMPORT_SUCCESS_EVENT, handleImportSuccess);
+      window.removeEventListener('check-db-status-event', handleCheckDbStatusEvent);
+      window.removeEventListener('commit-transaction-event', handleCommitTransactionEvent);
       // 确保安全地注销数据库，但不强制关闭
       graphDatabaseService.closeDatabase('GraphViewDemo', false)
         .catch(err => {
@@ -246,7 +286,7 @@ const GraphViewDemo: React.FC = () => {
   const handleRefreshData = async () => {
     try {
       setLoading(true);
-      console.log('GraphViewDemo开始刷新数据...');
+      
       
       // 不关闭数据库，而是直接重新加载数据
       // 这避免了关闭/打开数据库的竞态条件
@@ -254,7 +294,7 @@ const GraphViewDemo: React.FC = () => {
       
       setToastMessage('数据已刷新');
       setShowToast(true);
-      console.log('GraphViewDemo数据刷新完成');
+      
     } catch (err) {
       console.error('刷新数据失败:', err);
       setError(`刷新数据失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -614,6 +654,55 @@ const GraphViewDemo: React.FC = () => {
     setShowSettingsModal(false);
   };
 
+  // 添加处理查询数据库状态的函数
+  const handleCheckDbStatus = async () => {
+    try {
+      setLoading(true);
+      console.log('[GraphViewDemo] 查询数据库状态');
+      
+      const status = await graphDatabaseService.getDatabaseStatus('GraphViewDemo');
+      
+      console.log('[GraphViewDemo] 数据库状态:', status);
+      setDbStatus(status);
+      setDbStatusModalOpen(true);
+    } catch (error) {
+      console.error('[GraphViewDemo] 获取数据库状态失败:', error);
+      setToastMessage(`获取数据库状态失败: ${error instanceof Error ? error.message : String(error)}`);
+      setShowToast(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 添加处理手动提交事务的函数
+  const handleCommitTransaction = async () => {
+    try {
+      setLoading(true);
+      console.log('[GraphViewDemo] 手动提交事务');
+      
+      const result = await graphDatabaseService.forceCommitTransaction('GraphViewDemo');
+      
+      console.log('[GraphViewDemo] 手动提交事务结果:', result);
+      setTransactionResult(result);
+      setTransactionResultModalOpen(true);
+      
+      // 提交后刷新数据
+      if (result.success) {
+        await loadGraphData();
+        setToastMessage('已手动提交事务并刷新数据');
+      } else {
+        setToastMessage(`手动提交事务失败: ${result.message}`);
+      }
+      setShowToast(true);
+    } catch (error) {
+      console.error('[GraphViewDemo] 手动提交事务失败:', error);
+      setToastMessage(`手动提交事务失败: ${error instanceof Error ? error.message : String(error)}`);
+      setShowToast(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <IonPage>
       <IonHeader>
@@ -733,6 +822,43 @@ const GraphViewDemo: React.FC = () => {
           onUnconfiguredPositionChange={handleUnconfiguredPositionChange}
           onRelationshipTypeConfigChange={handleRelationshipTypeConfigChange}
           onResetAllConfigs={handleResetAllConfigs}
+        />
+        
+        {/* 添加数据库状态弹窗 */}
+        <IonAlert
+          isOpen={dbStatusModalOpen}
+          onDidDismiss={() => setDbStatusModalOpen(false)}
+          header={'数据库状态'}
+          message={
+            dbStatus ? 
+            `平台: ${dbStatus.database?.platform || '未知'}\n` +
+            `数据库名称: ${dbStatus.database?.dbName || '未知'}\n` +
+            `连接状态: ${dbStatus.database?.isConnected ? '已连接' : '未连接'}\n` +
+            `标记的事务状态: ${dbStatus.database?.inTransaction ? '在事务中' : '无事务'}\n` +
+            `实际事务状态: ${dbStatus.database?.actualTransactionActive ? '活跃' : '未活跃'}\n` +
+            `引用计数: ${dbStatus.service?.referenceCount || 0}\n` +
+            `正在关闭: ${dbStatus.service?.closingInProgress ? '是' : '否'}\n` +
+            `已初始化: ${dbStatus.service?.initialized ? '是' : '否'}\n` +
+            `访问组件: ${dbStatus.service?.accessingComponents?.join(', ') || '无'}\n` +
+            `时间戳: ${dbStatus.timestamp || '未知'}`
+            : '无数据'
+          }
+          buttons={['关闭']}
+        />
+        
+        {/* 添加事务提交结果弹窗 */}
+        <IonAlert
+          isOpen={transactionResultModalOpen}
+          onDidDismiss={() => setTransactionResultModalOpen(false)}
+          header={'事务提交结果'}
+          message={
+            transactionResult ? 
+            `状态: ${transactionResult.success ? '成功' : '失败'}\n` +
+            `消息: ${transactionResult.message || '无'}\n` +
+            `时间戳: ${new Date().toISOString()}`
+            : '无数据'
+          }
+          buttons={['关闭']}
         />
       </IonContent>
     </IonPage>

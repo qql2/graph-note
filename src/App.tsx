@@ -145,6 +145,20 @@ const App: React.FC = () => {
     window.dispatchEvent(event);
   };
 
+  // 添加处理检查数据库状态的函数
+  const handleCheckDbStatus = () => {
+    // 创建一个新的自定义事件，用于通知当前页面检查数据库状态
+    const event = new CustomEvent('check-db-status-event');
+    window.dispatchEvent(event);
+  };
+
+  // 添加处理手动提交事务的函数
+  const handleCommitTransaction = () => {
+    // 创建一个新的自定义事件，用于通知当前页面手动提交事务
+    const event = new CustomEvent('commit-transaction-event');
+    window.dispatchEvent(event);
+  };
+
   return (
     <SqliteServiceContext.Provider value={SqliteService}>
       <DbVersionServiceContext.Provider value={DbVersionService}>
@@ -156,6 +170,8 @@ const App: React.FC = () => {
                   onCreateNode={handleCreateNode} 
                   onSearch={handleSearch}
                   onImportSuccess={handleImportSuccess}
+                  onCheckDbStatus={handleCheckDbStatus}
+                  onCommitTransaction={handleCommitTransaction}
                 />
                 <IonRouterOutlet id="main-content">
                   <Route exact path="/home">
