@@ -34,7 +34,7 @@ const SearchPage: React.FC = () => {
     
     // 组件卸载时注销数据库使用
     return () => {
-      console.log('SearchPage组件卸载，注销数据库使用');
+      
       graphDatabaseService.closeDatabase('SearchPage', false).catch(err => {
         console.error('注销数据库使用失败:', err);
       });

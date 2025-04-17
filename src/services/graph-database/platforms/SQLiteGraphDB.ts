@@ -11,6 +11,53 @@ export class SQLiteGraphDB extends BaseGraphDB {
   private transactionQueue: Promise<any> = Promise.resolve();
   private isInTransaction: boolean = false;
 
+  // 添加实现抽象方法getEngine，修复linter错误
+  protected async getEngine(): Promise<SQLiteEngine> {
+    // 如果没有连接，抛出错误
+    if (!this.connection) {
+      throw new DatabaseError("Database connection not established");
+    }
+
+    // 返回当前引擎实例
+    return {
+      query: async (sql: string, params?: any[]): Promise<{ values?: any[] }> => {
+        return await this.connection!.query(sql, params);
+      },
+      run: async (sql: string, params?: any[]): Promise<void> => {
+        await this.connection!.run(sql, params, false);
+      },
+      isOpen: (): boolean => {
+        return !!this.connection;
+      },
+      open: async (): Promise<void> => {
+        if (this.connection) {
+          await this.connection.open();
+        }
+      },
+      close: async (): Promise<void> => {
+        if (this.connection) {
+          await sqliteService.closeDatabase(this.dbName, false);
+          this.connection = null;
+        }
+      },
+      beginTransaction: async (): Promise<void> => {
+        await this.beginTransaction();
+      },
+      commitTransaction: async (): Promise<void> => {
+        await this.commitTransaction();
+      },
+      rollbackTransaction: async (): Promise<void> => {
+        await this.rollbackTransaction();
+      },
+      export: (): Uint8Array => {
+        return new Uint8Array(0);
+      },
+      transaction: async <T>(operation: () => T | Promise<T>): Promise<T> => {
+        return this.transaction(operation);
+      },
+    };
+  }
+
   protected async createEngine(config: DatabaseConfig): Promise<SQLiteEngine> {
     try {
       this.dbName = config.dbName || this.dbName;
@@ -158,39 +205,50 @@ export class SQLiteGraphDB extends BaseGraphDB {
   async transaction<T>(operation: () => T | Promise<T>): Promise<T> {
     return (this.transactionQueue = this.transactionQueue.then(async () => {
       if (!this.connection) {
+        console.error('[SQLiteGraphDB] 事务开始失败: 数据库连接未建立');
         throw new DatabaseError("Database connection not established");
       }
 
+      console.log(`[SQLiteGraphDB] 尝试开始事务，平台: ${sqliteService.getPlatform()}, 数据库: ${this.dbName}`);
       let alreadyInTransaction = false;
       try {
         await this.connection.beginTransaction();
         this.isInTransaction = true;
+        console.log(`[SQLiteGraphDB] 成功开始事务`);
       } catch (error:any) {
-        if (error.message && /Already in transaction|cannot start a transaction within a transaction/.test(error.message)) {
+        if (error.message && /Already in transaction|cannot start a transaction within a transaction/i.test(error.message)) {
           alreadyInTransaction = true;
+          console.log(`[SQLiteGraphDB] 已经在事务中，继续执行操作`);
+        } else {
+          console.error(`[SQLiteGraphDB] 开始事务失败:`, error);
+          throw error;
         }
       }
 
       // 如果已经在事务中，直接执行操作
       if (alreadyInTransaction) {
+        console.log(`[SQLiteGraphDB] 使用现有事务执行操作`);
         return await operation();
       }
 
       try {
-
         // 检查事务是否真的开始了
         const transactionActive = await this.connection.isTransactionActive();
         if (transactionActive.result === false) {
+          console.error(`[SQLiteGraphDB] 事务未成功激活`);
           throw new TransactionError("Failed to begin transaction");
         }
+        console.log(`[SQLiteGraphDB] 事务成功激活，准备执行操作`);
 
         let result;
         try {
           // 执行操作
+          console.log(`[SQLiteGraphDB] 在事务中执行操作`);
           result = await operation();
+          console.log(`[SQLiteGraphDB] 操作执行成功，准备提交事务`);
         } catch (error) {
           // 如果执行失败，回滚事务
-          ;
+          console.error(`[SQLiteGraphDB] 操作执行失败，回滚事务:`, error);
           await this.connection.rollbackTransaction();
           this.isInTransaction = false;
           throw error;
@@ -198,15 +256,15 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
         // 提交事务
         try {
-          ;
+          console.log(`[SQLiteGraphDB] 尝试提交事务`);
           await this.connection.commitTransaction();
-          ;
+          console.log(`[SQLiteGraphDB] 事务提交成功`);
         } catch (error: any) {
           if(error.message && error.message.includes('no transaction is active')){
-            console.warn('Transaction has been ended unexpectedly, but operation was successful');
+            console.warn('[SQLiteGraphDB] 事务已意外结束，但操作已成功执行');
             // 尽管事务状态有问题，但操作已经执行成功，继续保存数据
           } else {
-            console.error("Error committing transaction:", error);
+            console.error("[SQLiteGraphDB] 提交事务时出错:", error);
             // 只有在提交时出现非事务状态类错误时才抛出
             this.isInTransaction = false;
             throw error;
@@ -219,10 +277,11 @@ export class SQLiteGraphDB extends BaseGraphDB {
         // 注意：这是事务API自动调用的persistData，不应在operation函数中再次调用
         try {
           // TODO (AI切勿擅自修改) 未来将persistData移出事务API, 需要设计一个API, 为所有修改操作自动调用持久化
+          console.log(`[SQLiteGraphDB] 事务完成，准备持久化数据`);
           await this.persistData();
-          ;
+          console.log(`[SQLiteGraphDB] 数据持久化成功`);
         } catch (persistError) {
-          console.error("Error persisting data:", persistError);
+          console.error("[SQLiteGraphDB] 持久化数据失败:", persistError);
           // 保存数据失败不应该影响操作的结果
         }
 
@@ -230,7 +289,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
       } catch (error: any) {
         this.isInTransaction = false;
         const msg = error.message ? error.message : error;
-        console.error("Transaction failed:", msg);
+        console.error("[SQLiteGraphDB] 事务失败:", msg);
         throw new DatabaseError(`Transaction failed: ${msg}`, error);
       }
     }));
@@ -238,14 +297,26 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
   protected async persistData(): Promise<void> {
     try {
-      if (sqliteService.getPlatform() === "web") {
+      const platform = sqliteService.getPlatform();
+      console.log(`[SQLiteGraphDB] 尝试保存数据库 ${this.dbName}，当前平台: ${platform}`);
+      
+      if (platform === "web") {
+        console.log(`[SQLiteGraphDB] 在web平台上保存数据到store: ${this.dbName}`);
         await sqliteService.saveToStore(this.dbName);
-        console.log('平台为web, 保存到IndexedDB');
+        console.log(`[SQLiteGraphDB] 成功保存数据到store: ${this.dbName}`);
+      } else if (platform === "android") {
+        // TODO: (AI不要擅自实现)这是个临时解决方案(危险), 未来需要彻底解决Android平台上事务管理的问题
+        // 在Android平台上, 如果有意外的事务处于活跃状态, 则强制提交事务
+        // if((await this.connection?.isTransactionActive())?.result){
+        //   await this.connection?.commitTransaction()
+        // }
       } else {
         // electron 平台不用手动保存到本地磁盘
+        console.log(`[SQLiteGraphDB] ${platform}平台不需要手动保存到本地磁盘`);
         // await sqliteService.saveToLocalDisk(this.dbName);
       }
     } catch (error) {
+      console.error(`[SQLiteGraphDB] 保存数据失败: ${error}`);
       throw new DatabaseError(
         `Failed to persist data: ${error}`,
         error as Error
@@ -293,5 +364,121 @@ export class SQLiteGraphDB extends BaseGraphDB {
   // 重写inTransaction属性，让BaseGraphDB可以获取当前事务状态
   protected override get inTransaction(): boolean {
     return this.isInTransaction;
+  }
+
+  // 添加获取数据库状态的方法，用于调试
+  async getDatabaseStatus(): Promise<any> {
+    const platform = sqliteService.getPlatform();
+    let transactionStatus = false;
+    let connectionStatus = false;
+    
+    try {
+      // 检查连接状态
+      connectionStatus = !!this.connection;
+      
+      // 检查事务状态
+      if (this.connection) {
+        const result = await this.connection.isTransactionActive();
+        transactionStatus = result.result as boolean;
+      }
+      
+      return {
+        platform,
+        dbName: this.dbName,
+        dbVersion: this.dbVersion,
+        isConnected: connectionStatus,
+        inTransaction: this.isInTransaction,
+        actualTransactionActive: transactionStatus,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('[SQLiteGraphDB] 获取数据库状态失败:', error);
+      return {
+        platform,
+        dbName: this.dbName,
+        error: `获取状态失败: ${error}`,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  // 强制提交当前事务并保存数据，用于调试
+  async forceCommitTransaction(): Promise<{ success: boolean, message: string }> {
+    console.log(`[SQLiteGraphDB] 尝试强制提交事务，平台: ${sqliteService.getPlatform()}`);
+    
+    try {
+      if (!this.connection) {
+        const message = "数据库连接未建立，无法提交事务";
+        console.error(`[SQLiteGraphDB] ${message}`);
+        return { success: false, message };
+      }
+      
+      // 检查事务状态
+      const transactionActive = await this.connection.isTransactionActive();
+      
+      if (!transactionActive.result) {
+        const message = "当前没有活跃的事务，尝试执行空事务";
+        console.log(`[SQLiteGraphDB] ${message}`);
+        // 没有活跃事务，尝试开始一个简单事务并提交
+        try {
+          await this.connection.beginTransaction();
+          // 执行一个简单查询
+          await this.connection.query("SELECT 1");
+          await this.connection.commitTransaction();
+          
+          // 尝试持久化数据
+          await this.persistData();
+          
+          return { 
+            success: true, 
+            message: "成功执行并提交了一个空事务，并尝试持久化数据" 
+          };
+        } catch (error) {
+          const errorMsg = `尝试执行空事务失败: ${error}`;
+          console.error(`[SQLiteGraphDB] ${errorMsg}`);
+          return { success: false, message: errorMsg };
+        }
+      }
+      
+      // 有活跃事务，尝试提交
+      try {
+        console.log(`[SQLiteGraphDB] 有活跃事务，尝试提交`);
+        await this.connection.commitTransaction();
+        console.log(`[SQLiteGraphDB] 事务提交成功`);
+        
+        // 重置事务状态
+        this.isInTransaction = false;
+        
+        // 尝试持久化数据
+        await this.persistData();
+        
+        return { 
+          success: true, 
+          message: "成功提交了活跃事务并持久化数据" 
+        };
+      } catch (error) {
+        const errorMsg = `提交活跃事务失败: ${error}`;
+        console.error(`[SQLiteGraphDB] ${errorMsg}`);
+        
+        // 尝试回滚事务
+        try {
+          await this.connection.rollbackTransaction();
+          this.isInTransaction = false;
+          return { 
+            success: false, 
+            message: `${errorMsg}，已回滚事务` 
+          };
+        } catch (rollbackError) {
+          return { 
+            success: false, 
+            message: `${errorMsg}，且回滚也失败: ${rollbackError}` 
+          };
+        }
+      }
+    } catch (error) {
+      const errorMsg = `强制提交事务时发生错误: ${error}`;
+      console.error(`[SQLiteGraphDB] ${errorMsg}`);
+      return { success: false, message: errorMsg };
+    }
   }
 }

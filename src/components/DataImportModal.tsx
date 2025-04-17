@@ -64,7 +64,7 @@ const DataImportModal: React.FC<DataImportModalProps> = ({ isOpen, onClose, onIm
         
         if (!result.valid) {
 			setErrorMessage(`文件验证失败: ${result.errors.join(', ')}`);
-			console.log(result.errors.join(', '));
+			console.error(result.errors.join(', '));
           setShowError(true);
         }
       } catch (error) {

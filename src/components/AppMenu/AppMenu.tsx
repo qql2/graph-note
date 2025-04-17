@@ -8,9 +8,11 @@ interface AppMenuProps {
   onCreateNode?: () => void; // Add callback for creating a new node
   onSearch?: () => void; // Add callback for searching nodes and edges
   onImportSuccess?: () => void; // Add callback for import success
+  onCheckDbStatus?: () => void; // 添加检查数据库状态的回调
+  onCommitTransaction?: () => void; // 添加手动提交事务的回调
 }
 
-const AppMenu: FC<AppMenuProps> = ({ onCreateNode, onSearch, onImportSuccess }) => {
+const AppMenu: FC<AppMenuProps> = ({ onCreateNode, onSearch, onImportSuccess, onCheckDbStatus, onCommitTransaction }) => {
   const closeMenu = () => {
     const menu = document.querySelector('ion-menu');
     menu!.close();
@@ -30,6 +32,22 @@ const AppMenu: FC<AppMenuProps> = ({ onCreateNode, onSearch, onImportSuccess }) 
     }
   };
 
+  // 添加处理检查数据库状态的函数
+  const handleCheckDbStatus = () => {
+    closeMenu();
+    if (onCheckDbStatus) {
+      onCheckDbStatus();
+    }
+  };
+
+  // 添加处理手动提交事务的函数
+  const handleCommitTransaction = () => {
+    closeMenu();
+    if (onCommitTransaction) {
+      onCommitTransaction();
+    }
+  };
+
   return (
     <IonMenu className="AppMenu" side="end" contentId="main-content">
       <IonHeader>
@@ -44,6 +62,20 @@ const AppMenu: FC<AppMenuProps> = ({ onCreateNode, onSearch, onImportSuccess }) 
           </IonItem>
           <IonItem onClick={handleSearch}>
             <IonButton size="default" expand="full">搜索节点和关系</IonButton>
+          </IonItem>
+          {/* 调试工具 */}
+          <IonItem>
+            <IonLabel>数据库调试工具</IonLabel>
+          </IonItem>
+          <IonItem onClick={handleCheckDbStatus}>
+            <IonButton size="default" expand="full" color="warning">检查数据库状态</IonButton>
+          </IonItem>
+          <IonItem onClick={handleCommitTransaction}>
+            <IonButton size="default" expand="full" color="danger">手动提交事务</IonButton>
+          </IonItem>
+          {/* 导航链接 */}
+          <IonItem>
+            <IonLabel>页面导航</IonLabel>
           </IonItem>
           <IonItem onClick={closeMenu}>
             <IonButton size="default" routerLink="/users" expand="full">Managing Users</IonButton>

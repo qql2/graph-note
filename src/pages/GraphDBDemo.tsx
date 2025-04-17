@@ -71,7 +71,7 @@ const GraphDBDemo: React.FC = () => {
     const initDB = async () => {
       try {
         setLoading(true);
-        console.log('GraphDBDemo: 正在初始化数据库...');
+        
         await graphDatabaseService.initialize({
           dbName: 'graph_demo',
           version: 1,
@@ -83,7 +83,7 @@ const GraphDBDemo: React.FC = () => {
           throw new Error('数据库初始化失败，请检查连接状态');
         }
         
-        console.log(`GraphDBDemo: 数据库初始化完成: ${graphDatabaseService.getCurrentDbName()}`);
+        
         
         if (isComponentMounted) {
           setDbInitialized(true);
@@ -109,7 +109,7 @@ const GraphDBDemo: React.FC = () => {
       isComponentMounted = false;
       
       // 组件卸载时注销数据库使用
-      console.log('GraphDBDemo组件卸载，注销数据库使用');
+      
       graphDatabaseService.closeDatabase('GraphDBDemo', false).catch(err => {
         console.error('GraphDBDemo组件卸载时注销数据库使用失败:', err);
       });
@@ -142,10 +142,10 @@ const GraphDBDemo: React.FC = () => {
       }
       
       const db = graphDatabaseService.getDatabase('GraphDBDemo');
-      console.log('正在获取节点和边数据...');
+      
       const fetchedNodes = await db.getNodes();
       const fetchedEdges = await db.getEdges();
-      console.log(`获取到 ${fetchedNodes.length} 个节点和 ${fetchedEdges.length} 条边`);
+      
       
       setNodes(fetchedNodes);
       setEdges(fetchedEdges);
@@ -161,14 +161,14 @@ const GraphDBDemo: React.FC = () => {
   const refreshData = async () => {
     try {
       setLoading(true);
-      console.log('GraphDBDemo开始刷新数据...');
+      
       
       // 不关闭数据库，直接重新获取数据
       // 这避免了关闭后重新连接带来的竞态问题
       await fetchData();
       
       showMessage('数据已刷新', 'success');
-      console.log('GraphDBDemo数据刷新完成');
+      
     } catch (error) {
       console.error('刷新数据失败:', error);
       showMessage(`刷新数据失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
