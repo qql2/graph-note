@@ -12,6 +12,13 @@
   width: 100%;
   height: 100%;
   background-color: var(--ion-background-color, #ffffff);
+  touch-action: none; /* 防止所有浏览器默认触摸行为 */
+  -webkit-touch-callout: none; /* 禁止iOS长按弹出菜单 */
+  -webkit-user-select: none; /* Safari */
+  -khtml-user-select: none; /* Konqueror HTML */
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* Internet Explorer/Edge */
+  user-select: none; /* 非IE浏览器 */
 }
 
 /* 隐藏锚点，只在需要时显示 */
@@ -209,4 +216,47 @@
   width: 1px;
   height: 100%;
   background-color: rgba(var(--ion-text-color-rgb, 0, 0, 0), 0.1);
+}
+
+/* 移动端触摸相关样式 */
+@media (hover: none) and (pointer: coarse) {
+  /* 增大控制按钮尺寸以便触摸操作 */
+  .graph-view-controls {
+    top: 15px;
+    right: 15px;
+  }
+
+  .graph-view-control-button {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    margin-bottom: 5px; /* 增加按钮间距 */
+  }
+
+  /* 减少触摸操作的透明度变化效果，使其更直观 */
+  .x6-node:hover .x6-port-body,
+  .x6-edge:hover + .x6-node .x6-port-body {
+    opacity: 0.7;
+  }
+
+  /* 增大节点点击区域 */
+  .x6-node {
+    touch-action: none; 
+  }
+
+  /* 防止X6画布默认的触摸行为 */
+  .x6-graph {
+    touch-action: none !important;
+  }
+  
+  /* 防止X6画布容器的默认触摸行为 */
+  .x6-graph-scroller {
+    touch-action: none !important;
+  }
+
+  /* 上下文菜单项增大点击区域 */
+  .context-menu-item {
+    padding: 12px 16px;
+    font-size: 16px;
+  }
 }

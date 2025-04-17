@@ -134,7 +134,7 @@ const GraphViewDemo: React.FC = () => {
       setError(null);
       
       // 初始化数据库 - 使用与GraphDBDemo相同的数据库名称
-      console.log('[GraphViewDemo] 开始加载图数据，尝试初始化数据库');
+      
       await graphDatabaseService.initialize({
         dbName: 'graph_demo', // 改为与GraphDBDemo相同的数据库名称
         version: 1,
@@ -147,14 +147,14 @@ const GraphViewDemo: React.FC = () => {
         throw new Error('数据库初始化失败，请检查连接状态');
       }
       
-      console.log('[GraphViewDemo] 数据库初始化成功，当前组件:', graphDatabaseService.getAccessingComponents());
+      
       const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
       // 获取所有节点和边
-      console.log('[GraphViewDemo] 开始从数据库获取节点和边');
+      
       const dbNodes = await db.getNodes();
       const dbEdges = await db.getEdges();
-      console.log(`[GraphViewDemo] 从数据库获取到 ${dbNodes.length} 个节点和 ${dbEdges.length} 条边`);
+      
       
       // 转换数据格式
       const convertedData = convertDbDataToGraphData(dbNodes, dbEdges);
@@ -168,12 +168,12 @@ const GraphViewDemo: React.FC = () => {
       
       // 从URL获取节点ID
       const urlNodeId = getNodeIdFromUrl();
-      console.log(`[GraphViewDemo] 选择中心节点，URL节点ID: ${urlNodeId}, 保存的节点ID: ${savedNodeId}`);
+      
       
       // 优先级顺序: URL参数 > 上次保存的节点 > 第一个节点
       if (urlNodeId && convertedData.nodes.some(node => node.id === urlNodeId)) {
         // 如果URL中指定了节点，并且该节点存在于图中
-        console.log(`[GraphViewDemo] 使用URL指定的节点: ${urlNodeId}`);
+        
         setCentralNodeId(urlNodeId);
         // 同时更新保存的节点ID，以便下次访问
         ConfigService.saveCentralNodeId(urlNodeId);
@@ -182,7 +182,7 @@ const GraphViewDemo: React.FC = () => {
       } 
       else if (savedNodeId && convertedData.nodes.some(node => node.id === savedNodeId)) {
         // 否则尝试恢复上次查看的节点
-        console.log(`[GraphViewDemo] 使用保存的节点: ${savedNodeId}`);
+        
         setCentralNodeId(savedNodeId);
         setToastMessage(`继续查看节点: ${savedNodeId}`);
         setShowToast(true);
@@ -190,11 +190,11 @@ const GraphViewDemo: React.FC = () => {
       else if (convertedData.nodes.length > 0) {
         // 如果没有保存的节点或者保存的节点不存在，则使用第一个节点
         const firstNodeId = convertedData.nodes[0].id;
-        console.log(`[GraphViewDemo] 使用第一个节点: ${firstNodeId}`);
+        
         setCentralNodeId(firstNodeId);
         ConfigService.saveCentralNodeId(firstNodeId);
       } else {
-        console.log('[GraphViewDemo] 没有节点数据');
+        
       }
       
     } catch (err) {
@@ -211,7 +211,7 @@ const GraphViewDemo: React.FC = () => {
     let isComponentMounted = true;
     
     // 组件挂载时加载数据
-    console.log('[GraphViewDemo] 组件挂载，准备加载数据');
+    
     const loadDataAndInitDb = async () => {
       try {
         
@@ -240,7 +240,7 @@ const GraphViewDemo: React.FC = () => {
 
     // 添加检查数据库状态事件的监听器
     const handleCheckDbStatusEvent = () => {
-      console.log('[GraphViewDemo] 收到检查数据库状态事件');
+      
       handleCheckDbStatus().catch(err => {
         console.error('[GraphViewDemo] 检查数据库状态失败:', err);
         if (isComponentMounted) {
@@ -251,7 +251,7 @@ const GraphViewDemo: React.FC = () => {
     
     // 添加手动提交事务事件的监听器
     const handleCommitTransactionEvent = () => {
-      console.log('[GraphViewDemo] 收到手动提交事务事件');
+      
       handleCommitTransaction().catch(err => {
         console.error('[GraphViewDemo] 手动提交事务失败:', err);
         if (isComponentMounted) {
@@ -658,11 +658,11 @@ const GraphViewDemo: React.FC = () => {
   const handleCheckDbStatus = async () => {
     try {
       setLoading(true);
-      console.log('[GraphViewDemo] 查询数据库状态');
+      
       
       const status = await graphDatabaseService.getDatabaseStatus('GraphViewDemo');
       
-      console.log('[GraphViewDemo] 数据库状态:', status);
+      
       setDbStatus(status);
       setDbStatusModalOpen(true);
     } catch (error) {
@@ -678,11 +678,11 @@ const GraphViewDemo: React.FC = () => {
   const handleCommitTransaction = async () => {
     try {
       setLoading(true);
-      console.log('[GraphViewDemo] 手动提交事务');
+      
       
       const result = await graphDatabaseService.forceCommitTransaction('GraphViewDemo');
       
-      console.log('[GraphViewDemo] 手动提交事务结果:', result);
+      
       setTransactionResult(result);
       setTransactionResultModalOpen(true);
       

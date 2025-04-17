@@ -29,7 +29,7 @@ class GraphDatabaseService {
   registerComponent(componentName: string): void {
     this.accessingComponents.add(componentName);
     this.referenceCount++;
-    console.log(`[GraphDatabaseService] 组件 ${componentName} 注册使用数据库，引用计数: ${this.referenceCount}`);
+    
   }
 
   // 注销组件对数据库的使用
@@ -39,38 +39,38 @@ class GraphDatabaseService {
       if (this.referenceCount > 0) {
         this.referenceCount--;
       }
-      console.log(`[GraphDatabaseService] 组件 ${componentName} 注销使用数据库，引用计数: ${this.referenceCount}`);
+      
     }
   }
 
   async initialize(config?: DatabaseConfig, componentName: string = "unknown"): Promise<void> {
     // 注册组件访问
     this.registerComponent(componentName);
-    console.log(`[GraphDatabaseService] ${componentName} 请求初始化数据库，当前引用计数: ${this.referenceCount}，访问组件: [${Array.from(this.accessingComponents).join(', ')}]`);
+    
     
     // 如果数据库已经初始化，且使用相同的数据库名称，直接返回
     const newDbName = config?.dbName || "graph_database";
     if (this.initialized && this.dbName === newDbName) {
-      console.log(`[GraphDatabaseService] 数据库 ${this.dbName} 已初始化，直接返回`);
+      
       return;
     }
     
     // 如果已经有一个初始化过程在进行中，等待它完成
     if (this.initializationPromise) {
       try {
-        console.log(`[GraphDatabaseService] ${componentName} 等待现有初始化过程完成...`);
+        
         await this.initializationPromise;
         
         // 如果数据库名称与当前不同，需要重新初始化
         if (this.initialized && this.dbName !== newDbName) {
-          console.log(`[GraphDatabaseService] ${componentName} 请求的数据库名称(${newDbName})与当前(${this.dbName})不同，需要重新初始化`);
+          
           await this._doCloseDatabase();
           return this.initialize(config, componentName);
         }
         
         // 如果初始化成功且使用相同的数据库名称，直接返回
         if (this.initialized) {
-          console.log(`[GraphDatabaseService] ${componentName} 初始化完成，数据库名称: ${this.dbName}`);
+          
           return;
         }
       } catch (error) {
@@ -81,11 +81,11 @@ class GraphDatabaseService {
     }
     
     // 创建一个新的初始化Promise
-    console.log(`[GraphDatabaseService] ${componentName} 开始新的初始化过程，数据库名称: ${newDbName}`);
+    
     this.initializationPromise = this._doInitialize(config);
     try {
       await this.initializationPromise;
-      console.log(`[GraphDatabaseService] ${componentName} 初始化成功，数据库名称: ${this.dbName}`);
+      
     } catch (error) {
       // 初始化失败，清空initializationPromise以便下次尝试
       this.initializationPromise = null;
@@ -161,23 +161,23 @@ class GraphDatabaseService {
   async closeDatabase(componentName: string = "unknown", force: boolean = false): Promise<void> {
     // 注销组件访问
     this.unregisterComponent(componentName);
-    console.log(`[GraphDatabaseService] 组件 ${componentName} 请求关闭数据库，强制关闭: ${force}，引用计数: ${this.referenceCount}`);
+    
     
     // 如果不是强制关闭且还有其他组件在使用数据库，就不关闭
     if (!force && this.referenceCount > 0) {
-      console.log(`[GraphDatabaseService] 引用计数不为0，跳过关闭操作，当前访问组件: [${Array.from(this.accessingComponents).join(', ')}]`);
+      
       return;
     }
     
     // 如果有初始化过程正在进行，可能有新组件正在等待初始化完成
     // 此时即使引用计数为0也不应关闭数据库
     if (!force && this.initializationPromise) {
-      console.log(`[GraphDatabaseService] 初始化过程正在进行中，跳过关闭操作`);
+      
       return;
     }
     
     // 真正的关闭逻辑
-    console.log(`[GraphDatabaseService] 执行关闭数据库操作`);
+    
     return this._doCloseDatabase();
   }
   
@@ -185,25 +185,25 @@ class GraphDatabaseService {
   private async _doCloseDatabase(): Promise<void> {
     // 防止并发关闭操作
     if (this.closingInProgress) {
-      console.log(`[GraphDatabaseService] 关闭操作正在进行中，跳过当前请求`);
+      
       return;
     }
     
     // 在关闭前再次检查引用计数，以防在等待初始化完成期间有新组件注册
     if (this.referenceCount > 0) {
-      console.log(`[GraphDatabaseService] 引用计数不为0，取消关闭操作，当前访问组件: [${Array.from(this.accessingComponents).join(', ')}]`);
+      
       return;
     }
     
     // 如果有初始化进行中，等待它完成再关闭
     if (this.initializationPromise) {
       try {
-        console.log(`[GraphDatabaseService] 等待初始化完成后再关闭数据库`);
+        
         await this.initializationPromise;
         
         // 初始化完成后再次检查引用计数
         if (this.referenceCount > 0) {
-          console.log(`[GraphDatabaseService] 初始化完成，但引用计数不为0，取消关闭操作`);
+          
           return;
         }
       } catch (error) {
@@ -215,10 +215,10 @@ class GraphDatabaseService {
     if (this.initialized) {
       try {
         this.closingInProgress = true;
-        console.log(`[GraphDatabaseService] 开始关闭数据库 ${this.dbName}`);
+        
         await this.db.close();
         this.initialized = false;
-        console.log(`[GraphDatabaseService] 数据库 ${this.dbName} 已成功关闭`);
+        
         
         // 重置引用计数和访问组件列表
         this.referenceCount = 0;
@@ -232,7 +232,7 @@ class GraphDatabaseService {
         this.closingInProgress = false;
       }
     } else {
-      console.log(`[GraphDatabaseService] 数据库未初始化，无需关闭`);
+      
     }
   }
   
@@ -256,7 +256,7 @@ class GraphDatabaseService {
   
   // 获取数据库状态信息（用于调试）
   async getDatabaseStatus(componentName: string = "unknown"): Promise<any> {
-    console.log(`[GraphDatabaseService] 组件 ${componentName} 请求数据库状态信息`);
+    
     
     // 服务层状态信息
     const serviceStatus = {
@@ -289,7 +289,7 @@ class GraphDatabaseService {
 
   // 强制提交当前事务（用于调试）
   async forceCommitTransaction(componentName: string = "unknown"): Promise<{ success: boolean, message: string }> {
-    console.log(`[GraphDatabaseService] 组件 ${componentName} 请求强制提交事务`);
+    
     
     if (!this.initialized) {
       const message = "数据库未初始化，无法提交事务";
@@ -301,7 +301,7 @@ class GraphDatabaseService {
     try {
       if (this.db && typeof (this.db as any).forceCommitTransaction === 'function') {
         const result = await (this.db as any).forceCommitTransaction();
-        console.log(`[GraphDatabaseService] 强制提交事务结果:`, result);
+        
         return result;
       } else {
         const message = "底层数据库不支持强制提交事务";
