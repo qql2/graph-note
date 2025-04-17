@@ -57,3 +57,16 @@ await this.withTransaction(async () => {
 
 ### 修复时间
 2025-04-17
+
+## sql.js v13版本不兼容
+### 问题描述
+在使用sql.js v13版本时，会出现不兼容的问题。出现`Aborted(LinkError: WebAssembly.instantiate(): Import #34 "a" "I": function import requires a callable). Build with -sASSERTIONS for more info.`报错
+
+### 原因分析
+应该是jeep-sql的bug, 不支持sql.js v13版本, 但安装jeep-sql时会自动安装最新的sql.js v13版本, 导致不兼容
+
+### 解决方法
+直接指定顶层依赖sql.js版本未1.12.0
+
+### 修复时间
+2025-04-17
