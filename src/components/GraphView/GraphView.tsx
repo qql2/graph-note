@@ -216,6 +216,14 @@ const GraphView: React.FC<GraphViewProps> = ({
   // 缓存当前存在的所有关系类型
   const [existingRelationshipTypes, setExistingRelationshipTypes] = useState<string[]>([]);
 
+  // 触摸拖动相关状态 - 使用 useRef 替代 useState
+  const isBlankTouchRef = useRef(false);
+  const isDraggingRef = useRef(false);
+  const lastTouchXRef = useRef(0);
+  const lastTouchYRef = useRef(0);
+  const initialPinchDistanceRef = useRef(0);
+  const initialScaleRef = useRef(1);
+
   // 在组件加载时收集所有现有的关系类型
   useEffect(() => {
     if (graphData && graphData.edges) {
@@ -398,6 +406,210 @@ const GraphView: React.FC<GraphViewProps> = ({
     });
   };
 
+  // 初始化触摸事件处理
+  useEffect(() => {
+    if (!graph || !containerRef.current) return;
+
+    // 计算两点之间的距离
+    const getDistance = (p1: Touch, p2: Touch) => {
+      const dx = p1.clientX - p2.clientX;
+      const dy = p1.clientY - p2.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    // 计算两点的中心点
+    const getMidPoint = (p1: Touch, p2: Touch) => {
+      return {
+        x: (p1.clientX + p2.clientX) / 2,
+        y: (p1.clientY + p2.clientY) / 2,
+      };
+    };
+
+    // 监听空白区域的触摸开始 (映射为鼠标事件)
+    graph.on('blank:mousedown', (e) => {
+      
+      // 设置为空白区域触摸
+      isBlankTouchRef.current = true;
+      
+      // 检查是否是触摸事件
+      const event = e.e as unknown;
+      if (event && typeof event === 'object' && 'touches' in event) {
+        const touchEvent = event as TouchEvent;
+        if (touchEvent.touches.length === 1) {
+          // 记录初始触摸位置
+          lastTouchXRef.current = touchEvent.touches[0].clientX;
+          lastTouchYRef.current = touchEvent.touches[0].clientY;
+          isDraggingRef.current = true;
+          
+          
+          
+          // 阻止默认行为，但仅当事件可取消时
+          if (touchEvent.cancelable) {
+            touchEvent.preventDefault();
+          }
+        }
+      }
+    });
+
+    // 监听节点的触摸开始，确保不会拖动画布
+    graph.on('node:mousedown', () => {
+      // 在节点上触摸时，标记为非空白区域
+      isBlankTouchRef.current = false;
+    });
+    
+    // 监听边的触摸开始，确保不会拖动画布
+    graph.on('edge:mousedown', () => {
+      // 在边上触摸时，标记为非空白区域
+      isBlankTouchRef.current = false;
+    });
+
+    // 监听触摸结束 (映射为鼠标事件)
+    graph.on('blank:mouseup', () => {
+      
+      isBlankTouchRef.current = false;
+      isDraggingRef.current = false;
+    });
+
+    // 处理触摸开始事件
+    const handleTouchStart = (e: TouchEvent) => {
+      
+      // 如果不是空白区域触摸，不处理拖动
+      if (!isBlankTouchRef.current && e.touches.length === 1) {
+        return;
+      }
+        
+      if (e.touches.length === 2) {
+        // 双指触摸开始，初始化缩放参数
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        
+        // 记录初始距离
+        const initialDistance = getDistance(touch1, touch2);
+        initialPinchDistanceRef.current = initialDistance;
+        
+        // 记录当前缩放比例
+        initialScaleRef.current = graph.zoom();
+        
+        // 只有当事件可以被取消时才调用 preventDefault
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    // 处理触摸移动事件
+    const handleTouchMove = (e: TouchEvent) => {
+      
+      // 多指触摸处理缩放
+      if (e.touches.length === 2) {
+        // 缩放处理
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        
+        // 计算当前两指距离
+        const distance = getDistance(touch1, touch2);
+        
+        // 如果初始距离未设置，先设置初始距离
+        if (initialPinchDistanceRef.current === 0) {
+          initialPinchDistanceRef.current = distance;
+          initialScaleRef.current = graph.zoom();
+          return;
+        }
+        
+        // 计算缩放比例
+        const scale = (distance / initialPinchDistanceRef.current) * initialScaleRef.current;
+        
+        // 限制缩放范围
+        const minScale = 0.5;
+        const maxScale = 2;
+        const limitedScale = Math.min(Math.max(scale, minScale), maxScale);
+        
+        // 获取缩放中心点
+        const center = getMidPoint(touch1, touch2);
+        
+        // 应用缩放
+        graph.zoom(limitedScale, {
+          absolute: true,
+          center: {
+            x: center.x,
+            y: center.y,
+          },
+        });
+        
+        // 只有当事件可以被取消时才调用 preventDefault
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        return;
+      }
+      
+      // 单指处理拖动
+      if (isDraggingRef.current && isBlankTouchRef.current && e.touches.length === 1) {
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - lastTouchXRef.current;
+        const deltaY = touch.clientY - lastTouchYRef.current;
+        
+        const currentScale = graph.scale();
+        
+        requestAnimationFrame(() => {
+          
+          graph.translateBy(deltaX / currentScale.sx, deltaY / currentScale.sy);
+        });
+        
+        lastTouchXRef.current = touch.clientX;
+        lastTouchYRef.current = touch.clientY;
+        
+        // 只有当事件可以被取消时才调用 preventDefault
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    // 处理触摸结束事件
+    const handleTouchEnd = () => {
+      
+      isDraggingRef.current = false;
+      // 重置双指缩放状态
+      initialPinchDistanceRef.current = 0;
+    };
+
+    // 添加触摸事件监听器
+    const container = containerRef.current;
+    
+    // 使用 capture 选项确保在事件捕获阶段处理触摸，可以更早地调用 preventDefault
+    const touchOptions = { passive: false, capture: true };
+    
+    container.addEventListener('touchmove', handleTouchMove, touchOptions);
+    container.addEventListener('touchstart', handleTouchStart, touchOptions);
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchEnd);
+
+    // 清理事件监听器
+    return () => {
+      if (container) {
+        
+        container.removeEventListener('touchmove', handleTouchMove, touchOptions);
+        container.removeEventListener('touchstart', handleTouchStart, touchOptions);
+        container.removeEventListener('touchend', handleTouchEnd);
+        container.removeEventListener('touchcancel', handleTouchEnd);
+      }
+      
+      // 清理X6事件监听
+      if (graph) {
+        graph.off('blank:mousedown');
+        graph.off('blank:mouseup');
+        graph.off('node:mousedown');
+        graph.off('edge:mousedown');
+      }
+      
+      // 重置所有触摸相关状态
+      isDraggingRef.current = false;
+      isBlankTouchRef.current = false;
+      initialPinchDistanceRef.current = 0;
+    };
+  }, [graph]);
+
   // Initialize the graph when the component mounts
   useEffect(() => {
     if (!containerRef.current) return;
@@ -446,6 +658,7 @@ const GraphView: React.FC<GraphViewProps> = ({
       },
       panning: {
         enabled: true,      // 启用画布平移
+        modifiers: 'alt',   // 使用Alt键+ 鼠标拖动平移，避免与触摸操作冲突
       },
     });
 

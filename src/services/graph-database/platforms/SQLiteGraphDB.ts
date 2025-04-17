@@ -209,16 +209,16 @@ export class SQLiteGraphDB extends BaseGraphDB {
         throw new DatabaseError("Database connection not established");
       }
 
-      console.log(`[SQLiteGraphDB] 尝试开始事务，平台: ${sqliteService.getPlatform()}, 数据库: ${this.dbName}`);
+      
       let alreadyInTransaction = false;
       try {
         await this.connection.beginTransaction();
         this.isInTransaction = true;
-        console.log(`[SQLiteGraphDB] 成功开始事务`);
+        
       } catch (error:any) {
         if (error.message && /Already in transaction|cannot start a transaction within a transaction/i.test(error.message)) {
           alreadyInTransaction = true;
-          console.log(`[SQLiteGraphDB] 已经在事务中，继续执行操作`);
+          
         } else {
           console.error(`[SQLiteGraphDB] 开始事务失败:`, error);
           throw error;
@@ -227,7 +227,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
       // 如果已经在事务中，直接执行操作
       if (alreadyInTransaction) {
-        console.log(`[SQLiteGraphDB] 使用现有事务执行操作`);
+        
         return await operation();
       }
 
@@ -238,14 +238,14 @@ export class SQLiteGraphDB extends BaseGraphDB {
           console.error(`[SQLiteGraphDB] 事务未成功激活`);
           throw new TransactionError("Failed to begin transaction");
         }
-        console.log(`[SQLiteGraphDB] 事务成功激活，准备执行操作`);
+        
 
         let result;
         try {
           // 执行操作
-          console.log(`[SQLiteGraphDB] 在事务中执行操作`);
+          
           result = await operation();
-          console.log(`[SQLiteGraphDB] 操作执行成功，准备提交事务`);
+          
         } catch (error) {
           // 如果执行失败，回滚事务
           console.error(`[SQLiteGraphDB] 操作执行失败，回滚事务:`, error);
@@ -256,9 +256,9 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
         // 提交事务
         try {
-          console.log(`[SQLiteGraphDB] 尝试提交事务`);
+          
           await this.connection.commitTransaction();
-          console.log(`[SQLiteGraphDB] 事务提交成功`);
+          
         } catch (error: any) {
           if(error.message && error.message.includes('no transaction is active')){
             console.warn('[SQLiteGraphDB] 事务已意外结束，但操作已成功执行');
@@ -277,9 +277,9 @@ export class SQLiteGraphDB extends BaseGraphDB {
         // 注意：这是事务API自动调用的persistData，不应在operation函数中再次调用
         try {
           // TODO (AI切勿擅自修改) 未来将persistData移出事务API, 需要设计一个API, 为所有修改操作自动调用持久化
-          console.log(`[SQLiteGraphDB] 事务完成，准备持久化数据`);
+          
           await this.persistData();
-          console.log(`[SQLiteGraphDB] 数据持久化成功`);
+          
         } catch (persistError) {
           console.error("[SQLiteGraphDB] 持久化数据失败:", persistError);
           // 保存数据失败不应该影响操作的结果
@@ -298,12 +298,12 @@ export class SQLiteGraphDB extends BaseGraphDB {
   protected async persistData(): Promise<void> {
     try {
       const platform = sqliteService.getPlatform();
-      console.log(`[SQLiteGraphDB] 尝试保存数据库 ${this.dbName}，当前平台: ${platform}`);
+      
       
       if (platform === "web") {
-        console.log(`[SQLiteGraphDB] 在web平台上保存数据到store: ${this.dbName}`);
+        
         await sqliteService.saveToStore(this.dbName);
-        console.log(`[SQLiteGraphDB] 成功保存数据到store: ${this.dbName}`);
+        
       } else if (platform === "android") {
         // TODO: (AI不要擅自实现)这是个临时解决方案(危险), 未来需要彻底解决Android平台上事务管理的问题
         // 在Android平台上, 如果有意外的事务处于活跃状态, 则强制提交事务
@@ -312,7 +312,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
         // }
       } else {
         // electron 平台不用手动保存到本地磁盘
-        console.log(`[SQLiteGraphDB] ${platform}平台不需要手动保存到本地磁盘`);
+        
         // await sqliteService.saveToLocalDisk(this.dbName);
       }
     } catch (error) {
@@ -404,7 +404,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
 
   // 强制提交当前事务并保存数据，用于调试
   async forceCommitTransaction(): Promise<{ success: boolean, message: string }> {
-    console.log(`[SQLiteGraphDB] 尝试强制提交事务，平台: ${sqliteService.getPlatform()}`);
+    
     
     try {
       if (!this.connection) {
@@ -418,7 +418,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
       
       if (!transactionActive.result) {
         const message = "当前没有活跃的事务，尝试执行空事务";
-        console.log(`[SQLiteGraphDB] ${message}`);
+        
         // 没有活跃事务，尝试开始一个简单事务并提交
         try {
           await this.connection.beginTransaction();
@@ -442,9 +442,9 @@ export class SQLiteGraphDB extends BaseGraphDB {
       
       // 有活跃事务，尝试提交
       try {
-        console.log(`[SQLiteGraphDB] 有活跃事务，尝试提交`);
+        
         await this.connection.commitTransaction();
-        console.log(`[SQLiteGraphDB] 事务提交成功`);
+        
         
         // 重置事务状态
         this.isInTransaction = false;
