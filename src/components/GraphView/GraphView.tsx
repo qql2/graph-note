@@ -210,7 +210,9 @@ const GraphView: React.FC<GraphViewProps> = ({
     isOpen: false,
     edgeId: '',
     relationshipType: '',
-    edge: {} as GraphEdge 
+    edge: {} as GraphEdge,
+    isNewRelation: false,
+    sourceNodeId: ''
   });
 
   // 缓存当前存在的所有关系类型
@@ -327,7 +329,16 @@ const GraphView: React.FC<GraphViewProps> = ({
         id: 'create-custom',
         label: '添加自定义关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.BUILD)
+        onClick: () => {
+          setEdgeEditModal({
+            isOpen: true,
+            edgeId: '',
+            relationshipType: '',
+            edge: {} as GraphEdge,
+            isNewRelation: true,
+            sourceNodeId: nodeId
+          });
+        }
       });
     }
     
@@ -338,9 +349,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         label: '删除节点',
         icon: trash,
         onClick: () => {
-          if (confirm('确定要删除此节点吗？')) {
-            onDeleteNode(nodeId);
-          }
+          onDeleteNode(nodeId);
         }
       });
     }
@@ -377,7 +386,9 @@ const GraphView: React.FC<GraphViewProps> = ({
             isOpen: true,
             edgeId: edgeId,
             relationshipType: currentLabel,
-            edge: edgeData
+            edge: edgeData,
+            isNewRelation: false,
+            sourceNodeId: edgeData.source
           });
         }
       });
@@ -390,9 +401,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         label: '删除关系',
         icon: trash,
         onClick: () => {
-          if (confirm('确定要删除此关系吗？')) {
-            onDeleteEdge(edgeId);
-          }
+          onDeleteEdge(edgeId);
         }
       });
     }
@@ -931,11 +940,22 @@ const GraphView: React.FC<GraphViewProps> = ({
         relationshipType={edgeEditModal.relationshipType}
         existingEdges={graphData.edges}
         labelMode={viewConfig.showRelationshipLabels}
+        isNewRelation={edgeEditModal.isNewRelation}
         onSave={(edgeId, newRelationshipType, isSimpleLabel) => {
-          if (onEditEdge) {
-            // 根据标签类型传递不同的参数，让父组件处理保存逻辑
-            onEditEdge(edgeId, newRelationshipType, isSimpleLabel);
+          if (edgeEditModal.isNewRelation) {
+            // 创建新关系
+            if (onCreateRelation) {
+              onCreateRelation(edgeEditModal.sourceNodeId, newRelationshipType);
+            }
+          } else {
+            // 编辑已有关系
+            if (onEditEdge) {
+              // 根据标签类型传递不同的参数，让父组件处理保存逻辑
+              onEditEdge(edgeId, newRelationshipType, isSimpleLabel);
+            }
           }
+          // 关闭模态框
+          setEdgeEditModal(prev => ({ ...prev, isOpen: false }));
         }}
       />
     </div>
