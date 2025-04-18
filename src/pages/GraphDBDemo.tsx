@@ -17,7 +17,7 @@ import {
 } from '@ionic/react';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import { GraphNode, GraphEdge, DeleteMode } from '../services/graph-database/core/types';
-import { arrowBack, search, eyeOutline, timeOutline, informationCircleOutline } from 'ionicons/icons';
+import { arrowBack, search, eyeOutline, timeOutline, informationCircleOutline, alertCircleOutline } from 'ionicons/icons';
 
 const GraphDBDemo: React.FC = () => {
   // 状态管理
@@ -62,6 +62,10 @@ const GraphDBDemo: React.FC = () => {
 
   // 自定义关系类型
   const [customType, setCustomType] = useState<string>('');
+
+  // 不完整关系查找状态
+  const [incompleteEdges, setIncompleteEdges] = useState<GraphEdge[]>([]);
+  const [showIncompleteEdgesModal, setShowIncompleteEdgesModal] = useState<boolean>(false);
 
   // 初始化数据库
   useEffect(() => {
@@ -403,6 +407,59 @@ const GraphDBDemo: React.FC = () => {
     );
   };
 
+  // 检查关系是否完整
+  const isEdgeComplete = (edge: GraphEdge): boolean => {
+    return !!(edge.source_id && edge.target_id && edge.type);
+  };
+  
+  // 查找不完整的关系
+  const findIncompleteEdges = () => {
+    try {
+      setLoading(true);
+      
+      // 过滤出不完整的边
+      const incomplete = edges.filter(edge => !isEdgeComplete(edge));
+      
+      setIncompleteEdges(incomplete);
+      setShowIncompleteEdgesModal(true);
+      
+      if (incomplete.length === 0) {
+        showMessage('没有找到不完整的关系', 'info');
+      } else {
+        showMessage(`找到 ${incomplete.length} 个不完整的关系`, 'info');
+      }
+    } catch (error) {
+      console.error('查找不完整关系失败:', error);
+      showMessage(`查找不完整关系失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 删除不完整关系并刷新列表
+  const deleteIncompleteEdge = async (edgeId: string) => {
+    try {
+      // 先删除边
+      await deleteEdge(edgeId);
+      
+      // 重新查找不完整关系
+      // 过滤出不完整的边
+      const incomplete = edges.filter(edge => !isEdgeComplete(edge));
+      setIncompleteEdges(incomplete);
+      
+      if (incomplete.length === 0) {
+        // 如果没有不完整关系了，关闭模态窗口
+        setShowIncompleteEdgesModal(false);
+        showMessage('所有不完整关系已清理完毕', 'success');
+      } else {
+        showMessage(`已删除关系，还剩 ${incomplete.length} 个不完整关系`, 'info');
+      }
+    } catch (error) {
+      console.error('删除不完整关系失败:', error);
+      showMessage(`删除不完整关系失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    }
+  };
+
   return (
     <IonPage>
       <IonHeader>
@@ -737,6 +794,20 @@ const GraphDBDemo: React.FC = () => {
                         演示关联节点查找（第一个节点，深度2）
                       </IonButton>
                     </IonCol>
+                    
+                    {/* 查找不完整关系按钮 */}
+                    <IonCol size="12" sizeMd="6" className="ion-margin-top">
+                      <IonButton
+                        expand="block"
+                        fill="outline"
+                        color="warning"
+                        onClick={findIncompleteEdges}
+                        disabled={loading || !dbInitialized || edges.length === 0}
+                      >
+                        <IonIcon icon={alertCircleOutline} slot="start" />
+                        查找不完整关系
+                      </IonButton>
+                    </IonCol>
                   </IonRow>
                 </IonCardContent>
               </IonCard>
@@ -917,6 +988,61 @@ const GraphDBDemo: React.FC = () => {
                 </IonCard>
               </div>
             )}
+          </IonContent>
+        </IonModal>
+        
+        {/* 不完整关系模态窗口 */}
+        <IonModal isOpen={showIncompleteEdgesModal} onDidDismiss={() => setShowIncompleteEdgesModal(false)}>
+          <IonHeader>
+            <IonToolbar>
+              <IonTitle>不完整关系列表</IonTitle>
+              <IonButtons slot="end">
+                <IonButton onClick={() => setShowIncompleteEdgesModal(false)}>关闭</IonButton>
+              </IonButtons>
+            </IonToolbar>
+          </IonHeader>
+          <IonContent>
+            <div style={{ padding: '16px' }}>
+              <IonCard>
+                <IonCardHeader>
+                  <IonCardTitle>不完整关系 ({incompleteEdges.length})</IonCardTitle>
+                  <IonCardSubtitle>缺少source_id、target_id或type字段的关系</IonCardSubtitle>
+                </IonCardHeader>
+                <IonCardContent>
+                  {incompleteEdges.length > 0 ? (
+                    <IonList>
+                      {incompleteEdges.map(edge => (
+                        <IonItem key={edge.id}>
+                          <IonLabel>
+                            <h2>ID: {edge.id}</h2>
+                            <p>类型: {edge.type || <IonText color="danger">缺失</IonText>}</p>
+                            <p>源节点: {edge.source_id || <IonText color="danger">缺失</IonText>}</p>
+                            <p>目标节点: {edge.target_id || <IonText color="danger">缺失</IonText>}</p>
+                            <p>缺少字段: {[
+                              !edge.source_id && '源节点ID',
+                              !edge.target_id && '目标节点ID',
+                              !edge.type && '关系类型'
+                            ].filter(Boolean).join(', ')}</p>
+                          </IonLabel>
+                          <IonButton
+                            slot="end"
+                            color="danger"
+                            onClick={() => edge.id && deleteIncompleteEdge(edge.id)}
+                            disabled={loading}
+                          >
+                            删除
+                          </IonButton>
+                        </IonItem>
+                      ))}
+                    </IonList>
+                  ) : (
+                    <IonItem>
+                      <IonLabel>没有找到不完整的关系</IonLabel>
+                    </IonItem>
+                  )}
+                </IonCardContent>
+              </IonCard>
+            </div>
           </IonContent>
         </IonModal>
         
