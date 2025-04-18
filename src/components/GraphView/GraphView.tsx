@@ -64,6 +64,17 @@ Graph.registerNode(
       label: {
         fontSize: 14,
         fill: '#fff',
+        textWrap: {
+          width: -10, // 内边距，使文本不会贴边
+          height: -10, // 内边距，使文本不会贴边
+          ellipsis: true, // 超出宽度时显示省略号
+          breakWord: true, // 允许在单词内换行
+          maxLines: 3, // 最大显示3行文本
+        },
+        textVerticalAnchor: 'middle',
+        textAnchor: 'middle',
+        refX: 0.5,
+        refY: 0.5,
       },
     },
     // 自定义锚点位置，定义在节点的上、下、左、右四个位置
@@ -742,6 +753,19 @@ const GraphView: React.FC<GraphViewProps> = ({
                        quadrant === 'right' ? 'var(--ion-color-danger, #F44336)' : 
                        'var(--ion-color-medium, #607D8B)';
 
+      // 计算合适的字体大小，根据节点宽度和文本长度动态调整
+      const baseFontSize = 14;
+      const fontSize = isCentralNode ? baseFontSize + 2 : baseFontSize;
+      
+      // 文本自动裁剪配置
+      const textWrap = {
+        width: width - 16, // 留出边距
+        height: height - 12,
+        ellipsis: true,
+        breakWord: true, // 允许在单词内换行，确保长文本能正确换行
+        maxLines: height > 50 ? 3 : 2, // 根据节点高度确定最大行数
+      };
+
       return graph.addNode({
         id,
         x,
@@ -756,6 +780,8 @@ const GraphView: React.FC<GraphViewProps> = ({
           label: {
             text: label || id,
             fontWeight: isCentralNode ? 'bold' : 'normal',
+            fontSize: fontSize,
+            textWrap: textWrap,
           },
         },
         data: {
