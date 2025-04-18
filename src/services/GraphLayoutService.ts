@@ -630,9 +630,9 @@ export class GraphLayoutService {
     const baseQuadrantOffsetX = 250; // 水平象限（左/右）与中心的基础距离
     const baseQuadrantOffsetY = 180; // 垂直象限（上/下）与中心的基础距离
 
-    // 每增加一层的额外偏移
-    const layerOffsetX = 120; // 水平方向每层增加的偏移
-    const layerOffsetY = 100; // 垂直方向每层增加的偏移
+    // 层级之间的最小间距
+    const minLayerSpacingX = 150; // 水平方向层级之间的最小间距
+    const minLayerSpacingY = 130; // 垂直方向层级之间的最小间距
 
     // 计算中心节点尺寸
     const centralNodeWidth = calculateNodeWidth(centralNode.label);
@@ -668,10 +668,14 @@ export class GraphLayoutService {
 
     // 上方象限：按层级垂直排列，每层内部水平排列
     const topNodesByDepth = groupNodesByDepth(quadrants.top);
+    
+    // 保存每层的最大高度，用于计算层级间距
+    const topLayersMaxHeight: {[key: number]: number} = {};
+    
+    // 首先计算所有层节点的尺寸
     Object.entries(topNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
       const depth = parseInt(depthStr);
-      const quadrantOffsetY = baseQuadrantOffsetY + (depth - 1) * layerOffsetY;
-
+      
       // 计算每个节点的宽度和高度
       const nodeDimensions = nodesInDepth.map((node: any) => {
         const nodeWidth = calculateNodeWidth(node.label);
@@ -681,6 +685,41 @@ export class GraphLayoutService {
       
       // 找出该层最高的节点
       const maxHeight = nodeDimensions.reduce((max, dim) => Math.max(max, dim.height), 0);
+      
+      // 保存该层的最大高度
+      topLayersMaxHeight[depth] = maxHeight;
+    });
+    
+    // 计算每层的垂直偏移量，考虑前面层的节点高度
+    const topLayerOffsetY: {[key: number]: number} = {};
+    let currentTopOffset = baseQuadrantOffsetY;
+    
+    Object.keys(topLayersMaxHeight)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .forEach((depth) => {
+        if (depth === 1) {
+          // 第一层使用基础偏移
+          topLayerOffsetY[depth] = currentTopOffset;
+        } else {
+          // 后续层考虑前一层的最大高度和最小间距
+          const prevLayerHeight = topLayersMaxHeight[depth - 1];
+          currentTopOffset += prevLayerHeight + minLayerSpacingY;
+          topLayerOffsetY[depth] = currentTopOffset;
+        }
+      });
+    
+    // 然后再渲染节点，使用计算好的偏移量
+    Object.entries(topNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
+      const depth = parseInt(depthStr);
+      const quadrantOffsetY = topLayerOffsetY[depth] || baseQuadrantOffsetY;
+
+      // 计算每个节点的宽度和高度
+      const nodeDimensions = nodesInDepth.map((node: any) => {
+        const nodeWidth = calculateNodeWidth(node.label);
+        const nodeHeight = calculateNodeHeight(node.label, nodeWidth);
+        return { width: nodeWidth, height: nodeHeight };
+      });
       
       // 计算该层节点的总宽度
       let totalWidth = 0;
@@ -712,10 +751,14 @@ export class GraphLayoutService {
 
     // 下方象限：按层级垂直排列，每层内部水平排列
     const bottomNodesByDepth = groupNodesByDepth(quadrants.bottom);
+    
+    // 保存每层的最大高度，用于计算层级间距
+    const bottomLayersMaxHeight: {[key: number]: number} = {};
+    
+    // 首先计算所有层节点的尺寸
     Object.entries(bottomNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
       const depth = parseInt(depthStr);
-      const quadrantOffsetY = baseQuadrantOffsetY + (depth - 1) * layerOffsetY;
-
+      
       // 计算每个节点的宽度和高度
       const nodeDimensions = nodesInDepth.map((node: any) => {
         const nodeWidth = calculateNodeWidth(node.label);
@@ -725,6 +768,41 @@ export class GraphLayoutService {
       
       // 找出该层最高的节点
       const maxHeight = nodeDimensions.reduce((max, dim) => Math.max(max, dim.height), 0);
+      
+      // 保存该层的最大高度
+      bottomLayersMaxHeight[depth] = maxHeight;
+    });
+    
+    // 计算每层的垂直偏移量
+    const bottomLayerOffsetY: {[key: number]: number} = {};
+    let currentBottomOffset = baseQuadrantOffsetY;
+    
+    Object.keys(bottomLayersMaxHeight)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .forEach((depth) => {
+        if (depth === 1) {
+          // 第一层使用基础偏移
+          bottomLayerOffsetY[depth] = currentBottomOffset;
+        } else {
+          // 后续层考虑前一层的最大高度和最小间距
+          const prevLayerHeight = bottomLayersMaxHeight[depth - 1];
+          currentBottomOffset += prevLayerHeight + minLayerSpacingY;
+          bottomLayerOffsetY[depth] = currentBottomOffset;
+        }
+      });
+      
+    // 然后渲染节点，使用计算好的偏移量
+    Object.entries(bottomNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
+      const depth = parseInt(depthStr);
+      const quadrantOffsetY = bottomLayerOffsetY[depth] || baseQuadrantOffsetY;
+
+      // 计算每个节点的宽度和高度
+      const nodeDimensions = nodesInDepth.map((node: any) => {
+        const nodeWidth = calculateNodeWidth(node.label);
+        const nodeHeight = calculateNodeHeight(node.label, nodeWidth);
+        return { width: nodeWidth, height: nodeHeight };
+      });
       
       // 计算该层节点的总宽度
       let totalWidth = 0;
@@ -756,9 +834,51 @@ export class GraphLayoutService {
 
     // 左侧象限：按层级水平排列，每层内部垂直排列
     const leftNodesByDepth = groupNodesByDepth(quadrants.left);
+    
+    // 保存每层的最大宽度，用于计算层级间距
+    const leftLayersMaxWidth: {[key: number]: number} = {};
+    
+    // 首先计算所有层节点的尺寸
     Object.entries(leftNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
       const depth = parseInt(depthStr);
-      const quadrantOffsetX = baseQuadrantOffsetX + (depth - 1) * layerOffsetX;
+      
+      // 计算每个节点的宽度和高度
+      const nodeDimensions = nodesInDepth.map((node: any) => {
+        const nodeWidth = calculateNodeWidth(node.label);
+        const nodeHeight = calculateNodeHeight(node.label, nodeWidth);
+        return { width: nodeWidth, height: nodeHeight };
+      });
+      
+      // 找出该层最宽的节点
+      const maxWidth = nodeDimensions.reduce((max, dim) => Math.max(max, dim.width), 0);
+      
+      // 保存该层的最大宽度
+      leftLayersMaxWidth[depth] = maxWidth;
+    });
+    
+    // 计算每层的水平偏移量
+    const leftLayerOffsetX: {[key: number]: number} = {};
+    let currentLeftOffset = baseQuadrantOffsetX;
+    
+    Object.keys(leftLayersMaxWidth)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .forEach((depth) => {
+        if (depth === 1) {
+          // 第一层使用基础偏移
+          leftLayerOffsetX[depth] = currentLeftOffset;
+        } else {
+          // 后续层考虑前一层的最大宽度和最小间距
+          const prevLayerWidth = leftLayersMaxWidth[depth - 1];
+          currentLeftOffset += prevLayerWidth + minLayerSpacingX;
+          leftLayerOffsetX[depth] = currentLeftOffset;
+        }
+      });
+      
+    // 然后渲染节点，使用计算好的偏移量
+    Object.entries(leftNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
+      const depth = parseInt(depthStr);
+      const quadrantOffsetX = leftLayerOffsetX[depth] || baseQuadrantOffsetX;
 
       // 计算每个节点的宽度和高度
       const nodeDimensions = nodesInDepth.map((node: any) => {
@@ -794,9 +914,51 @@ export class GraphLayoutService {
 
     // 右侧象限：按层级水平排列，每层内部垂直排列
     const rightNodesByDepth = groupNodesByDepth(quadrants.right);
+    
+    // 保存每层的最大宽度，用于计算层级间距
+    const rightLayersMaxWidth: {[key: number]: number} = {};
+    
+    // 首先计算所有层节点的尺寸
     Object.entries(rightNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
       const depth = parseInt(depthStr);
-      const quadrantOffsetX = baseQuadrantOffsetX + (depth - 1) * layerOffsetX;
+      
+      // 计算每个节点的宽度和高度
+      const nodeDimensions = nodesInDepth.map((node: any) => {
+        const nodeWidth = calculateNodeWidth(node.label);
+        const nodeHeight = calculateNodeHeight(node.label, nodeWidth);
+        return { width: nodeWidth, height: nodeHeight };
+      });
+      
+      // 找出该层最宽的节点
+      const maxWidth = nodeDimensions.reduce((max, dim) => Math.max(max, dim.width), 0);
+      
+      // 保存该层的最大宽度
+      rightLayersMaxWidth[depth] = maxWidth;
+    });
+    
+    // 计算每层的水平偏移量
+    const rightLayerOffsetX: {[key: number]: number} = {};
+    let currentRightOffset = baseQuadrantOffsetX;
+    
+    Object.keys(rightLayersMaxWidth)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .forEach((depth) => {
+        if (depth === 1) {
+          // 第一层使用基础偏移
+          rightLayerOffsetX[depth] = currentRightOffset;
+        } else {
+          // 后续层考虑前一层的最大宽度和最小间距
+          const prevLayerWidth = rightLayersMaxWidth[depth - 1];
+          currentRightOffset += prevLayerWidth + minLayerSpacingX;
+          rightLayerOffsetX[depth] = currentRightOffset;
+        }
+      });
+      
+    // 然后渲染节点，使用计算好的偏移量
+    Object.entries(rightNodesByDepth).forEach(([depthStr, nodesInDepth]) => {
+      const depth = parseInt(depthStr);
+      const quadrantOffsetX = rightLayerOffsetX[depth] || baseQuadrantOffsetX;
 
       // 计算每个节点的宽度和高度
       const nodeDimensions = nodesInDepth.map((node: any) => {
