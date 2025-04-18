@@ -448,25 +448,16 @@ const GraphViewDemo: React.FC = () => {
       const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
       // 检查是否需要创建自定义关系
-      let actualRelationType = relationType;
-      let isCustomType = false;
-      
-      // 如果用户选择了自定义关系（通过菜单时实际传的是build）
-      if (relationType === CommonRelationshipTypes.BUILD) {
-        const customType = prompt('请输入自定义关系类型名称:');
-        if (customType && customType.trim() !== '') {
-          actualRelationType = customType.trim();
-          isCustomType = true;
-        }
-      }
+      relationType;
+    
       
       // 创建新节点
       const newNodeId = await db.addNode({
         type: 'knowledge',
-        label: `新${isCustomType ? actualRelationType : relationType}节点`,
+        label: `新${relationType}节点`,
         properties: {
           created_at: new Date().toISOString(),
-          description: `从节点 ${sourceNodeId} 创建的 ${isCustomType ? actualRelationType : relationType} 关系节点`
+          description: `从节点 ${sourceNodeId} 创建的 ${relationType} 关系节点`
         }
       });
       
@@ -474,18 +465,18 @@ const GraphViewDemo: React.FC = () => {
       await db.addEdge({
         source_id: sourceNodeId,
         target_id: newNodeId,
-        type: actualRelationType,
+        type: relationType,
         properties: {
           created_at: new Date().toISOString()
         }
       });
       
-      setToastMessage(`已创建 ${isCustomType ? actualRelationType : relationType} 关系和新节点`);
+      setToastMessage(`已创建 ${relationType} 关系和新节点`);
       setShowToast(true);
       
       // 更新已知关系类型列表
-      if (isCustomType && !knownRelationshipTypes.includes(actualRelationType)) {
-        setKnownRelationshipTypes([...knownRelationshipTypes, actualRelationType]);
+      if (!knownRelationshipTypes.includes(relationType)) {
+        setKnownRelationshipTypes([...knownRelationshipTypes, relationType]);
       }
       
       // 重新加载数据

@@ -26,6 +26,7 @@ interface EdgeEditModalProps {
   existingEdges: GraphEdge[]; // 接收所有存在的边数据，而不仅仅是关系类型
   labelMode: RelationshipLabelMode;
   onSave: (edgeId: string, newRelationshipType: string, isSimpleLabel?: boolean) => void;
+  isNewRelation?: boolean; // 添加是否为新关系的标志
 }
 
 const EdgeEditModal: React.FC<EdgeEditModalProps> = ({
@@ -36,6 +37,7 @@ const EdgeEditModal: React.FC<EdgeEditModalProps> = ({
   existingEdges,
   labelMode,
   onSave,
+  isNewRelation = false
 }) => {
   // Reference to input for auto-focus
   const inputRef = useRef<HTMLIonSearchbarElement>(null);
@@ -197,11 +199,11 @@ const EdgeEditModal: React.FC<EdgeEditModalProps> = ({
     <IonModal isOpen={isOpen} onDidDismiss={onClose} className="edge-edit-modal">
       <IonHeader>
         <IonToolbar>
-          <IonTitle>编辑关系</IonTitle>
+          <IonTitle>{isNewRelation ? '添加自定义关系' : '编辑关系'}</IonTitle>
           <IonButtons slot="end">
             <IonButton onClick={onClose}>取消</IonButton>
             <IonButton strong={true} onClick={handleSave}>
-              保存
+              {isNewRelation ? '添加' : '保存'}
             </IonButton>
           </IonButtons>
         </IonToolbar>
