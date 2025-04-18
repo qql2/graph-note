@@ -320,6 +320,168 @@ export class GraphLayoutService {
     return "unknown";
   };
   /**
+   * 在节点排布完成后检测并调整节点位置，避免重叠
+   * @param nodes 已经排布位置的节点数组
+   * @param minDistance 最小安全距离
+   * @returns 调整后的节点数组
+   */
+  static resolveNodeOverlaps(nodes: any[], minDistance: number = 30) {
+    if (!nodes || nodes.length < 2) return nodes;
+
+    // 创建节点的副本，避免修改原始数据
+    const adjustedNodes = [...nodes];
+    
+    // 节点之间的重叠检测函数
+    const nodesOverlap = (node1: any, node2: any) => {
+      // 节点的实际边界包含扩展的碰撞区域
+      const n1 = {
+        left: node1.x - minDistance/2,
+        right: node1.x + node1.width + minDistance/2,
+        top: node1.y - minDistance/2,
+        bottom: node1.y + node1.height + minDistance/2
+      };
+      
+      const n2 = {
+        left: node2.x - minDistance/2,
+        right: node2.x + node2.width + minDistance/2,
+        top: node2.y - minDistance/2,
+        bottom: node2.y + node2.height + minDistance/2
+      };
+      
+      // 检查两个边界是否重叠
+      return !(n1.right < n2.left || n1.left > n2.right || n1.bottom < n2.top || n1.top > n2.bottom);
+    };
+    
+    // 计算两个节点中心点之间的距离
+    const getDistance = (node1: any, node2: any) => {
+      const center1 = {
+        x: node1.x + node1.width / 2,
+        y: node1.y + node1.height / 2
+      };
+      
+      const center2 = {
+        x: node2.x + node2.width / 2,
+        y: node2.y + node2.height / 2
+      };
+      
+      const dx = center2.x - center1.x;
+      const dy = center2.y - center1.y;
+      
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+    
+    // 计算两个节点之间需要的调整向量
+    const calculateAdjustment = (node1: any, node2: any) => {
+      // 获取两个节点的中心点
+      const center1 = {
+        x: node1.x + node1.width / 2,
+        y: node1.y + node1.height / 2
+      };
+      
+      const center2 = {
+        x: node2.x + node2.width / 2,
+        y: node2.y + node2.height / 2
+      };
+      
+      // 计算中心点之间的方向向量
+      const dx = center2.x - center1.x;
+      const dy = center2.y - center1.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // 计算所需的最小距离
+      const requiredDistance = (node1.width + node2.width) / 2 + 
+                              (node1.height + node2.height) / 2 + 
+                              minDistance;
+      
+      // 如果当前距离已经足够，不需要调整
+      if (distance >= requiredDistance) return { dx: 0, dy: 0 };
+      
+      // 计算需要移动的距离
+      const moveDistance = requiredDistance - distance;
+      
+      // 归一化方向向量并乘以移动距离
+      const adjustFactor = moveDistance / distance;
+      return {
+        dx: dx * adjustFactor,
+        dy: dy * adjustFactor
+      };
+    };
+    
+    // 根据象限对节点应用不同的约束
+    const applyConstraints = (node: any, adjustment: {dx: number, dy: number}) => {
+      // 中心节点固定不动
+      if (node.isCentralNode) return { dx: 0, dy: 0 };
+      
+      let { dx, dy } = adjustment;
+      
+      // 基于象限应用约束
+      switch(node.quadrant) {
+        case 'top':
+          // 上方象限的节点只能水平移动或向上移动
+          dy = Math.min(0, dy); // 只允许向上移动
+          break;
+        case 'bottom':
+          // 下方象限的节点只能水平移动或向下移动
+          dy = Math.max(0, dy); // 只允许向下移动
+          break;
+        case 'left':
+          // 左侧象限的节点只能垂直移动或向左移动
+          dx = Math.min(0, dx); // 只允许向左移动
+          break;
+        case 'right':
+          // 右侧象限的节点只能垂直移动或向右移动
+          dx = Math.max(0, dx); // 只允许向右移动
+          break;
+      }
+      
+      return { dx, dy };
+    };
+
+    // 最大迭代次数，防止无限循环
+    const MAX_ITERATIONS = 20;
+    let iterations = 0;
+    let hasOverlaps = true;
+    
+    // 迭代调整直到无重叠或达到最大迭代次数
+    while (hasOverlaps && iterations < MAX_ITERATIONS) {
+      hasOverlaps = false;
+      iterations++;
+      
+      // 为每个节点计算所有推力
+      for (let i = 0; i < adjustedNodes.length; i++) {
+        if (adjustedNodes[i].isCentralNode) continue; // 跳过中心节点
+        
+        let totalDx = 0;
+        let totalDy = 0;
+        let adjustmentCount = 0;
+        
+        for (let j = 0; j < adjustedNodes.length; j++) {
+          if (i === j) continue; // 跳过自身
+          
+          // 检查是否需要调整
+          if (nodesOverlap(adjustedNodes[i], adjustedNodes[j])) {
+            hasOverlaps = true;
+            const adjustment = calculateAdjustment(adjustedNodes[j], adjustedNodes[i]);
+            const constrainedAdjustment = applyConstraints(adjustedNodes[i], adjustment);
+            
+            totalDx += constrainedAdjustment.dx;
+            totalDy += constrainedAdjustment.dy;
+            adjustmentCount++;
+          }
+        }
+        
+        // 如果有需要调整的重叠，应用平均调整值
+        if (adjustmentCount > 0) {
+          adjustedNodes[i].x += totalDx / adjustmentCount;
+          adjustedNodes[i].y += totalDy / adjustmentCount;
+        }
+      }
+    }
+    
+    return adjustedNodes;
+  }
+
+  /**
    * Calculates the position for each node in the quadrant layout
    * @param organizedData Data organized by quadrants
    * @param containerWidth Width of the container
@@ -474,7 +636,8 @@ export class GraphLayoutService {
       });
     });
 
-    return result;
+    // 返回结果前应用碰撞检测和位置调整
+    return this.resolveNodeOverlaps(result, Math.min(horizontalSpacing, verticalSpacing) * 0.4);
   }
 
   /**

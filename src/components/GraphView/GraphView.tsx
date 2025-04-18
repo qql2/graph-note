@@ -706,7 +706,7 @@ const GraphView: React.FC<GraphViewProps> = ({
       depthConfig  // 传递深度配置
     );
 
-    // Calculate positions for each node
+    // Calculate positions for each node with collision detection
     const layoutData = GraphLayoutService.calculateQuadrantLayout(
       organizedData,
       containerRef.current.offsetWidth,
