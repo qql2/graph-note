@@ -73,11 +73,11 @@ Graph.registerNode(
           position: 'top',
           attrs: {
             circle: {
-              r: 4,
-              magnet: true,
+              r: 0,  // 设置半径为0，使连接点不可见
+              magnet: false,  // 禁用磁性功能，防止手动连线
               stroke: '#31d0c6',
               fill: '#fff',
-              strokeWidth: 1,
+              strokeWidth: 0,
             },
           },
         },
@@ -85,11 +85,11 @@ Graph.registerNode(
           position: 'bottom',
           attrs: {
             circle: {
-              r: 4,
-              magnet: true,
+              r: 0,  // 设置半径为0，使连接点不可见
+              magnet: false,  // 禁用磁性功能，防止手动连线
               stroke: '#31d0c6',
               fill: '#fff',
-              strokeWidth: 1,
+              strokeWidth: 0,
             },
           },
         },
@@ -97,11 +97,11 @@ Graph.registerNode(
           position: 'left',
           attrs: {
             circle: {
-              r: 4,
-              magnet: true,
+              r: 0,  // 设置半径为0，使连接点不可见
+              magnet: false,  // 禁用磁性功能，防止手动连线
               stroke: '#31d0c6',
               fill: '#fff',
-              strokeWidth: 1,
+              strokeWidth: 0,
             },
           },
         },
@@ -109,11 +109,11 @@ Graph.registerNode(
           position: 'right',
           attrs: {
             circle: {
-              r: 4,
-              magnet: true,
+              r: 0,  // 设置半径为0，使连接点不可见
+              magnet: false,  // 禁用磁性功能，防止手动连线
               stroke: '#31d0c6',
               fill: '#fff',
-              strokeWidth: 1,
+              strokeWidth: 0,
             },
           },
         },
@@ -433,7 +433,7 @@ const GraphView: React.FC<GraphViewProps> = ({
       
       // 检查是否是触摸事件
       const event = e.e as unknown;
-      if (event && typeof event === 'object' && 'touches' in event) {
+      if (event && typeof event === 'object' && (event as any).touches) {
         const touchEvent = event as TouchEvent;
         if (touchEvent.touches.length === 1) {
           // 记录初始触摸位置
@@ -636,15 +636,15 @@ const GraphView: React.FC<GraphViewProps> = ({
           thickness: 1,
         },
       },
+      // 禁用连线功能
       connecting: {
-        router: 'normal',
-        connector: {
-          name: 'rounded',
-          args: {
-            radius: 10,
-          },
-        },
-        validateConnection: () => false, // Prevent interactive connections
+        validateConnection: () => false, // 禁止任何连接验证通过
+        validateMagnet: () => false, // 禁止磁铁可连接
+        allowBlank: false, // 禁止连接到空白位置
+        allowLoop: false, // 禁止自环
+        allowNode: false, // 禁止直接连接到节点
+        allowEdge: false, // 禁止连接到边
+        createEdge: () => null, // 阻止创建新的边
       },
       interacting: {
         nodeMovable: false, // Prevent node dragging
@@ -658,7 +658,6 @@ const GraphView: React.FC<GraphViewProps> = ({
       },
       panning: {
         enabled: true,      // 启用画布平移
-        modifiers: 'alt',   // 使用Alt键+ 鼠标拖动平移，避免与触摸操作冲突
       },
     });
 
