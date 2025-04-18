@@ -203,7 +203,9 @@ export class SQLiteGraphDB extends BaseGraphDB {
   // 注意：不要在事务操作中调用persistData()，因为它已经在这个方法的成功路径上自动调用了
   // 在事务中调用persistData()会导致"Transaction has been ended unexpectedly"错误
   async transaction<T>(operation: () => T | Promise<T>): Promise<T> {
-    return (this.transactionQueue = this.transactionQueue.then(async () => {
+    return (this.transactionQueue = this.transactionQueue.catch((error: any) => {
+      return null;
+    }).then(async () => {
       if (!this.connection) {
         console.error('[SQLiteGraphDB] 事务开始失败: 数据库连接未建立');
         throw new DatabaseError("Database connection not established");
@@ -289,7 +291,6 @@ export class SQLiteGraphDB extends BaseGraphDB {
       } catch (error: any) {
         this.isInTransaction = false;
         const msg = error.message ? error.message : error;
-        console.error("[SQLiteGraphDB] 事务失败:", msg);
         throw new DatabaseError(`Transaction failed: ${msg}`, error);
       }
     }));
