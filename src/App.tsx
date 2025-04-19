@@ -115,8 +115,8 @@ const App: React.FC = () => {
                 
                 // 根据配置决定是否自动跳转到新节点
                 if (viewConfig.autoFocusNewNode) {
-                  // 通过URL参数传递新创建的节点ID
-                  window.location.href = `/graph-view-demo?node=${nodeId}`;
+                  // 通过URL参数传递新创建的节点ID，并标记为新节点
+                  window.location.href = `/graph-view-demo?node=${nodeId}&new=true`;
                 } else {
                   // 如果不自动聚焦，则只跳转到图视图页面，不传递节点ID
                   window.location.href = `/graph-view-demo`;
