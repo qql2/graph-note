@@ -326,11 +326,56 @@ const GraphViewDemo: React.FC = () => {
       setLoading(true);
       const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
-      // 更新节点
-      await db.updateNode(nodeId, { label: newLabel });
-      
-      setToastMessage(`节点已更新: ${newLabel}`);
-      setShowToast(true);
+      // 检查是否为节点合并操作 (格式: MERGE:targetNodeId)
+      if (newLabel.startsWith('MERGE:')) {
+        const targetNodeId = newLabel.substring(6); // 提取目标节点ID
+        
+        // 获取源节点的所有相关边
+        const relatedEdges = await db.getEdgesForNode(nodeId);
+        
+        // 先创建指向目标节点的新关系
+        for (const edge of relatedEdges) {
+          // 针对每个边创建一个新的连接到目标节点的边
+          // 如果源节点是当前节点，则修改源节点为目标节点
+          // 如果目标节点是当前节点，则修改目标节点为合并目标节点
+          const newEdge = {
+            source_id: edge.source_id === nodeId ? targetNodeId : edge.source_id,
+            target_id: edge.target_id === nodeId ? targetNodeId : edge.target_id,
+            type: edge.type,
+            properties: edge.properties || {}
+          };
+          
+          // 跳过自环（源和目标相同的边）
+          if (newEdge.source_id === newEdge.target_id) continue;
+          
+          // 检查是否已存在相同的边
+          const existingEdges = await db.getEdgesBetweenNodes(newEdge.source_id, newEdge.target_id);
+          const hasExistingEdge = existingEdges.some(e => e.type === newEdge.type);
+          
+          // 如果没有现有边，创建一个新边
+          if (!hasExistingEdge) {
+            await db.addEdge(newEdge);
+          }
+        }
+        
+        // 删除源节点
+        await db.deleteNode(nodeId);
+        
+        setToastMessage(`节点已合并到目标节点`);
+        setShowToast(true);
+        
+        // 如果当前中心节点是被合并的节点，更新中心节点为目标节点
+        if (nodeId === centralNodeId) {
+          setCentralNodeId(targetNodeId);
+          ConfigService.saveCentralNodeId(targetNodeId);
+        }
+      } else {
+        // 常规节点编辑
+        await db.updateNode(nodeId, { label: newLabel });
+        
+        setToastMessage(`节点已更新: ${newLabel}`);
+        setShowToast(true);
+      }
       
       // 重新加载数据
       await loadGraphData();
@@ -442,24 +487,32 @@ const GraphViewDemo: React.FC = () => {
   };
 
   // 处理创建关系
-  const handleCreateRelation = async (sourceNodeId: string, relationType: string) => {
+  const handleCreateRelation = async (sourceNodeId: string, relationType: string, targetNodeId?: string, nodeLabel?: string) => {
     try {
       setLoading(true);
       const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
-      // 检查是否需要创建自定义关系
-      relationType;
-    
-      
-      // 创建新节点
-      const newNodeId = await db.addNode({
-        type: 'knowledge',
-        label: `新${relationType}节点`,
-        properties: {
-          created_at: new Date().toISOString(),
-          description: `从节点 ${sourceNodeId} 创建的 ${relationType} 关系节点`
-        }
-      });
+      let newNodeId = '';
+
+      // 检查是否提供了目标节点ID
+      if (targetNodeId) {
+        // 如果提供了目标节点ID，则直接创建关系到该节点
+        newNodeId = targetNodeId;
+      } else {
+        // 创建新节点，使用用户提供的标签或默认标签
+        const label = nodeLabel && nodeLabel.trim() !== '' 
+          ? nodeLabel 
+          : `新${relationType}节点`;
+        
+        newNodeId = await db.addNode({
+          type: 'knowledge',
+          label: label,
+          properties: {
+            created_at: new Date().toISOString(),
+            description: `从节点 ${sourceNodeId} 创建的 ${relationType} 关系节点`
+          }
+        });
+      }
       
       // 创建边
       await db.addEdge({
@@ -471,7 +524,11 @@ const GraphViewDemo: React.FC = () => {
         }
       });
       
-      setToastMessage(`已创建 ${relationType} 关系和新节点`);
+      const message = targetNodeId 
+        ? `已创建 ${relationType} 关系到现有节点` 
+        : `已创建 ${relationType} 关系和新节点`;
+      
+      setToastMessage(message);
       setShowToast(true);
       
       // 更新已知关系类型列表
@@ -482,10 +539,13 @@ const GraphViewDemo: React.FC = () => {
       // 重新加载数据
       await loadGraphData();
       
-      // 将新节点设为中心节点
-      setCentralNodeId(newNodeId);
-      // 保存当前聚焦节点
-      ConfigService.saveCentralNodeId(newNodeId);
+      // 根据配置决定是否将新节点设为中心节点
+      if (!targetNodeId && viewConfig.autoFocusNewNode) {
+        // 将新节点设为中心节点
+        setCentralNodeId(newNodeId);
+        // 保存当前聚焦节点
+        ConfigService.saveCentralNodeId(newNodeId);
+      }
     } catch (error) {
       console.error('创建关系失败:', error);
       setToastMessage(`创建关系失败: ${error instanceof Error ? error.message : String(error)}`);
@@ -557,6 +617,21 @@ const GraphViewDemo: React.FC = () => {
     setViewConfig(newConfig);
     // 保存到本地存储
     ConfigService.saveViewConfig(newConfig);
+  };
+
+  // 处理自动聚焦新节点配置变更
+  const handleAutoFocusNewNodeChange = (value: boolean) => {
+    const newConfig = {
+      ...viewConfig,
+      autoFocusNewNode: value
+    };
+    setViewConfig(newConfig);
+    // 保存到本地存储
+    ConfigService.saveViewConfig(newConfig);
+    
+    // 显示提示
+    setToastMessage(`自动聚焦新节点已${value ? '开启' : '关闭'}`);
+    setShowToast(true);
   };
 
   // 关系类型的中文名称映射
@@ -810,6 +885,7 @@ const GraphViewDemo: React.FC = () => {
           onQuadrantChange={handleQuadrantChange}
           onDepthChange={handleDepthChange}
           onRelationshipLabelModeChange={handleRelationshipLabelModeChange}
+          onAutoFocusNewNodeChange={handleAutoFocusNewNodeChange}
           onUnconfiguredPositionChange={handleUnconfiguredPositionChange}
           onRelationshipTypeConfigChange={handleRelationshipTypeConfigChange}
           onResetAllConfigs={handleResetAllConfigs}

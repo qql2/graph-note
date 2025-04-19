@@ -95,6 +95,8 @@ export interface GraphDatabaseInterface {
     maxDepth?: number
   ): Promise<GraphEdge[]>;
   findConnectedNodes(nodeId: string, depth?: number): Promise<GraphNode[]>;
+  getEdgesForNode(nodeId: string): Promise<GraphEdge[]>;
+  getEdgesBetweenNodes(sourceId: string, targetId: string): Promise<GraphEdge[]>;
   exportToJson(options?: ExportOptions): Promise<string>;
   importFromJson(jsonData: string, mode: ImportMode): Promise<ImportResult>;
   validateImportData(jsonData: string): Promise<ValidationResult>;

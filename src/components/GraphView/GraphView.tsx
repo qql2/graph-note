@@ -20,7 +20,7 @@ interface GraphViewProps {
   onDeleteNode?: (nodeId: string) => void;
   onEditEdge?: (edgeId: string, label: string, isSimpleLabel?: boolean) => void;
   onDeleteEdge?: (edgeId: string) => void;
-  onCreateRelation?: (sourceNodeId: string, relationType: string) => void;
+  onCreateRelation?: (sourceNodeId: string, relationType: string, targetNodeId?: string, nodeLabel?: string) => void;
 }
 
 // 关系类型到简短标签的映射
@@ -213,7 +213,10 @@ const GraphView: React.FC<GraphViewProps> = ({
   const [nodeEditModal, setNodeEditModal] = useState({
     isOpen: false,
     nodeId: '',
-    nodeLabel: ''
+    nodeLabel: '',
+    isNewNode: false,
+    relationType: '',
+    sourceNodeId: ''
   });
 
   // 边编辑模态框状态
@@ -298,7 +301,10 @@ const GraphView: React.FC<GraphViewProps> = ({
           setNodeEditModal({
             isOpen: true,
             nodeId: nodeId,
-            nodeLabel: node.attrs.label.text
+            nodeLabel: node.attrs.label.text,
+            isNewNode: false,
+            relationType: '',
+            sourceNodeId: ''
           });
         }
       });
@@ -311,28 +317,64 @@ const GraphView: React.FC<GraphViewProps> = ({
         id: 'create-father',
         label: '添加父节点关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.FATHER)
+        onClick: () => {
+          setNodeEditModal({
+            isOpen: true,
+            nodeId: '',
+            nodeLabel: `新${CommonRelationshipTypes.FATHER}节点`,
+            isNewNode: true,
+            relationType: CommonRelationshipTypes.FATHER,
+            sourceNodeId: nodeId
+          });
+        }
       });
       
       menuItems.push({
         id: 'create-child',
         label: '添加子节点关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.CHILD)
+        onClick: () => {
+          setNodeEditModal({
+            isOpen: true,
+            nodeId: '',
+            nodeLabel: `新${CommonRelationshipTypes.CHILD}节点`,
+            isNewNode: true,
+            relationType: CommonRelationshipTypes.CHILD,
+            sourceNodeId: nodeId
+          });
+        }
       });
       
       menuItems.push({
         id: 'create-base',
         label: '添加基础关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.BASE)
+        onClick: () => {
+          setNodeEditModal({
+            isOpen: true,
+            nodeId: '',
+            nodeLabel: `新${CommonRelationshipTypes.BASE}节点`,
+            isNewNode: true,
+            relationType: CommonRelationshipTypes.BASE,
+            sourceNodeId: nodeId
+          });
+        }
       });
       
       menuItems.push({
         id: 'create-build',
         label: '添加构建关系',
         icon: add,
-        onClick: () => onCreateRelation(nodeId, CommonRelationshipTypes.BUILD)
+        onClick: () => {
+          setNodeEditModal({
+            isOpen: true,
+            nodeId: '',
+            nodeLabel: `新${CommonRelationshipTypes.BUILD}节点`,
+            isNewNode: true,
+            relationType: CommonRelationshipTypes.BUILD,
+            sourceNodeId: nodeId
+          });
+        }
       });
       
       // 添加自定义关系
@@ -951,9 +993,26 @@ const GraphView: React.FC<GraphViewProps> = ({
         onClose={() => setNodeEditModal(prev => ({ ...prev, isOpen: false }))}
         nodeId={nodeEditModal.nodeId}
         nodeLabel={nodeEditModal.nodeLabel}
-        onSave={(nodeId, newLabel) => {
-          if (onEditNode) {
+        existingNodes={graphData.nodes}
+        isNewNode={nodeEditModal.isNewNode}
+        relationType={nodeEditModal.relationType}
+        sourceNodeId={nodeEditModal.sourceNodeId}
+        onSave={(nodeId, newLabel, targetNodeId) => {
+          if (onEditNode && !targetNodeId && !nodeEditModal.isNewNode) {
+            // 常规节点编辑，没有选择目标节点且不是新建节点
             onEditNode(nodeId, newLabel);
+          } else if (targetNodeId) {
+            // 处理节点合并或连接到现有节点
+            if (nodeEditModal.isNewNode && onCreateRelation) {
+              // 新建节点时，直接连接到目标节点
+              onCreateRelation(nodeEditModal.sourceNodeId, nodeEditModal.relationType, targetNodeId);
+            } else if (!nodeEditModal.isNewNode && onEditNode) {
+              // 编辑节点时需要进行节点合并
+              onEditNode(nodeId, `MERGE:${targetNodeId}`);
+            }
+          } else if (nodeEditModal.isNewNode && onCreateRelation) {
+            // 新建节点但没有选择现有节点，传递用户输入的标签
+            onCreateRelation(nodeEditModal.sourceNodeId, nodeEditModal.relationType, undefined, newLabel);
           }
         }}
       />
@@ -971,7 +1030,8 @@ const GraphView: React.FC<GraphViewProps> = ({
           if (edgeEditModal.isNewRelation) {
             // 创建新关系
             if (onCreateRelation) {
-              onCreateRelation(edgeEditModal.sourceNodeId, newRelationshipType);
+              // 使用关系类型作为节点标签，保持现有行为
+              onCreateRelation(edgeEditModal.sourceNodeId, newRelationshipType, undefined, `新${newRelationshipType}节点`);
             }
           } else {
             // 编辑已有关系
