@@ -994,6 +994,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         nodeId={nodeEditModal.nodeId}
         nodeLabel={nodeEditModal.nodeLabel}
         existingNodes={graphData.nodes}
+        existingEdges={graphData.edges}
         isNewNode={nodeEditModal.isNewNode}
         relationType={nodeEditModal.relationType}
         sourceNodeId={nodeEditModal.sourceNodeId}
