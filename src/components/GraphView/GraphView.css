@@ -260,3 +260,51 @@
     font-size: 16px;
   }
 }
+
+/* 新建节点的闪光动画 */
+@keyframes node-highlight-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(var(--ion-color-primary-rgb, 33, 150, 243), 0.7);
+    filter: brightness(1.2);
+    stroke-width: 2;
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(var(--ion-color-primary-rgb, 33, 150, 243), 0);
+    filter: brightness(1.1);
+    stroke-width: 1.5;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--ion-color-primary-rgb, 33, 150, 243), 0);
+    filter: brightness(1);
+    stroke-width: 1;
+  }
+}
+
+/* 针对X6节点中的rect元素应用动画 */
+.x6-node [class*="new-node"] rect {
+  animation: node-highlight-pulse 1.5s ease-in-out 3;
+}
+
+/* 闪光效果边框 */
+.new-node-effect {
+  stroke-width: 2;
+  stroke: var(--ion-color-primary, #2196F3);
+  stroke-dasharray: 4;
+  animation: dash-animation 10s linear;
+  animation-iteration-count: 1;
+  opacity: 0;
+}
+
+@keyframes dash-animation {
+  0% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.7;
+  }
+  100% {
+    stroke-dashoffset: 200;
+    opacity: 0;
+  }
+}

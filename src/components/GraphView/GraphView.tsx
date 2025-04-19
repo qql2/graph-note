@@ -21,6 +21,7 @@ interface GraphViewProps {
   onEditEdge?: (edgeId: string, label: string, isSimpleLabel?: boolean) => void;
   onDeleteEdge?: (edgeId: string) => void;
   onCreateRelation?: (sourceNodeId: string, relationType: string, targetNodeId?: string, nodeLabel?: string) => void;
+  newNodeId?: string;
 }
 
 // 关系类型到简短标签的映射
@@ -197,7 +198,8 @@ const GraphView: React.FC<GraphViewProps> = ({
   onDeleteNode,
   onEditEdge,
   onDeleteEdge,
-  onCreateRelation
+  onCreateRelation,
+  newNodeId = ''  // 默认为空字符串
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [graph, setGraph] = useState<Graph | null>(null);
@@ -241,6 +243,9 @@ const GraphView: React.FC<GraphViewProps> = ({
   const lastTouchYRef = useRef(0);
   const initialPinchDistanceRef = useRef(0);
   const initialScaleRef = useRef(1);
+
+  // 添加state跟踪新节点
+  const [newlyCreatedNodeIds, setNewlyCreatedNodeIds] = useState<string[]>([]);
 
   // 在组件加载时收集所有现有的关系类型
   useEffect(() => {
@@ -709,6 +714,29 @@ const GraphView: React.FC<GraphViewProps> = ({
     };
   }, [containerRef, onNodeClick, onEditNode, onDeleteNode, onEditEdge, onDeleteEdge, onCreateRelation]);
 
+  // 当有新节点ID传入时，更新状态
+  useEffect(() => {
+    if (newNodeId && !newlyCreatedNodeIds.includes(newNodeId)) {
+      setNewlyCreatedNodeIds(prev => [...prev, newNodeId]);
+      
+      // 设置定时器，一段时间后移除新节点状态
+      const timer = setTimeout(() => {
+        setNewlyCreatedNodeIds(prev => prev.filter(id => id !== newNodeId));
+        
+        // 如果图存在，找到对应节点并移除新节点效果
+        if (graph) {
+          const node = graph.getCellById(newNodeId);
+          if (node && node.isNode()) {
+            // 直接设置class属性为空
+            node.attr('body/class', '');
+          }
+        }
+      }, 4500); // 动画持续3次，每次1.5秒，总共4.5秒
+      
+      return () => clearTimeout(timer);
+    }
+  }, [newNodeId, newlyCreatedNodeIds, graph]);
+
   // Render the graph when data or central node changes
   useEffect(() => {
     if (!graph || !graphData || !centralNodeId || !containerRef.current) return;
@@ -764,7 +792,8 @@ const GraphView: React.FC<GraphViewProps> = ({
         maxLines: height > 50 ? 3 : 2, // 根据节点高度确定最大行数
       };
 
-      return graph.addNode({
+      // 创建节点
+      const node = graph.addNode({
         id,
         x,
         y,
@@ -788,6 +817,35 @@ const GraphView: React.FC<GraphViewProps> = ({
           depth,
         },
       });
+      
+      // 检查此节点是否是新节点，如果是，添加特殊类名来触发动画
+      if (newlyCreatedNodeIds.includes(id)) {
+        // 使用 attr 方法添加类
+        node.attr('body/class', 'new-node');
+        
+        // 可以选择性地添加额外的边框效果
+        const bbox = node.getBBox();
+        const padding = 4; // 边框与节点的距离
+        
+        // 添加一个动画边框作为特效
+        graph.addNode({
+          shape: 'rect',
+          x: bbox.x - padding,
+          y: bbox.y - padding,
+          width: bbox.width + padding * 2,
+          height: bbox.height + padding * 2,
+          attrs: {
+            body: {
+              fill: 'none',
+              class: 'new-node-effect'
+            }
+          },
+          zIndex: -1, // 确保在节点下方
+          interacting: false, // 禁用交互
+        });
+      }
+      
+      return node;
     });
 
     // 获取关系类型的显示标签
@@ -923,7 +981,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     // Center the view
     graph.centerContent();
 
-  }, [graph, graphData, centralNodeId, quadrantConfig, depthConfig, viewConfig]);
+  }, [graph, graphData, centralNodeId, quadrantConfig, depthConfig, viewConfig, newlyCreatedNodeIds]);
 
   return (
     <div className="graph-view-container">

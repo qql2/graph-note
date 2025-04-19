@@ -83,43 +83,36 @@ const convertDbDataToGraphData = (
 
 const GraphViewDemo: React.FC = () => {
   const location = useLocation();
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [graphData, setGraphData] = useState<GraphData>({nodes: [], edges: []});
+  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [centralNodeId, setCentralNodeId] = useState<string>('');
-  const [quadrantConfig, setQuadrantConfig] = useState<QuadrantConfig>(ConfigService.loadQuadrantConfig());
-  const [depthConfig, setDepthConfig] = useState<DepthConfig>(ConfigService.loadDepthConfig());
-  const [viewConfig, setViewConfig] = useState<ViewConfig>(ConfigService.loadViewConfig());
+  const [isLoading, setLoading] = useState<boolean>(false);
+  const [showToast, setShowToast] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const [knownRelationshipTypes, setKnownRelationshipTypes] = useState<string[]>([]);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [quadrantConfig, setQuadrantConfig] = useState<QuadrantConfig>(ConfigService.loadQuadrantConfig() || defaultQuadrantConfig);
+  const [depthConfig, setDepthConfig] = useState<DepthConfig>(ConfigService.loadDepthConfig() || defaultDepthConfig);
+  const [viewConfig, setViewConfig] = useState<ViewConfig>(ConfigService.loadViewConfig() || defaultViewConfig);
+  // 从加载的quadrantConfig中获取relationshipTypeConfig，如果不存在则使用默认值
+  const loadedQuadrantConfig = ConfigService.loadQuadrantConfig();
   const [relationshipTypeConfig, setRelationshipTypeConfig] = useState<RelationshipTypeConfig>(
-    quadrantConfig.relationshipTypeConfig || defaultRelationshipTypeConfig
+    loadedQuadrantConfig?.relationshipTypeConfig || defaultRelationshipTypeConfig
   );
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  
-  // 导航栏高度 - Ionic 默认为 56px，但可以根据实际情况调整
-  const navbarHeight = 56;
-  
-  // 弹窗状态
+  const [isDatabaseReady, setIsDatabaseReady] = useState<boolean>(false);
+  const [pendingChanges, setPendingChanges] = useState<boolean>(false);
+  // 添加新节点ID的状态
+  const [newNodeId, setNewNodeId] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
   const [showAlert, setShowAlert] = useState(false);
   const [alertHeader, setAlertHeader] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
   const [confirmHandler, setConfirmHandler] = useState<() => void>(() => {});
-
-  // 存储已知的所有关系类型
-  const [knownRelationshipTypes, setKnownRelationshipTypes] = useState<string[]>([
-    CommonRelationshipTypes.FATHER,
-    CommonRelationshipTypes.CHILD,
-    CommonRelationshipTypes.BASE,
-    CommonRelationshipTypes.BUILD
-  ]);
-
-  // 添加数据库状态的状态
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [dbStatusModalOpen, setDbStatusModalOpen] = useState(false);
   const [dbStatus, setDbStatus] = useState<any>(null);
-  
-  // 添加事务提交状态的状态
   const [transactionResultModalOpen, setTransactionResultModalOpen] = useState(false);
   const [transactionResult, setTransactionResult] = useState<any>(null);
+  const [navbarHeight, setNavbarHeight] = useState(56);
 
   // 从URL参数获取节点ID
   const getNodeIdFromUrl = () => {
@@ -166,8 +159,10 @@ const GraphViewDemo: React.FC = () => {
       // 尝试获取上次保存的节点ID
       const savedNodeId = ConfigService.loadCentralNodeId();
       
-      // 从URL获取节点ID
-      const urlNodeId = getNodeIdFromUrl();
+      // 从URL获取节点ID和新节点标记
+      const urlParams = new URLSearchParams(location.search);
+      const urlNodeId = urlParams.get('node');
+      const isNewNode = urlParams.get('new') === 'true';
       
       
       // 优先级顺序: URL参数 > 上次保存的节点 > 第一个节点
@@ -177,6 +172,16 @@ const GraphViewDemo: React.FC = () => {
         setCentralNodeId(urlNodeId);
         // 同时更新保存的节点ID，以便下次访问
         ConfigService.saveCentralNodeId(urlNodeId);
+        
+        // 如果是通过URL参数标记的新节点，应用动效
+        if (isNewNode) {
+          setNewNodeId(urlNodeId);
+          // 设置定时器，5秒后清除新节点标记
+          setTimeout(() => {
+            setNewNodeId('');
+          }, 5000);
+        }
+        
         setToastMessage(`正在查看节点: ${urlNodeId}`);
         setShowToast(true);
       } 
@@ -492,19 +497,19 @@ const GraphViewDemo: React.FC = () => {
       setLoading(true);
       const db = graphDatabaseService.getDatabase('GraphViewDemo');
       
-      let newNodeId = '';
+      let createdNodeId = '';
 
       // 检查是否提供了目标节点ID
       if (targetNodeId) {
         // 如果提供了目标节点ID，则直接创建关系到该节点
-        newNodeId = targetNodeId;
+        createdNodeId = targetNodeId;
       } else {
         // 创建新节点，使用用户提供的标签或默认标签
         const label = nodeLabel && nodeLabel.trim() !== '' 
           ? nodeLabel 
           : `新${relationType}节点`;
         
-        newNodeId = await db.addNode({
+        createdNodeId = await db.addNode({
           type: 'knowledge',
           label: label,
           properties: {
@@ -512,12 +517,20 @@ const GraphViewDemo: React.FC = () => {
             description: `从节点 ${sourceNodeId} 创建的 ${relationType} 关系节点`
           }
         });
+        
+        // 设置新节点ID以应用动效
+        setNewNodeId(createdNodeId);
+        
+        // 设置定时器，5秒后清除新节点标记
+        setTimeout(() => {
+          setNewNodeId('');
+        }, 5000);
       }
       
       // 创建边
       await db.addEdge({
         source_id: sourceNodeId,
-        target_id: newNodeId,
+        target_id: createdNodeId,
         type: relationType,
         properties: {
           created_at: new Date().toISOString()
@@ -542,9 +555,9 @@ const GraphViewDemo: React.FC = () => {
       // 根据配置决定是否将新节点设为中心节点
       if (!targetNodeId && viewConfig.autoFocusNewNode) {
         // 将新节点设为中心节点
-        setCentralNodeId(newNodeId);
+        setCentralNodeId(createdNodeId);
         // 保存当前聚焦节点
-        ConfigService.saveCentralNodeId(newNodeId);
+        ConfigService.saveCentralNodeId(createdNodeId);
       }
     } catch (error) {
       console.error('创建关系失败:', error);
@@ -707,9 +720,6 @@ const GraphViewDemo: React.FC = () => {
     );
   };
 
-  // 设置弹窗状态
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-
   // 处理打开设置弹窗
   const handleOpenSettings = () => {
     setShowSettingsModal(true);
@@ -780,10 +790,10 @@ const GraphViewDemo: React.FC = () => {
           </IonButtons>
           <IonTitle>图形视图展示</IonTitle>
           <IonButtons slot="end">
-            <IonButton onClick={handleRefreshData} disabled={loading}>
+            <IonButton onClick={handleRefreshData} disabled={isLoading}>
               刷新数据
             </IonButton>
-            <IonButton onClick={handleReset} disabled={loading}>
+            <IonButton onClick={handleReset} disabled={isLoading}>
               <IonIcon icon={refreshOutline} />
             </IonButton>
             <ThemeToggle />
@@ -795,7 +805,7 @@ const GraphViewDemo: React.FC = () => {
         </IonToolbar>
       </IonHeader>
       <IonContent fullscreen>
-        {loading ? (
+        {isLoading ? (
           <div className="loading-container">
             <IonSpinner name="crescent" />
             <p>正在加载数据...</p>
@@ -840,6 +850,7 @@ const GraphViewDemo: React.FC = () => {
               onEditEdge={handleEditEdge}
               onDeleteEdge={handleDeleteEdge}
               onCreateRelation={handleCreateRelation}
+              newNodeId={newNodeId}
             />
           </div>
         )}
