@@ -153,10 +153,14 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
   // Auto-focus the input when modal opens
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      // Small delay to ensure the modal is fully rendered
-      setTimeout(() => {
-        inputRef.current?.setFocus();
-      }, 150);
+      // 使用多次尝试的方式确保聚焦成功
+      const focusAttempts = [50, 150, 300];
+      
+      focusAttempts.forEach(delay => {
+        setTimeout(() => {
+          inputRef.current?.setFocus();
+        }, delay);
+      });
     }
     // Reset states when modal opens with new node
     setLabel(nodeLabel);
@@ -191,6 +195,14 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
     setLabel(node.label);
     setSelectedNode(node);
     setShowSuggestions(false);
+    
+    // 多次尝试聚焦，确保成功
+    const focusAttempts = [50, 150, 300];
+    focusAttempts.forEach(delay => {
+      setTimeout(() => {
+        inputRef.current?.setFocus();
+      }, delay);
+    });
   };
 
   const handleSave = () => {
@@ -214,7 +226,10 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
   };
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="node-edit-modal">
+    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="node-edit-modal" onDidPresent={() => {
+      // 在模态框打开完成后也尝试聚焦
+      inputRef.current?.setFocus();
+    }}>
       <IonHeader>
         <IonToolbar>
           <IonTitle>{isNewNode ? '新建节点' : '编辑节点'}</IonTitle>
