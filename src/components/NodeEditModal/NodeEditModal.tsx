@@ -15,7 +15,8 @@ import {
   IonListHeader
 } from '@ionic/react';
 import './NodeEditModal.css';
-import { GraphNode } from '../../models/GraphNode';
+import { GraphNode, GraphEdge, CommonRelationshipTypes, QuadrantConfig, defaultQuadrantConfig } from '../../models/GraphNode';
+import { GraphLayoutService } from '../../services/GraphLayoutService';
 
 interface NodeEditModalProps {
   isOpen: boolean;
@@ -23,9 +24,11 @@ interface NodeEditModalProps {
   nodeId: string;
   nodeLabel: string;
   existingNodes: GraphNode[]; // 所有现有的节点
+  existingEdges: GraphEdge[]; // 所有现有的边，用于构建节点间的父子关系
   isNewNode?: boolean; // 是否为新建节点
   relationType?: string; // 关系类型，用于创建新节点时
   sourceNodeId?: string; // 源节点ID，用于创建新节点时
+  quadrantConfig?: QuadrantConfig; // 四象限配置，用于判断关系方向
   onSave: (nodeId: string, newLabel: string, targetNodeId?: string) => void; // 添加targetNodeId参数用于处理合并节点
 }
 
@@ -41,9 +44,11 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
   nodeId,
   nodeLabel,
   existingNodes,
+  existingEdges = [], // 默认为空数组
   isNewNode = false,
   relationType,
   sourceNodeId,
+  quadrantConfig = defaultQuadrantConfig, // 默认使用默认配置
   onSave
 }) => {
   // Reference to input for auto-focus
@@ -56,41 +61,84 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
 
   // 准备带有路径的节点列表，用于区分同名节点
   const nodesWithPath = useMemo(() => {
-    // 创建一个映射，键为节点ID，值为该节点的所有父节点ID
+    // 创建节点之间的父子关系映射
     const nodeParents: Record<string, string[]> = {};
     
-    // 根据边建立父子关系
+    // 初始化节点父子关系映射
     existingNodes.forEach(node => {
       nodeParents[node.id] = [];
     });
+    
+    // 从边数据构建父子关系，考虑关系的方向性
+    existingEdges.forEach(edge => {
+      if (edge.source && edge.target && edge.relationshipType) {
+        // 避免自环
+        if (edge.source !== edge.target) {
+          // 判断关系的方向性
+          // TODO: (AI请勿擅自实现或修改)未来可以统一定义一个API, 可以把隐式关系类型也考虑进来获取关联节点
+          const oppositeType = GraphLayoutService.getOppositeRelationType(edge.relationshipType, quadrantConfig);
+          
+          
+          if (oppositeType === CommonRelationshipTypes.FATHER) {
+            // source是父节点，target是子节点
+            nodeParents[edge.target].push(edge.source);
+          } else if (edge.relationshipType === CommonRelationshipTypes.FATHER) {
+            // source是子节点，target是父节点
+            nodeParents[edge.source].push(edge.target);
+          }
+        }
+      }
+    });
+    
+    // 辅助函数：递归获取节点的路径（包括父节点链）
+    const getNodePath = (nodeId: string, depth: number = 0, visited: Set<string> = new Set()): string => {
+      // 防止无限递归和设置最大深度
+      if (visited.has(nodeId) || depth > 5) {
+        return existingNodes.find(n => n.id === nodeId)?.label || nodeId;
+      }
+      
+      visited.add(nodeId);
+      
+      const node = existingNodes.find(n => n.id === nodeId);
+      if (!node) return nodeId;
+      
+      // 获取同名节点
+      const sameNameNodes = existingNodes.filter(n => 
+        n.label === node.label && 
+        n.id !== node.id && 
+        n.id !== nodeId
+      );
+      
+      // 如果没有同名节点，直接返回节点标签
+      if (sameNameNodes.length === 0) {
+        return node.label;
+      }
+      
+      // 如果有同名节点，尝试使用父节点链来修饰
+      if (nodeParents[nodeId] && nodeParents[nodeId].length > 0) {
+        // 遍历所有父节点，找到一个合适的
+        for (const parentId of nodeParents[nodeId]) {
+          const parent = existingNodes.find(n => n.id === parentId);
+          if (!parent) continue;
+          
+          // 递归获取父节点的路径
+          const parentPath = getNodePath(parentId, depth + 1, new Set([...visited]));
+          
+          return `${node.label} (${parentPath})`;
+        }
+      }
+      
+      // 如果没有父节点或无法确定父节点，使用ID的前缀作为区分
+      return `${node.label} (ID: ${nodeId.substring(0, 6)}...)`;
+    };
 
     // 为每个节点生成路径
     const result: NodeWithPath[] = existingNodes.map(node => {
       // 对当前编辑的节点跳过
       if (node.id === nodeId) return { id: node.id, label: node.label, path: node.label };
       
-      // 查找该节点的路径信息
-      let path = node.label;
-      
-      // 查找与当前节点同名的节点
-      const sameNameNodes = existingNodes.filter(n => 
-        n.label === node.label && n.id !== node.id && n.id !== nodeId
-      );
-      
-      // 如果有同名节点，添加区分信息
-      if (sameNameNodes.length > 0) {
-        // 查找父节点信息，这里需要从边的关系中获取
-        // 由于我们没有直接传入边的信息，这里简化处理，使用父节点ID作为区分
-        if (nodeParents[node.id] && nodeParents[node.id].length > 0) {
-          const parentId = nodeParents[node.id][0];
-          const parent = existingNodes.find(n => n.id === parentId);
-          if (parent) {
-            path = `${node.label} (${parent.label})`;
-          }
-        } else {
-          path = `${node.label} (ID: ${node.id.substring(0, 6)}...)`;
-        }
-      }
+      // 获取节点的完整路径（包括递归向上的父节点链）
+      const path = getNodePath(node.id);
       
       return {
         id: node.id,
@@ -100,7 +148,7 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
     });
     
     return result;
-  }, [existingNodes, nodeId]);
+  }, [existingNodes, existingEdges, nodeId, quadrantConfig]);
 
   // Auto-focus the input when modal opens
   useEffect(() => {
