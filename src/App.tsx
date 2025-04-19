@@ -10,6 +10,7 @@ import StorageService  from './services/storageService';
 import AppInitializer from './components/AppInitializer/AppInitializer';
 import graphDatabaseService from './services/graph-database/GraphDatabaseService';
 import { ThemeService } from './services/ThemeService';
+import { ConfigService } from './services/ConfigService';
 
 import UsersPage from './pages/UsersPage/UsersPage';
 import GraphDBDemo from './pages/GraphDBDemo';
@@ -69,6 +70,9 @@ const App: React.FC = () => {
       
       const db = graphDatabaseService.getDatabase();
       
+      // 加载视图配置
+      const viewConfig = ConfigService.loadViewConfig();
+      
       // Show dialog to input node label
       presentAlert({
         header: '创建独立节点',
@@ -109,8 +113,14 @@ const App: React.FC = () => {
                   color: 'success'
                 });
                 
-                // 通过URL参数传递新创建的节点ID
-                window.location.href = `/graph-view-demo?node=${nodeId}`;
+                // 根据配置决定是否自动跳转到新节点
+                if (viewConfig.autoFocusNewNode) {
+                  // 通过URL参数传递新创建的节点ID
+                  window.location.href = `/graph-view-demo?node=${nodeId}`;
+                } else {
+                  // 如果不自动聚焦，则只跳转到图视图页面，不传递节点ID
+                  window.location.href = `/graph-view-demo`;
+                }
               } catch (error) {
                 console.error('创建节点失败:', error);
                 presentToast({

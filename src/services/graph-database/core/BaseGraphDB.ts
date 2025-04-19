@@ -1849,4 +1849,168 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     
     return properties;
   }
+
+  // 获取与指定节点相关的所有边
+  public async getEdgesForNode(nodeId: string): Promise<GraphEdge[]> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+    
+    try {
+      // 检查节点是否存在
+      const nodeExistsResult = await this.db.query(
+        "SELECT 1 FROM nodes WHERE id = ?",
+        [nodeId]
+      );
+      
+      if (!nodeExistsResult?.values || nodeExistsResult.values.length === 0) {
+        throw new NodeNotFoundError(nodeId);
+      }
+      
+      // 查询与该节点相关的所有边（作为源节点或目标节点）
+      const edgesResult = await this.db.query(
+        `SELECT * FROM relationships WHERE source_id = ? OR target_id = ?`,
+        [nodeId, nodeId]
+      );
+      
+      if (!edgesResult?.values || edgesResult.values.length === 0) {
+        return [];
+      }
+      
+      const edges: GraphEdge[] = [];
+      
+      for (const edgeRow of edgesResult.values) {
+        // 构建边对象
+        const edge: GraphEdge = {
+          id: edgeRow.id,
+          source_id: edgeRow.source_id,
+          target_id: edgeRow.target_id,
+          type: edgeRow.type,
+          created_at: edgeRow.created_at,
+          properties: {}
+        };
+        
+        // 获取边的属性
+        const propsResult = await this.db.query(
+          "SELECT key, value FROM relationship_properties WHERE relationship_id = ?",
+          [edge.id]
+        );
+        
+        if (propsResult?.values && propsResult.values.length > 0) {
+          for (const propRow of propsResult.values) {
+            let key: string;
+            let rawValue: string;
+            
+            if (Array.isArray(propRow)) {
+              key = propRow[0];
+              rawValue = propRow[1];
+            } else {
+              key = propRow.key;
+              rawValue = propRow.value;
+            }
+            
+            try {
+              edge.properties![key] = JSON.parse(rawValue);
+            } catch (e) {
+              edge.properties![key] = rawValue;
+            }
+          }
+        }
+        
+        edges.push(edge);
+      }
+      
+      return edges;
+    } catch (error) {
+      if (error instanceof NodeNotFoundError) {
+        throw error;
+      }
+      throw new DatabaseError(`Failed to get edges for node: ${error}`, error as Error);
+    }
+  }
+
+  // 获取两个节点之间的边
+  public async getEdgesBetweenNodes(sourceId: string, targetId: string): Promise<GraphEdge[]> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+    
+    try {
+      // 检查两个节点是否都存在
+      const sourceExistsResult = await this.db.query(
+        "SELECT 1 FROM nodes WHERE id = ?",
+        [sourceId]
+      );
+      
+      if (!sourceExistsResult?.values || sourceExistsResult.values.length === 0) {
+        throw new NodeNotFoundError(sourceId);
+      }
+      
+      const targetExistsResult = await this.db.query(
+        "SELECT 1 FROM nodes WHERE id = ?",
+        [targetId]
+      );
+      
+      if (!targetExistsResult?.values || targetExistsResult.values.length === 0) {
+        throw new NodeNotFoundError(targetId);
+      }
+      
+      // 查询两个节点之间的所有边（双向）
+      const edgesResult = await this.db.query(
+        `SELECT * FROM relationships 
+         WHERE (source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?)`,
+        [sourceId, targetId, targetId, sourceId]
+      );
+      
+      if (!edgesResult?.values || edgesResult.values.length === 0) {
+        return [];
+      }
+      
+      const edges: GraphEdge[] = [];
+      
+      for (const edgeRow of edgesResult.values) {
+        // 构建边对象
+        const edge: GraphEdge = {
+          id: edgeRow.id,
+          source_id: edgeRow.source_id,
+          target_id: edgeRow.target_id,
+          type: edgeRow.type,
+          created_at: edgeRow.created_at,
+          properties: {}
+        };
+        
+        // 获取边的属性
+        const propsResult = await this.db.query(
+          "SELECT key, value FROM relationship_properties WHERE relationship_id = ?",
+          [edge.id]
+        );
+        
+        if (propsResult?.values && propsResult.values.length > 0) {
+          for (const propRow of propsResult.values) {
+            let key: string;
+            let rawValue: string;
+            
+            if (Array.isArray(propRow)) {
+              key = propRow[0];
+              rawValue = propRow[1];
+            } else {
+              key = propRow.key;
+              rawValue = propRow.value;
+            }
+            
+            try {
+              edge.properties![key] = JSON.parse(rawValue);
+            } catch (e) {
+              edge.properties![key] = rawValue;
+            }
+          }
+        }
+        
+        edges.push(edge);
+      }
+      
+      return edges;
+    } catch (error) {
+      if (error instanceof NodeNotFoundError) {
+        throw error;
+      }
+      throw new DatabaseError(`Failed to get edges between nodes: ${error}`, error as Error);
+    }
+  }
 } 

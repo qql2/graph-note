@@ -17,7 +17,8 @@ import {
   IonRadioGroup,
   IonRadio,
   IonListHeader,
-  IonAlert
+  IonAlert,
+  IonToggle
 } from '@ionic/react';
 import { close, refresh, sunny, moon, contrast } from 'ionicons/icons';
 import { 
@@ -48,6 +49,7 @@ interface SettingsModalProps {
   onQuadrantChange: (position: QuadrantPosition, value: string[]) => void;
   onDepthChange: (relationshipType: string, value: number) => void;
   onRelationshipLabelModeChange: (value: RelationshipLabelMode) => void;
+  onAutoFocusNewNodeChange: (value: boolean) => void;
   onUnconfiguredPositionChange: (position: QuadrantPosition) => void;
   onRelationshipTypeConfigChange: (newConfig: RelationshipTypeConfig) => void;
   onResetAllConfigs: () => void;
@@ -64,6 +66,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onQuadrantChange,
   onDepthChange,
   onRelationshipLabelModeChange,
+  onAutoFocusNewNodeChange,
   onUnconfiguredPositionChange,
   onRelationshipTypeConfigChange,
   onResetAllConfigs
@@ -336,6 +339,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 ))}
               </IonRadioGroup>
             </IonList>
+            
+            <IonItem lines="none" className="auto-focus-toggle">
+              <IonLabel>
+                自动聚焦新节点
+                <p className="setting-description">创建新节点后自动将视图聚焦于该节点</p>
+              </IonLabel>
+              <IonToggle
+                checked={viewConfig.autoFocusNewNode}
+                onIonChange={e => onAutoFocusNewNodeChange(e.detail.checked)}
+              />
+            </IonItem>
           </div>
           
           <div className="config-actions">
