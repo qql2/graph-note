@@ -83,10 +83,14 @@ const EdgeEditModal: React.FC<EdgeEditModalProps> = ({
   // Auto-focus the input when modal opens
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      // Small delay to ensure the modal is fully rendered
-      setTimeout(() => {
-        inputRef.current?.setFocus();
-      }, 150);
+      // 使用多次尝试的方式确保聚焦成功
+      const focusAttempts = [50, 150, 300];
+      
+      focusAttempts.forEach(delay => {
+        setTimeout(() => {
+          inputRef.current?.setFocus();
+        }, delay);
+      });
     }
     // Reset states when modal opens with new edge
     setRelationType(relationshipType);
@@ -176,10 +180,13 @@ const EdgeEditModal: React.FC<EdgeEditModalProps> = ({
     }
     
     setShowSuggestions(false);
-    // Focus back on the input after selection
-    setTimeout(() => {
-      inputRef.current?.setFocus();
-    }, 100);
+    // 多次尝试聚焦，确保成功
+    const focusAttempts = [50, 150, 300];
+    focusAttempts.forEach(delay => {
+      setTimeout(() => {
+        inputRef.current?.setFocus();
+      }, delay);
+    });
   };
 
   // 切换显示模式
@@ -196,7 +203,10 @@ const EdgeEditModal: React.FC<EdgeEditModalProps> = ({
   };
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="edge-edit-modal">
+    <IonModal isOpen={isOpen} onDidDismiss={onClose} className="edge-edit-modal" onDidPresent={() => {
+      // 在模态框打开完成后也尝试聚焦
+      inputRef.current?.setFocus();
+    }}>
       <IonHeader>
         <IonToolbar>
           <IonTitle>{isNewRelation ? '添加自定义关系' : '编辑关系'}</IonTitle>
