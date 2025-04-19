@@ -317,43 +317,73 @@ const GraphView: React.FC<GraphViewProps> = ({
       });
     }
     
-    // 创建关系菜单项（仅对中心节点显示）
-    if (isCenter && onCreateRelation) {
-      // 添加默认关系类型
-      for (const commonRelationshipType of Object.values(CommonRelationshipTypes)) {
+    // 创建关系菜单项
+    if (onCreateRelation) {
+      if (isCenter) {
+        // 中心节点可以创建所有关系类型的节点
+        for (const commonRelationshipType of Object.values(CommonRelationshipTypes)) {
+          menuItems.push({
+            id: `create-${commonRelationshipType}`,
+            label: `添加${commonRelationshipType}节点`,
+            icon: add,
+            onClick: () => {
+              setNodeEditModal({
+                isOpen: true,
+                nodeId: '',
+                nodeLabel: `新${commonRelationshipType}节点`,
+                isNewNode: true,
+                relationType: commonRelationshipType,
+                sourceNodeId: nodeId
+              });
+            }
+          });
+        }
+        
+        // 添加自定义关系
         menuItems.push({
-          id: `create-${commonRelationshipType}`,
-          label: `添加${commonRelationshipType}节点`,
+          id: 'create-custom',
+          label: '添加自定义关系',
           icon: add,
           onClick: () => {
-            setNodeEditModal({
+            setEdgeEditModal({
               isOpen: true,
-              nodeId: '',
-              nodeLabel: `新${commonRelationshipType}节点`,
-              isNewNode: true,
-              relationType: commonRelationshipType,
+              edgeId: '',
+              relationshipType: '',
+              edge: {} as GraphEdge,
+              isNewRelation: true,
               sourceNodeId: nodeId
             });
           }
         });
-      }
-      
-      // 添加自定义关系
-      menuItems.push({
-        id: 'create-custom',
-        label: '添加自定义关系',
-        icon: add,
-        onClick: () => {
-          setEdgeEditModal({
-            isOpen: true,
-            edgeId: '',
-            relationshipType: '',
-            edge: {} as GraphEdge,
-            isNewRelation: true,
-            sourceNodeId: nodeId
-          });
+      } else {
+        // 非中心节点，根据节点所在象限来限制可创建的关系类型
+        // 获取节点相对于中心节点的象限位置
+        const nodeQuadrant = getNodeQuadrant(nodeId);
+        
+        if (nodeQuadrant) {
+          // 获取该象限允许的关系类型
+          const allowedRelationshipTypes = quadrantConfig[nodeQuadrant];
+          
+          // 只添加该象限允许的关系类型
+          for (const relationType of allowedRelationshipTypes) {
+            menuItems.push({
+              id: `create-${relationType}`,
+              label: `添加${relationType}节点`,
+              icon: add,
+              onClick: () => {
+                setNodeEditModal({
+                  isOpen: true,
+                  nodeId: '',
+                  nodeLabel: `新${relationType}节点`,
+                  isNewNode: true,
+                  relationType: relationType,
+                  sourceNodeId: nodeId
+                });
+              }
+            });
+          }
         }
-      });
+      }
     }
     
     // 删除节点菜单项
@@ -375,6 +405,45 @@ const GraphView: React.FC<GraphViewProps> = ({
       targetId: nodeId,
       type: 'node'
     });
+  };
+
+  // 获取节点相对于中心节点的象限位置
+  const getNodeQuadrant = (nodeId: string): QuadrantPosition | null => {
+    if (!graph) return null;
+    
+    const nodeCell = graph.getCellById(nodeId);
+    const centralNodeCell = graph.getCellById(centralNodeId);
+    
+    if (!nodeCell || !centralNodeCell) return null;
+    
+    const nodeBBox = nodeCell.getBBox();
+    const centralBBox = centralNodeCell.getBBox();
+    
+    // 获取节点和中心节点的中心点
+    const nodeCenter = {
+      x: nodeBBox.x + nodeBBox.width / 2,
+      y: nodeBBox.y + nodeBBox.height / 2
+    };
+    
+    const centralCenter = {
+      x: centralBBox.x + centralBBox.width / 2,
+      y: centralBBox.y + centralBBox.height / 2
+    };
+    
+    // 判断节点相对于中心节点在哪个象限
+    if (nodeCenter.y < centralCenter.y) {
+      // 在中心节点上方
+      return QuadrantPosition.TOP;
+    } else if (nodeCenter.y > centralCenter.y) {
+      // 在中心节点下方
+      return QuadrantPosition.BOTTOM;
+    } else if (nodeCenter.x < centralCenter.x) {
+      // 在中心节点左侧
+      return QuadrantPosition.LEFT;
+    } else {
+      // 在中心节点右侧
+      return QuadrantPosition.RIGHT;
+    }
   };
   
   // 处理边右键菜单
