@@ -29,6 +29,8 @@ const relationshipToSimpleLabel: Record<string, string> = {
   [CommonRelationshipTypes.CHILD]: 'C',
   [CommonRelationshipTypes.BASE]: 'Ba',
   [CommonRelationshipTypes.BUILD]: 'Bu',
+  [CommonRelationshipTypes.MENTION]: 'M',
+  [CommonRelationshipTypes.MENTIONED_BY]: 'MB',
 };
 
 // 定义菜单项接口
@@ -313,69 +315,23 @@ const GraphView: React.FC<GraphViewProps> = ({
     // 创建关系菜单项（仅对中心节点显示）
     if (isCenter && onCreateRelation) {
       // 添加默认关系类型
-      menuItems.push({
-        id: 'create-father',
-        label: '添加父节点关系',
-        icon: add,
-        onClick: () => {
-          setNodeEditModal({
-            isOpen: true,
-            nodeId: '',
-            nodeLabel: `新${CommonRelationshipTypes.FATHER}节点`,
-            isNewNode: true,
-            relationType: CommonRelationshipTypes.FATHER,
-            sourceNodeId: nodeId
-          });
-        }
-      });
-      
-      menuItems.push({
-        id: 'create-child',
-        label: '添加子节点关系',
-        icon: add,
-        onClick: () => {
-          setNodeEditModal({
-            isOpen: true,
-            nodeId: '',
-            nodeLabel: `新${CommonRelationshipTypes.CHILD}节点`,
-            isNewNode: true,
-            relationType: CommonRelationshipTypes.CHILD,
-            sourceNodeId: nodeId
-          });
-        }
-      });
-      
-      menuItems.push({
-        id: 'create-base',
-        label: '添加基础关系',
-        icon: add,
-        onClick: () => {
-          setNodeEditModal({
-            isOpen: true,
-            nodeId: '',
-            nodeLabel: `新${CommonRelationshipTypes.BASE}节点`,
-            isNewNode: true,
-            relationType: CommonRelationshipTypes.BASE,
-            sourceNodeId: nodeId
-          });
-        }
-      });
-      
-      menuItems.push({
-        id: 'create-build',
-        label: '添加构建关系',
-        icon: add,
-        onClick: () => {
-          setNodeEditModal({
-            isOpen: true,
-            nodeId: '',
-            nodeLabel: `新${CommonRelationshipTypes.BUILD}节点`,
-            isNewNode: true,
-            relationType: CommonRelationshipTypes.BUILD,
-            sourceNodeId: nodeId
-          });
-        }
-      });
+      for (const commonRelationshipType of Object.values(CommonRelationshipTypes)) {
+        menuItems.push({
+          id: `create-${commonRelationshipType}`,
+          label: `添加${commonRelationshipType}节点`,
+          icon: add,
+          onClick: () => {
+            setNodeEditModal({
+              isOpen: true,
+              nodeId: '',
+              nodeLabel: `新${commonRelationshipType}节点`,
+              isNewNode: true,
+              relationType: commonRelationshipType,
+              sourceNodeId: nodeId
+            });
+          }
+        });
+      }
       
       // 添加自定义关系
       menuItems.push({

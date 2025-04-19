@@ -14,6 +14,8 @@ export const CommonRelationshipTypes = {
   CHILD: 'child',
   BASE: 'base',
   BUILD: 'build',
+  MENTION: 'mention',
+  MENTIONED_BY: 'mentioned_by',
 };
 
 // 关系类型的显示方式
@@ -89,6 +91,8 @@ export const defaultRelationshipTypeConfig: RelationshipTypeConfig = {
     [CommonRelationshipTypes.CHILD]: CommonRelationshipTypes.FATHER,
     [CommonRelationshipTypes.BASE]: CommonRelationshipTypes.BUILD,
     [CommonRelationshipTypes.BUILD]: CommonRelationshipTypes.BASE,
+    [CommonRelationshipTypes.MENTION]: CommonRelationshipTypes.MENTIONED_BY,
+    [CommonRelationshipTypes.MENTIONED_BY]: CommonRelationshipTypes.MENTION,
   }
 };
 
@@ -96,8 +100,8 @@ export const defaultRelationshipTypeConfig: RelationshipTypeConfig = {
 export const defaultQuadrantConfig: QuadrantConfig = {
   [QuadrantPosition.TOP]: [CommonRelationshipTypes.FATHER],
   [QuadrantPosition.BOTTOM]: [CommonRelationshipTypes.CHILD],
-  [QuadrantPosition.LEFT]: [CommonRelationshipTypes.BASE],
-  [QuadrantPosition.RIGHT]: [CommonRelationshipTypes.BUILD],
+  [QuadrantPosition.LEFT]: [CommonRelationshipTypes.BASE, CommonRelationshipTypes.MENTIONED_BY],
+  [QuadrantPosition.RIGHT]: [CommonRelationshipTypes.BUILD, CommonRelationshipTypes.MENTION],
   unconfiguredTypesPosition: QuadrantPosition.LEFT, // 默认未指定关系组用于未配置的关系类型
   relationshipTypeConfig: defaultRelationshipTypeConfig, // 使用默认关系类型相对性配置
 };
@@ -108,6 +112,8 @@ export const defaultDepthConfig: DepthConfig = {
   [CommonRelationshipTypes.CHILD]: 3,
   [CommonRelationshipTypes.BASE]: 3,
   [CommonRelationshipTypes.BUILD]: 3,
+  [CommonRelationshipTypes.MENTION]: 3,
+  [CommonRelationshipTypes.MENTIONED_BY]: 3,
 };
 
 // 默认视图配置

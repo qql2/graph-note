@@ -591,6 +591,8 @@ const GraphDBDemo: React.FC = () => {
                       <IonSelectOption value="child">子女</IonSelectOption>
                       <IonSelectOption value="base">基础</IonSelectOption>
                       <IonSelectOption value="build">构建</IonSelectOption>
+                      <IonSelectOption value="mention">提及</IonSelectOption>
+                      <IonSelectOption value="mentioned_by">被提及</IonSelectOption>
                       <IonSelectOption value="custom">自定义</IonSelectOption>
                     </IonSelect>
                   </IonItem>
