@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { Graph } from '@antv/x6';
 import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, GraphEdge, CommonRelationshipTypes, QuadrantPosition } from '../../models/GraphNode';
 import { GraphLayoutService } from '../../services/GraphLayoutService';
@@ -186,7 +186,7 @@ Graph.registerEdge(
   true
 );
 
-const GraphView: React.FC<GraphViewProps> = ({
+const GraphView: React.FC<GraphViewProps> = memo(({
   graphData,
   centralNodeId,
   quadrantConfig = defaultQuadrantConfig,
@@ -202,11 +202,11 @@ const GraphView: React.FC<GraphViewProps> = ({
   newNodeId = ''  // 默认为空字符串
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [graph, setGraph] = useState<Graph | null>(null);
+  const [graphState, setGraphState] = useState<Graph | null>(null);
   const isPress = useRef(false);
   
   // 右键菜单状态
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+  const contextMenu = useRef<ContextMenuState>({
     isOpen: false,
     position: { x: 0, y: 0 },
     items: [],
@@ -215,7 +215,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   });
 
   // 节点编辑模态框状态
-  const [nodeEditModal, setNodeEditModal] = useState({
+  const nodeEditModal = useRef({
     isOpen: false,
     nodeId: '',
     nodeLabel: '',
@@ -225,7 +225,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   });
 
   // 边编辑模态框状态
-  const [edgeEditModal, setEdgeEditModal] = useState({
+  const edgeEditModal = useRef({
     isOpen: false,
     edgeId: '',
     relationshipType: '',
@@ -235,7 +235,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   });
 
   // 缓存当前存在的所有关系类型
-  const [existingRelationshipTypes, setExistingRelationshipTypes] = useState<string[]>([]);
+  const existingRelationshipTypes = useRef<string[]>([]);
 
   // 触摸拖动相关状态 - 使用 useRef 替代 useState
   const isBlankTouchRef = useRef(false);
@@ -246,7 +246,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   const initialScaleRef = useRef(1);
 
   // 添加state跟踪新节点
-  const [newlyCreatedNodeIds, setNewlyCreatedNodeIds] = useState<string[]>([]);
+  const newlyCreatedNodeIds = useRef<string[]>([]);
 
   // 添加长按相关状态
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -270,39 +270,40 @@ const GraphView: React.FC<GraphViewProps> = ({
       graphData.edges.forEach(edge => {
         relationshipTypes.add(edge.relationshipType);
       });
-      setExistingRelationshipTypes(Array.from(relationshipTypes));
+      existingRelationshipTypes.current = Array.from(relationshipTypes);
     }
   }, [graphData]);
 
   // 处理缩放和重置视图的函数
   const handleZoomIn = () => {
-    if (graph) {
-      const zoom = graph.zoom();
+    if (graphState) {
+      const zoom = graphState.zoom();
       if (zoom < 2) {
-        graph.zoom(zoom + 0.1);
+        graphState.zoom(0.1);
       }
     }
   };
 
   const handleZoomOut = () => {
-    if (graph) {
-      const zoom = graph.zoom();
+    if (graphState) {
+      const zoom = graphState.zoom();
+      console.log('zoom', zoom);
       if (zoom > 0.5) {
-        graph.zoom(zoom - 0.1);
+        graphState.zoom(-0.1);
       }
     }
   };
 
   const handleResetView = () => {
-    if (graph) {
-      graph.zoomTo(1);
-      graph.centerContent();
+    if (graphState) {
+      graphState.zoomTo(1);
+      graphState.centerContent();
     }
   };
 
   // 关闭上下文菜单
   const closeContextMenu = () => {
-    setContextMenu(prev => ({ ...prev, isOpen: false }));
+    contextMenu.current.isOpen = false;
   };
 
   // 修改handleNodeContextMenu来支持长按触发
@@ -322,14 +323,14 @@ const GraphView: React.FC<GraphViewProps> = ({
         icon: pencil,
         onClick: () => {
           // 打开节点编辑模态框
-          setNodeEditModal({
+          nodeEditModal.current = {
             isOpen: true,
             nodeId: nodeId,
             nodeLabel: node.attrs.label.text,
             isNewNode: false,
             relationType: '',
             sourceNodeId: ''
-          });
+          };
         }
       });
     }
@@ -344,14 +345,14 @@ const GraphView: React.FC<GraphViewProps> = ({
             label: `添加${commonRelationshipType}节点`,
             icon: add,
             onClick: () => {
-              setNodeEditModal({
+              nodeEditModal.current = {
                 isOpen: true,
                 nodeId: '',
                 nodeLabel: `新${commonRelationshipType}节点`,
                 isNewNode: true,
                 relationType: commonRelationshipType,
                 sourceNodeId: nodeId
-              });
+              };
             }
           });
         }
@@ -362,14 +363,14 @@ const GraphView: React.FC<GraphViewProps> = ({
           label: '添加自定义关系',
           icon: add,
           onClick: () => {
-            setEdgeEditModal({
+            edgeEditModal.current = {
               isOpen: true,
               edgeId: '',
               relationshipType: '',
               edge: {} as GraphEdge,
               isNewRelation: true,
               sourceNodeId: nodeId
-            });
+            };
           }
         });
       } else {
@@ -388,14 +389,14 @@ const GraphView: React.FC<GraphViewProps> = ({
               label: `添加${relationType}节点`,
               icon: add,
               onClick: () => {
-                setNodeEditModal({
+                nodeEditModal.current = {
                   isOpen: true,
                   nodeId: '',
                   nodeLabel: `新${relationType}节点`,
                   isNewNode: true,
                   relationType: relationType,
                   sourceNodeId: nodeId
-                });
+                };
               }
             });
           }
@@ -419,21 +420,21 @@ const GraphView: React.FC<GraphViewProps> = ({
     let menuX = event.clientX;
     let menuY = event.clientY;
     
-    setContextMenu({
+    contextMenu.current = {
       isOpen: true,
       position: { x: menuX, y: menuY },
       items: menuItems,
       targetId: nodeId,
       type: 'node'
-    });
+    };
   };
 
   // 获取节点相对于中心节点的象限位置
   const getNodeQuadrant = (nodeId: string): QuadrantPosition | null => {
-    if (!graph) return null;
+    if (!graphState) return null;
     
-    const nodeCell = graph.getCellById(nodeId);
-    const centralNodeCell = graph.getCellById(centralNodeId);
+    const nodeCell = graphState.getCellById(nodeId);
+    const centralNodeCell = graphState.getCellById(centralNodeId);
     
     if (!nodeCell || !centralNodeCell) return null;
     
@@ -486,14 +487,14 @@ const GraphView: React.FC<GraphViewProps> = ({
           // 获取当前显示的标签
           const currentLabel = edge.data.relationshipType || '';
           // 打开边编辑模态框
-          setEdgeEditModal({
+          edgeEditModal.current = {
             isOpen: true,
             edgeId: edgeId,
             relationshipType: currentLabel,
             edge: edgeData,
             isNewRelation: false,
             sourceNodeId: edgeData.source
-          });
+          };
         }
       });
     }
@@ -524,13 +525,13 @@ const GraphView: React.FC<GraphViewProps> = ({
       }
     }
     
-    setContextMenu({
+    contextMenu.current = {
       isOpen: true,
       position: { x: menuX, y: menuY },
       items: menuItems,
       targetId: edgeId,
       type: 'edge'
-    });
+    };
   };
 
   // 在组件初始化Graph之后添加状态
@@ -538,7 +539,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   
   // 初始化触摸事件处理
   useEffect(() => {
-    if (!graph || !containerRef.current) return;
+    if (!graphState || !containerRef.current) return;
 
     // 计算两点之间的距离
     const getDistance = (p1: Touch, p2: Touch) => {
@@ -556,7 +557,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     };
 
     // 监听空白区域的触摸开始 (映射为鼠标事件)
-    graph.on('blank:mousedown', (e) => {
+    graphState.on('blank:mousedown', (e) => {
       
       // 设置为空白区域触摸
       isBlankTouchRef.current = true;
@@ -582,19 +583,19 @@ const GraphView: React.FC<GraphViewProps> = ({
     });
 
     // 监听节点的触摸开始，确保不会拖动画布
-    graph.on('node:mousedown', () => {
+    graphState.on('node:mousedown', () => {
       // 在节点上触摸时，标记为非空白区域
       isBlankTouchRef.current = false;
     });
     
     // 监听边的触摸开始，确保不会拖动画布
-    graph.on('edge:mousedown', () => {
+    graphState.on('edge:mousedown', () => {
       // 在边上触摸时，标记为非空白区域
       isBlankTouchRef.current = false;
     });
 
     // 监听触摸结束 (映射为鼠标事件)
-    graph.on('blank:mouseup', () => {
+    graphState.on('blank:mouseup', () => {
       
       isBlankTouchRef.current = false;
       isDraggingRef.current = false;
@@ -618,7 +619,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         initialPinchDistanceRef.current = initialDistance;
         
         // 记录当前缩放比例
-        initialScaleRef.current = graph.zoom();
+        initialScaleRef.current = graphState.zoom();
         
         // 只有当事件可以被取消时才调用 preventDefault
         if (e.cancelable) {
@@ -642,7 +643,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         // 如果初始距离未设置，先设置初始距离
         if (initialPinchDistanceRef.current === 0) {
           initialPinchDistanceRef.current = distance;
-          initialScaleRef.current = graph.zoom();
+          initialScaleRef.current = graphState.zoom();
           return;
         }
         
@@ -658,7 +659,7 @@ const GraphView: React.FC<GraphViewProps> = ({
         const center = getMidPoint(touch1, touch2);
         
         // 应用缩放
-        graph.zoom(limitedScale, {
+        graphState.zoom(limitedScale, {
           absolute: true,
           center: {
             x: center.x,
@@ -679,11 +680,11 @@ const GraphView: React.FC<GraphViewProps> = ({
         const deltaX = touch.clientX - lastTouchXRef.current;
         const deltaY = touch.clientY - lastTouchYRef.current;
         
-        const currentScale = graph.scale();
+        const currentScale = graphState.scale();
         
         requestAnimationFrame(() => {
           
-          graph.translateBy(deltaX / currentScale.sx, deltaY / currentScale.sy);
+          graphState.translateBy(deltaX / currentScale.sx, deltaY / currentScale.sy);
         });
         
         lastTouchXRef.current = touch.clientX;
@@ -726,11 +727,11 @@ const GraphView: React.FC<GraphViewProps> = ({
       }
       
       // 清理X6事件监听
-      if (graph) {
-        graph.off('blank:mousedown');
-        graph.off('blank:mouseup');
-        graph.off('node:mousedown');
-        graph.off('edge:mousedown');
+      if (graphState) {
+        graphState.off('blank:mousedown');
+        graphState.off('blank:mouseup');
+        graphState.off('node:mousedown');
+        graphState.off('edge:mousedown');
       }
       
       // 重置所有触摸相关状态
@@ -738,15 +739,40 @@ const GraphView: React.FC<GraphViewProps> = ({
       isBlankTouchRef.current = false;
       initialPinchDistanceRef.current = 0;
     };
-  }, [graph]);
+  }, [graphState]);
+
+  useEffect(() => {
+    console.log('containerRef changed');
+  }, [containerRef]);
+
+  useEffect(() => {
+    console.log('graphData changed');
+  }, [graphData]);
+
+  useEffect(() => {
+    console.log('centralNodeId changed');
+  }, [centralNodeId]);
+
+  useEffect(() => {
+    console.log('quadrantConfig changed');
+  }, [quadrantConfig]);
+
+  useEffect(() => {
+    console.log('depthConfig changed');
+  }, [depthConfig]);
+
+  useEffect(() => {
+    console.log('graph changed');
+  },[graphState]);
 
   // Initialize the graph when the component mounts
   useEffect(() => {
     if (!containerRef.current) return;
+    console.log('some listener changed');
 
     // Clear any existing graph
-    if (graph) {
-      graph.dispose();
+    if (graphState) {
+      graphState.dispose();
     }
 
     // Create a new graph instance
@@ -793,7 +819,6 @@ const GraphView: React.FC<GraphViewProps> = ({
 
     // Register node click event
     newGraph.on('node:click', ({ node }) => {
-      console.log('node:click', isPress.current);
       // 如果是长按触发的点击，不执行通常的点击操作
       if (isPress.current) {
         isPress.current = false;
@@ -818,9 +843,10 @@ const GraphView: React.FC<GraphViewProps> = ({
     newGraph.on('blank:click', () => {
       closeContextMenu();
     });
+    console.log('change graph')
+    setGraphState(newGraph);
 
-    setGraph(newGraph);
-
+    console.log('graph:',graphState?.getCells())
     // Cleanup on unmount
     return () => {
       newGraph.dispose();
@@ -829,16 +855,17 @@ const GraphView: React.FC<GraphViewProps> = ({
 
   // 当有新节点ID传入时，更新状态
   useEffect(() => {
-    if (newNodeId && !newlyCreatedNodeIds.includes(newNodeId)) {
-      setNewlyCreatedNodeIds(prev => [...prev, newNodeId]);
+    if (newNodeId && !newlyCreatedNodeIds.current.includes(newNodeId)) {
+      newlyCreatedNodeIds.current.push(newNodeId);
       
       // 设置定时器，一段时间后移除新节点状态
       const timer = setTimeout(() => {
-        setNewlyCreatedNodeIds(prev => prev.filter(id => id !== newNodeId));
+        console.log('new create node timer');
+        newlyCreatedNodeIds.current = newlyCreatedNodeIds.current.filter(id => id !== newNodeId);
         
         // 如果图存在，找到对应节点并移除新节点效果
-        if (graph) {
-          const node = graph.getCellById(newNodeId);
+        if (graphState) {
+          const node = graphState.getCellById(newNodeId);
           if (node && node.isNode()) {
             // 直接设置class属性为空
             node.attr('body/class', '');
@@ -848,14 +875,15 @@ const GraphView: React.FC<GraphViewProps> = ({
       
       return () => clearTimeout(timer);
     }
-  }, [newNodeId, newlyCreatedNodeIds, graph]);
+  }, [newNodeId, newlyCreatedNodeIds, graphState]);
 
   // Render the graph when data or central node changes
   useEffect(() => {
-    if (!graph || !graphData || !centralNodeId || !containerRef.current) return;
+    console.log('central node changed');
+    if (!graphState || !graphData || !centralNodeId || !containerRef.current) return;
 
     // Clear the graph
-    graph.clearCells();
+    graphState.clearCells();
 
     // Organize and layout the graph data
     const organizedData = GraphLayoutService.organizeByQuadrants(
@@ -875,7 +903,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     // 节点和其quadrant的映射，用于决定连接点
     const nodeQuadrantMap = new Map();
     const nodeDepthMap = new Map();
-
+    console.log('layoutData:',layoutData)
     // Add nodes to the graph
     const nodes = layoutData.map((nodeData: any) => {
       const { id, x, y, width, height, label, isCentralNode, quadrant, depth } = nodeData;
@@ -906,7 +934,7 @@ const GraphView: React.FC<GraphViewProps> = ({
       };
 
       // 创建节点
-      const node = graph.addNode({
+      const node = graphState.addNode({
         id,
         x,
         y,
@@ -930,18 +958,17 @@ const GraphView: React.FC<GraphViewProps> = ({
           depth,
         },
       });
-      
+
       // 检查此节点是否是新节点，如果是，添加特殊类名来触发动画
-      if (newlyCreatedNodeIds.includes(id)) {
+      if (newlyCreatedNodeIds.current.includes(id)) {
         // 使用 attr 方法添加类
         node.attr('body/class', 'new-node');
         
         // 可以选择性地添加额外的边框效果
         const bbox = node.getBBox();
         const padding = 4; // 边框与节点的距离
-        
         // 添加一个动画边框作为特效
-        graph.addNode({
+        graphState.addNode({
           shape: 'rect',
           x: bbox.x - padding,
           y: bbox.y - padding,
@@ -1088,21 +1115,21 @@ const GraphView: React.FC<GraphViewProps> = ({
         }
         
         // 添加边到图中
-        graph.addEdge(edgeOptions);
+        graphState.addEdge(edgeOptions);
       }
     });
 
     // Center the view
-    graph.centerContent();
+    // graph.centerContent();
 
-  }, [graph, graphData, centralNodeId, quadrantConfig, depthConfig, viewConfig, newlyCreatedNodeIds]);
+  }, [graphState, graphData, centralNodeId, quadrantConfig, depthConfig, viewConfig, newlyCreatedNodeIds]);
 
   // 初始化图形时添加边的点击事件监听和节点的长按事件监听
   useEffect(() => {
-    if (!graph) return;
+    if (!graphState) return;
 
     // 添加边点击事件
-    graph.on('edge:click', ({ edge }) => {
+    graphState.on('edge:click', ({ edge }) => {
       // 如果是长按触发的点击，不执行通常的点击操作
       if (isPress.current) {
         isPress.current = false;
@@ -1152,8 +1179,7 @@ const GraphView: React.FC<GraphViewProps> = ({
     });
     
     // 添加边长按事件 (通过mousedown/mouseup模拟)
-    graph.on('edge:mousedown', ({ cell, e }) => {
-      console.log('edge:mousedown', e);
+    graphState.on('edge:mousedown', ({ cell, e }) => {
       // 记录当前长按的边和位置
       edgeUnderLongPressRef.current = { 
         cell, 
@@ -1196,20 +1222,17 @@ const GraphView: React.FC<GraphViewProps> = ({
     });
     
     // 监听边mouseup事件，结束长按
-    graph.on('edge:mouseup', () => {
-      console.log('edge:mouseup');
+    graphState.on('edge:mouseup', () => {
       clearLongPressTimer();
     });
     
     // 如果手指/鼠标移出了边，也取消长按
-    graph.on('edge:mouseleave', () => {
-      console.log('edge:mouseleave');
+    graphState.on('edge:mouseleave', () => {
       clearLongPressTimer();
     });
     
     // 添加节点长按事件 (通过mousedown/mouseup模拟)
-    graph.on('node:mousedown', ({ cell, e }) => {
-      console.log('node:mousedown', e);
+    graphState.on('node:mousedown', ({ cell, e }) => {
       // 记录当前长按的节点和位置
       nodeUnderLongPressRef.current = { 
         cell, 
@@ -1251,23 +1274,21 @@ const GraphView: React.FC<GraphViewProps> = ({
     });
     
     // 监听mouseup事件，结束长按
-    graph.on('node:mouseup', () => {
-      console.log('node:mouseup');
+    graphState.on('node:mouseup', () => {
       clearLongPressTimer();
     });
     
     
     // 如果手指/鼠标移出了节点，也取消长按
-    graph.on('node:mouseleave', () => {
-      console.log('node:mouseleave');
+    graphState.on('node:mouseleave', () => {
       clearLongPressTimer();
     });
 
     // 点击空白区域时，移除所有边的工具和清除长按状态
-    graph.on('blank:click', () => {
+    graphState.on('blank:click', () => {
       // 清除选中的边
       selectedEdges.forEach(edgeId => {
-        const edge = graph.getCellById(edgeId);
+        const edge = graphState.getCellById(edgeId);
         if (edge && edge.isEdge()) {
           edge.removeTools();
         }
@@ -1277,11 +1298,11 @@ const GraphView: React.FC<GraphViewProps> = ({
     });
 
     // 点击节点时，也移除所有边的工具
-    graph.on('node:click', ({ cell }) => {
+    graphState.on('node:click', ({ cell }) => {
       
       // 清除选中的边
       selectedEdges.forEach(edgeId => {
-        const edge = graph.getCellById(edgeId);
+        const edge = graphState.getCellById(edgeId);
         if (edge && edge.isEdge()) {
           edge.removeTools();
         }
@@ -1294,17 +1315,17 @@ const GraphView: React.FC<GraphViewProps> = ({
 
     return () => {
       // 清理事件监听器
-      graph.off('edge:click');
-      graph.off('edge:mousedown');
-      graph.off('edge:mouseup');
-      graph.off('edge:mouseleave');
-      graph.off('node:mousedown');
-      graph.off('node:mouseup');
-      graph.off('node:mousemove');
-      graph.off('node:mouseleave');
+      graphState.off('edge:click');
+      graphState.off('edge:mousedown');
+      graphState.off('edge:mouseup');
+      graphState.off('edge:mouseleave');
+      graphState.off('node:mousedown');
+      graphState.off('node:mouseup');
+      graphState.off('node:mousemove');
+      graphState.off('node:mouseleave');
       clearLongPressTimer();
     };
-  }, [graph, selectedEdges]);
+  }, [graphState, selectedEdges]);
 
   // 添加CSS样式
   useEffect(() => {
@@ -1345,6 +1366,43 @@ const GraphView: React.FC<GraphViewProps> = ({
     };
   }, []);
 
+  // Memoize event handlers
+  const handleNodeClick = useCallback((nodeId: string) => {
+    if (onNodeClick) {
+      onNodeClick(nodeId);
+    }
+  }, [onNodeClick]);
+
+  const handleEditNode = useCallback((nodeId: string, label: string) => {
+    if (onEditNode) {
+      onEditNode(nodeId, label);
+    }
+  }, [onEditNode]);
+
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    if (onDeleteNode) {
+      onDeleteNode(nodeId);
+    }
+  }, [onDeleteNode]);
+
+  const handleEditEdge = useCallback((edgeId: string, label: string, isSimpleLabel?: boolean) => {
+    if (onEditEdge) {
+      onEditEdge(edgeId, label, isSimpleLabel);
+    }
+  }, [onEditEdge]);
+
+  const handleDeleteEdge = useCallback((edgeId: string) => {
+    if (onDeleteEdge) {
+      onDeleteEdge(edgeId);
+    }
+  }, [onDeleteEdge]);
+
+  const handleCreateRelation = useCallback((sourceNodeId: string, relationType: string, targetNodeId?: string, nodeLabel?: string) => {
+    if (onCreateRelation) {
+      onCreateRelation(sourceNodeId, relationType, targetNodeId, nodeLabel);
+    }
+  }, [onCreateRelation]);
+
   return (
     <div className="graph-view-container">
       <div className="graph-view-controls">
@@ -1356,73 +1414,63 @@ const GraphView: React.FC<GraphViewProps> = ({
       
       {/* 右键菜单组件 */}
       <ContextMenu 
-        isOpen={contextMenu.isOpen}
-        position={contextMenu.position}
-        items={contextMenu.items}
+        isOpen={contextMenu.current.isOpen}
+        position={contextMenu.current.position}
+        items={contextMenu.current.items}
         onClose={closeContextMenu}
         navbarHeight={navbarHeight} // 传入导航栏高度
       />
 
       {/* 节点编辑模态框 */}
       <NodeEditModal
-        isOpen={nodeEditModal.isOpen}
-        onClose={() => setNodeEditModal(prev => ({ ...prev, isOpen: false }))}
-        nodeId={nodeEditModal.nodeId}
-        nodeLabel={nodeEditModal.nodeLabel}
+        isOpen={nodeEditModal.current.isOpen}
+        onClose={() => nodeEditModal.current.isOpen = false}
+        nodeId={nodeEditModal.current.nodeId}
+        nodeLabel={nodeEditModal.current.nodeLabel}
         existingNodes={graphData.nodes}
         existingEdges={graphData.edges}
-        isNewNode={nodeEditModal.isNewNode}
-        relationType={nodeEditModal.relationType}
-        sourceNodeId={nodeEditModal.sourceNodeId}
+        isNewNode={nodeEditModal.current.isNewNode}
+        relationType={nodeEditModal.current.relationType}
+        sourceNodeId={nodeEditModal.current.sourceNodeId}
         onSave={(nodeId, newLabel, targetNodeId) => {
-          if (onEditNode && !targetNodeId && !nodeEditModal.isNewNode) {
-            // 常规节点编辑，没有选择目标节点且不是新建节点
+          if (onEditNode && !targetNodeId && !nodeEditModal.current.isNewNode) {
             onEditNode(nodeId, newLabel);
           } else if (targetNodeId) {
-            // 处理节点合并或连接到现有节点
-            if (nodeEditModal.isNewNode && onCreateRelation) {
-              // 新建节点时，直接连接到目标节点
-              onCreateRelation(nodeEditModal.sourceNodeId, nodeEditModal.relationType, targetNodeId);
-            } else if (!nodeEditModal.isNewNode && onEditNode) {
-              // 编辑节点时需要进行节点合并
+            if (nodeEditModal.current.isNewNode && onCreateRelation) {
+              onCreateRelation(nodeEditModal.current.sourceNodeId, nodeEditModal.current.relationType, targetNodeId);
+            } else if (!nodeEditModal.current.isNewNode && onEditNode) {
               onEditNode(nodeId, `MERGE:${targetNodeId}`);
             }
-          } else if (nodeEditModal.isNewNode && onCreateRelation) {
-            // 新建节点但没有选择现有节点，传递用户输入的标签
-            onCreateRelation(nodeEditModal.sourceNodeId, nodeEditModal.relationType, undefined, newLabel);
+          } else if (nodeEditModal.current.isNewNode && onCreateRelation) {
+            onCreateRelation(nodeEditModal.current.sourceNodeId, nodeEditModal.current.relationType, undefined, newLabel);
           }
         }}
       />
 
       {/* 边编辑模态框 */}
       <EdgeEditModal
-        isOpen={edgeEditModal.isOpen}
-        onClose={() => setEdgeEditModal(prev => ({ ...prev, isOpen: false }))}
-        edgeId={edgeEditModal.edgeId}
-        relationshipType={edgeEditModal.relationshipType}
+        isOpen={edgeEditModal.current.isOpen}
+        onClose={() => edgeEditModal.current.isOpen = false}
+        edgeId={edgeEditModal.current.edgeId}
+        relationshipType={edgeEditModal.current.relationshipType}
         existingEdges={graphData.edges}
         labelMode={viewConfig.showRelationshipLabels}
-        isNewRelation={edgeEditModal.isNewRelation}
+        isNewRelation={edgeEditModal.current.isNewRelation}
         onSave={(edgeId, newRelationshipType, isSimpleLabel) => {
-          if (edgeEditModal.isNewRelation) {
-            // 创建新关系
+          if (edgeEditModal.current.isNewRelation) {
             if (onCreateRelation) {
-              // 使用关系类型作为节点标签，保持现有行为
-              onCreateRelation(edgeEditModal.sourceNodeId, newRelationshipType, undefined, `新${newRelationshipType}节点`);
+              onCreateRelation(edgeEditModal.current.sourceNodeId, newRelationshipType, undefined, `新${newRelationshipType}节点`);
             }
           } else {
-            // 编辑已有关系
             if (onEditEdge) {
-              // 根据标签类型传递不同的参数，让父组件处理保存逻辑
               onEditEdge(edgeId, newRelationshipType, isSimpleLabel);
             }
           }
-          // 关闭模态框
-          setEdgeEditModal(prev => ({ ...prev, isOpen: false }));
+          edgeEditModal.current.isOpen = false;
         }}
       />
     </div>
   );
-};
+});
 
-export default GraphView; 
+export default React.memo(GraphView); 
