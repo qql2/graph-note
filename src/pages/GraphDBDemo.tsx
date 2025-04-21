@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   IonContent, IonHeader, IonPage, IonTitle, IonToolbar,
   IonGrid, IonRow, IonCol, IonCard, IonCardHeader, IonCardTitle, IonCardContent,
@@ -21,7 +21,7 @@ import { arrowBack, search, eyeOutline, timeOutline, informationCircleOutline, a
 
 const GraphDBDemo: React.FC = () => {
   // 状态管理
-  const [loading, setLoading] = useState<boolean>(false);
+  const loading= useRef<boolean>(false);
   const [dbInitialized, setDbInitialized] = useState<boolean>(false);
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
@@ -74,7 +74,7 @@ const GraphDBDemo: React.FC = () => {
     
     const initDB = async () => {
       try {
-        setLoading(true);
+        loading.current = true;
         
         await graphDatabaseService.initialize({
           dbName: 'graph_demo',
@@ -101,7 +101,7 @@ const GraphDBDemo: React.FC = () => {
         }
       } finally {
         if (isComponentMounted) {
-          setLoading(false);
+          loading.current = false;
         }
       }
     };
@@ -129,7 +129,7 @@ const GraphDBDemo: React.FC = () => {
   // 获取数据
   const fetchData = async () => {
     try {
-      setLoading(true);
+      loading.current = true;
       
       // 确保数据库已初始化
       if (!graphDatabaseService.isInitialized()) {
@@ -157,14 +157,14 @@ const GraphDBDemo: React.FC = () => {
       console.error('获取数据失败:', error);
       showMessage(`获取数据失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
-      setLoading(false);
+      loading.current = false;
     }
   };
   
   // 刷新数据 - 但不强制关闭数据库
   const refreshData = async () => {
     try {
-      setLoading(true);
+      loading.current = true;
       
       
       // 不关闭数据库，直接重新获取数据
@@ -177,21 +177,21 @@ const GraphDBDemo: React.FC = () => {
       console.error('刷新数据失败:', error);
       showMessage(`刷新数据失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
-      setLoading(false);
+      loading.current = false;
     }
   };
 
   // 添加节点
   const addNode = async () => {
     try {
-      setLoading(true);
+      loading.current = true;
       let parsedProperties = {};
       
       try {
         parsedProperties = JSON.parse(nodeForm.properties);
       } catch (e) {
         showMessage('属性必须是有效的JSON格式', 'error');
-        setLoading(false);
+        loading.current = false;
         return;
       }
       
@@ -218,21 +218,21 @@ const GraphDBDemo: React.FC = () => {
       console.error('添加节点失败:', error);
       showMessage(`添加节点失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
-      setLoading(false);
+      loading.current = false;
     }
   };
 
   // 添加边
   const addEdge = async () => {
     try {
-      setLoading(true);
+      loading.current = true;
       let parsedProperties = {};
       
       try {
         parsedProperties = JSON.parse(edgeForm.properties);
       } catch (e) {
         showMessage('属性必须是有效的JSON格式', 'error');
-        setLoading(false);
+        loading.current = false;
         return;
       }
       
@@ -261,14 +261,14 @@ const GraphDBDemo: React.FC = () => {
       console.error('添加边失败:', error);
       showMessage(`添加边失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
-      setLoading(false);
+      loading.current = false;
     }
   };
 
   // 删除节点
   const deleteNode = async (nodeId: string) => {
     try {
-      setLoading(true);
+      loading.current = true;
       const db = graphDatabaseService.getDatabase('GraphDBDemo');
       await db.deleteNode(nodeId, DeleteMode.CASCADE);
       showMessage(`节点删除成功，ID: ${nodeId}`, 'success');
@@ -277,14 +277,14 @@ const GraphDBDemo: React.FC = () => {
       console.error('删除节点失败:', error);
       showMessage(`删除节点失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
-      setLoading(false);
+      loading.current = false;
     }
   };
 
   // 删除边
   const deleteEdge = async (edgeId: string) => {
     try {
-      setLoading(true);
+      loading.current = true;
       const db = graphDatabaseService.getDatabase('GraphDBDemo');
       await db.deleteEdge(edgeId);
       showMessage(`边删除成功，ID: ${edgeId}`, 'success');
@@ -293,7 +293,7 @@ const GraphDBDemo: React.FC = () => {
       console.error('删除边失败:', error);
       showMessage(`删除边失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
-      setLoading(false);
+      loading.current = false;
     }
   };
 
@@ -325,7 +325,7 @@ const GraphDBDemo: React.FC = () => {
   // 获取节点详情
   const getNodeDetail = async (nodeId: string) => {
     try {
-      setLoading(true);
+      loading.current = true;
       const db = graphDatabaseService.getDatabase('GraphDBDemo');
       
       // 获取节点的关联节点
@@ -348,14 +348,14 @@ const GraphDBDemo: React.FC = () => {
       console.error('获取节点详情失败:', error);
       showMessage(`获取节点详情失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
-      setLoading(false);
+      loading.current = false;
     }
   };
 
   // 获取边详情
   const getEdgeDetail = async (edgeId: string) => {
     try {
-      setLoading(true);
+      loading.current = true;
       
       // 找到选中的边
       const edge = edges.find(e => e.id === edgeId);
@@ -377,7 +377,7 @@ const GraphDBDemo: React.FC = () => {
       console.error('获取边详情失败:', error);
       showMessage(`获取边详情失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
-      setLoading(false);
+      loading.current = false;
     }
   };
 
@@ -415,7 +415,7 @@ const GraphDBDemo: React.FC = () => {
   // 查找不完整的关系
   const findIncompleteEdges = () => {
     try {
-      setLoading(true);
+      loading.current = true;
       
       // 过滤出不完整的边
       const incomplete = edges.filter(edge => !isEdgeComplete(edge));
@@ -432,7 +432,7 @@ const GraphDBDemo: React.FC = () => {
       console.error('查找不完整关系失败:', error);
       showMessage(`查找不完整关系失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
-      setLoading(false);
+      loading.current = false;
     }
   };
 
@@ -487,10 +487,10 @@ const GraphDBDemo: React.FC = () => {
           <IonButton 
             expand="block" 
             onClick={refreshData} 
-            disabled={loading}
+            disabled={loading.current}
           >
             刷新数据
-            {loading && <IonSpinner name="crescent" />}
+            {loading.current  && <IonSpinner name="crescent" />}
           </IonButton>
         </div>
         
@@ -528,7 +528,7 @@ const GraphDBDemo: React.FC = () => {
                   <IonButton
                     expand="block"
                     onClick={addNode}
-                    disabled={loading || !dbInitialized || !nodeForm.label}
+                    disabled={loading.current || !dbInitialized || !nodeForm.label}
                     style={{ marginTop: '16px' }}
                   >
                     添加节点
@@ -616,7 +616,7 @@ const GraphDBDemo: React.FC = () => {
                   <IonButton
                     expand="block"
                     onClick={addEdge}
-                    disabled={loading || !dbInitialized || !edgeForm.source_id || !edgeForm.target_id}
+                    disabled={loading.current || !dbInitialized || !edgeForm.source_id || !edgeForm.target_id}
                     style={{ marginTop: '16px' }}
                   >
                     添加边
@@ -650,7 +650,7 @@ const GraphDBDemo: React.FC = () => {
                               slot="end"
                               color="primary"
                               onClick={() => node.id && getNodeDetail(node.id)}
-                              disabled={loading}
+                              disabled={loading.current}
                             >
                               <IonIcon icon={eyeOutline} slot="icon-only" />
                             </IonButton>
@@ -658,7 +658,7 @@ const GraphDBDemo: React.FC = () => {
                               slot="end"
                               color="danger"
                               onClick={() => node.id && deleteNode(node.id)}
-                              disabled={loading}
+                              disabled={loading.current}
                             >
                               删除
                             </IonButton>
@@ -703,7 +703,7 @@ const GraphDBDemo: React.FC = () => {
                               slot="end"
                               color="primary"
                               onClick={() => edge.id && getEdgeDetail(edge.id)}
-                              disabled={loading}
+                              disabled={loading.current}
                             >
                               <IonIcon icon={eyeOutline} slot="icon-only" />
                             </IonButton>
@@ -711,7 +711,7 @@ const GraphDBDemo: React.FC = () => {
                               slot="end"
                               color="danger"
                               onClick={() => edge.id && deleteEdge(edge.id)}
-                              disabled={loading}
+                              disabled={loading.current}
                             >
                               删除
                             </IonButton>
@@ -747,7 +747,7 @@ const GraphDBDemo: React.FC = () => {
                             return;
                           }
                           try {
-                            setLoading(true);
+                            loading.current = true;
                             const db = graphDatabaseService.getDatabase('GraphDBDemo');
                             const startId = nodes[0].id;
                             const endId = nodes[nodes.length - 1].id;
@@ -759,10 +759,10 @@ const GraphDBDemo: React.FC = () => {
                             console.error('路径查找失败:', error);
                             showMessage(`路径查找失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
                           } finally {
-                            setLoading(false);
+                            loading.current = false;
                           }
                         }}
-                        disabled={loading || !dbInitialized || nodes.length < 2}
+                        disabled={loading.current || !dbInitialized || nodes.length < 2}
                       >
                         演示路径查找（第一个节点到最后一个节点）
                       </IonButton>
@@ -777,7 +777,7 @@ const GraphDBDemo: React.FC = () => {
                             return;
                           }
                           try {
-                            setLoading(true);
+                            loading.current = true;
                             const db = graphDatabaseService.getDatabase('GraphDBDemo');
                             const nodeId = nodes[0].id;
                             if (!nodeId) return;
@@ -788,10 +788,10 @@ const GraphDBDemo: React.FC = () => {
                             console.error('关联节点查找失败:', error);
                             showMessage(`关联节点查找失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
                           } finally {
-                            setLoading(false);
+                            loading.current = false;
                           }
                         }}
-                        disabled={loading || !dbInitialized || nodes.length < 1}
+                        disabled={loading.current || !dbInitialized || nodes.length < 1}
                       >
                         演示关联节点查找（第一个节点，深度2）
                       </IonButton>
@@ -804,7 +804,7 @@ const GraphDBDemo: React.FC = () => {
                         fill="outline"
                         color="warning"
                         onClick={findIncompleteEdges}
-                        disabled={loading || !dbInitialized || edges.length === 0}
+                        disabled={loading.current || !dbInitialized || edges.length === 0}
                       >
                         <IonIcon icon={alertCircleOutline} slot="start" />
                         查找不完整关系
@@ -1030,7 +1030,7 @@ const GraphDBDemo: React.FC = () => {
                             slot="end"
                             color="danger"
                             onClick={() => edge.id && deleteIncompleteEdge(edge.id)}
-                            disabled={loading}
+                            disabled={loading.current}
                           >
                             删除
                           </IonButton>
@@ -1058,7 +1058,7 @@ const GraphDBDemo: React.FC = () => {
         />
         
         {/* 加载指示器 */}
-        {loading && (
+        {loading.current  && (
           <div style={{
             position: 'fixed',
             top: 0,

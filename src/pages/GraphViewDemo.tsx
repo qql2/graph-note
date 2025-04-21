@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   IonContent, 
   IonHeader, 
@@ -83,36 +83,33 @@ const convertDbDataToGraphData = (
 
 const GraphViewDemo: React.FC = () => {
   const location = useLocation();
-  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
-  const [centralNodeId, setCentralNodeId] = useState<string>('');
-  const [isLoading, setLoading] = useState<boolean>(false);
-  const [showToast, setShowToast] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<string>('');
-  const [knownRelationshipTypes, setKnownRelationshipTypes] = useState<string[]>([]);
-  const [showSettings, setShowSettings] = useState<boolean>(false);
-  const [quadrantConfig, setQuadrantConfig] = useState<QuadrantConfig>(ConfigService.loadQuadrantConfig() || defaultQuadrantConfig);
-  const [depthConfig, setDepthConfig] = useState<DepthConfig>(ConfigService.loadDepthConfig() || defaultDepthConfig);
-  const [viewConfig, setViewConfig] = useState<ViewConfig>(ConfigService.loadViewConfig() || defaultViewConfig);
-  // 从加载的quadrantConfig中获取relationshipTypeConfig，如果不存在则使用默认值
-  const loadedQuadrantConfig = ConfigService.loadQuadrantConfig();
-  const [relationshipTypeConfig, setRelationshipTypeConfig] = useState<RelationshipTypeConfig>(
-    loadedQuadrantConfig?.relationshipTypeConfig || defaultRelationshipTypeConfig
+  const [graphDataState, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
+  const [centralNodeIdState, setCentralNodeId] = useState<string>('');
+  const [isLoadingState, setLoading] = useState<boolean>(false);
+  const [showToastState, setShowToast] = useState<boolean>(false);
+  const [toastMessageState, setToastMessage] = useState<string>('');
+  const [knownRelationshipTypesState, setKnownRelationshipTypes] = useState<string[]>([]);
+  const [quadrantConfigState, setQuadrantConfig] = useState<QuadrantConfig>(ConfigService.loadQuadrantConfig() || defaultQuadrantConfig);
+  const [depthConfigState, setDepthConfig] = useState<DepthConfig>(ConfigService.loadDepthConfig() || defaultDepthConfig);
+  const [viewConfigState, setViewConfig] = useState<ViewConfig>(ConfigService.loadViewConfig() || defaultViewConfig);
+  const loadedQuadrantConfigState = ConfigService.loadQuadrantConfig();
+  const [relationshipTypeConfigState, setRelationshipTypeConfig] = useState<RelationshipTypeConfig>(
+    loadedQuadrantConfigState?.relationshipTypeConfig || defaultRelationshipTypeConfig
   );
-  const [isDatabaseReady, setIsDatabaseReady] = useState<boolean>(false);
-  const [pendingChanges, setPendingChanges] = useState<boolean>(false);
-  // 添加新节点ID的状态
-  const [newNodeId, setNewNodeId] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const [showAlert, setShowAlert] = useState(false);
-  const [alertHeader, setAlertHeader] = useState('');
-  const [alertMessage, setAlertMessage] = useState('');
-  const [confirmHandler, setConfirmHandler] = useState<() => void>(() => {});
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [dbStatusModalOpen, setDbStatusModalOpen] = useState(false);
-  const [dbStatus, setDbStatus] = useState<any>(null);
-  const [transactionResultModalOpen, setTransactionResultModalOpen] = useState(false);
-  const [transactionResult, setTransactionResult] = useState<any>(null);
-  const [navbarHeight, setNavbarHeight] = useState(56);
+  const isDatabaseReady = useRef<boolean>(false);
+  const pendingChanges = useRef<boolean>(false);
+  const newNodeId = useRef<string>('');
+  const [errorState, setError] = useState<string | null>(null);
+  const [showAlertState, setShowAlert] = useState(false);
+  const [alertHeaderState, setAlertHeader] = useState('');
+  const [alertMessageState, setAlertMessage] = useState('');
+  const [confirmHandlerState, setConfirmHandler] = useState<() => void>(() => {});
+  const [showSettingsModalState, setShowSettingsModal] = useState(false);
+  const [dbStatusModalOpenState, setDbStatusModalOpen] = useState(false);
+  const [dbStatusState, setDbStatus] = useState<any>(null);
+  const [transactionResultModalOpenState, setTransactionResultModalOpen] = useState(false);
+  const [transactionResultState, setTransactionResult] = useState<any>(null);
+  const [navbarHeightState, setNavbarHeight] = useState(56);
 
   // 从URL参数获取节点ID
   const getNodeIdFromUrl = () => {
@@ -175,10 +172,11 @@ const GraphViewDemo: React.FC = () => {
         
         // 如果是通过URL参数标记的新节点，应用动效
         if (isNewNode) {
-          setNewNodeId(urlNodeId);
+          newNodeId.current = urlNodeId;
           // 设置定时器，5秒后清除新节点标记
           setTimeout(() => {
-            setNewNodeId('');
+            console.log('newnodeid timer1');
+            newNodeId.current = '';
           }, 5000);
         }
         
@@ -309,13 +307,12 @@ const GraphViewDemo: React.FC = () => {
   };
 
   // 处理节点点击，改变中心节点
-  const handleNodeClick = (nodeId: string) => {
+  const handleNodeClick = useCallback((nodeId: string) => {
     setCentralNodeId(nodeId);
-    // 保存当前聚焦节点
     ConfigService.saveCentralNodeId(nodeId);
     setToastMessage(`正在查看节点: ${nodeId}`);
     setShowToast(true);
-  };
+  }, []);
 
   // 显示确认对话框
   const showConfirmDialog = (header: string, message: string, onConfirm: () => void) => {
@@ -326,7 +323,7 @@ const GraphViewDemo: React.FC = () => {
   };
 
   // 处理编辑节点
-  const handleEditNode = async (nodeId: string, newLabel: string) => {
+  const handleEditNode = useCallback(async (nodeId: string, newLabel: string) => {
     try {
       setLoading(true);
       const db = graphDatabaseService.getDatabase('GraphViewDemo');
@@ -370,7 +367,7 @@ const GraphViewDemo: React.FC = () => {
         setShowToast(true);
         
         // 如果当前中心节点是被合并的节点，更新中心节点为目标节点
-        if (nodeId === centralNodeId) {
+        if (nodeId === centralNodeIdState) {
           setCentralNodeId(targetNodeId);
           ConfigService.saveCentralNodeId(targetNodeId);
         }
@@ -391,10 +388,10 @@ const GraphViewDemo: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // 处理删除节点
-  const handleDeleteNode = async (nodeId: string) => {
+  const handleDeleteNode = useCallback(async (nodeId: string) => {
     showConfirmDialog(
       '确认删除',
       '确定要删除此节点吗？这也将删除所有与此节点相关的关系。',
@@ -410,7 +407,7 @@ const GraphViewDemo: React.FC = () => {
           setShowToast(true);
           
           // 如果删除的是当前中心节点，重置中心节点
-          if (nodeId === centralNodeId) {
+          if (nodeId === centralNodeIdState) {
             // 重新加载数据后设置新的中心节点
             await loadGraphData();
           } else {
@@ -426,10 +423,10 @@ const GraphViewDemo: React.FC = () => {
         }
       }
     );
-  };
+  }, []);
 
   // 处理编辑关系
-  const handleEditEdge = async (edgeId: string, newLabel: string, isSimpleLabel?: boolean) => {
+  const handleEditEdge = useCallback(async (edgeId: string, newLabel: string, isSimpleLabel?: boolean) => {
     try {
       setLoading(true);
       const db = graphDatabaseService.getDatabase('GraphViewDemo');
@@ -460,10 +457,10 @@ const GraphViewDemo: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // 处理删除关系
-  const handleDeleteEdge = async (edgeId: string) => {
+  const handleDeleteEdge = useCallback(async (edgeId: string) => {
     showConfirmDialog(
       '确认删除',
       '确定要删除此关系吗？',
@@ -489,10 +486,10 @@ const GraphViewDemo: React.FC = () => {
         }
       }
     );
-  };
+  }, []);
 
   // 处理创建关系
-  const handleCreateRelation = async (sourceNodeId: string, relationType: string, targetNodeId?: string, nodeLabel?: string) => {
+  const handleCreateRelation = useCallback(async (sourceNodeId: string, relationType: string, targetNodeId?: string, nodeLabel?: string) => {
     try {
       setLoading(true);
       const db = graphDatabaseService.getDatabase('GraphViewDemo');
@@ -519,11 +516,12 @@ const GraphViewDemo: React.FC = () => {
         });
         
         // 设置新节点ID以应用动效
-        setNewNodeId(createdNodeId);
+        newNodeId.current = createdNodeId;
         
         // 设置定时器，5秒后清除新节点标记
         setTimeout(() => {
-          setNewNodeId('');
+          console.log('newnodeid timer2');
+          newNodeId.current = '';
         }, 5000);
       }
       
@@ -545,15 +543,15 @@ const GraphViewDemo: React.FC = () => {
       setShowToast(true);
       
       // 更新已知关系类型列表
-      if (!knownRelationshipTypes.includes(relationType)) {
-        setKnownRelationshipTypes([...knownRelationshipTypes, relationType]);
+      if (!knownRelationshipTypesState.includes(relationType)) {
+        setKnownRelationshipTypes([...knownRelationshipTypesState, relationType]);
       }
       
       // 重新加载数据
       await loadGraphData();
       
       // 根据配置决定是否将新节点设为中心节点
-      if (!targetNodeId && viewConfig.autoFocusNewNode) {
+      if (!targetNodeId && viewConfigState.autoFocusNewNode) {
         // 将新节点设为中心节点
         setCentralNodeId(createdNodeId);
         // 保存当前聚焦节点
@@ -566,33 +564,33 @@ const GraphViewDemo: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // 处理关系组配置更改
-  const handleQuadrantChange = (position: QuadrantPosition, value: string[]) => {
+  const handleQuadrantChange = useCallback((position: QuadrantPosition, value: string[]) => {
     const newConfig = {
-      ...quadrantConfig,
+      ...quadrantConfigState,
       [position]: value
     };
     setQuadrantConfig(newConfig);
     // 保存到本地存储
     ConfigService.saveQuadrantConfig(newConfig);
-  };
+  }, []);
   
   // 处理深度配置更改
-  const handleDepthChange = (relationshipType: string, value: number) => {
+  const handleDepthChange = useCallback((relationshipType: string, value: number) => {
     const newConfig = {
-      ...depthConfig,
+      ...depthConfigState,
       [relationshipType]: value
     };
     setDepthConfig(newConfig);
     // 保存到本地存储
     ConfigService.saveDepthConfig(newConfig);
-  };
+  }, []);
 
   // 加载数据时，更新已知的关系类型列表
-  const updateKnownRelationshipTypes = (edges: GraphEdge[]) => {
-    const relationshipTypes = new Set<string>(knownRelationshipTypes);
+  const updateKnownRelationshipTypes = useCallback((edges: GraphEdge[]) => {
+    const relationshipTypes = new Set<string>(knownRelationshipTypesState);
     
     edges.forEach(edge => {
       if (edge.relationshipType) {
@@ -602,19 +600,19 @@ const GraphViewDemo: React.FC = () => {
     
     // 更新为已知关系类型列表
     setKnownRelationshipTypes(Array.from(relationshipTypes));
-  };
+  }, []);
 
   // 加载数据时调用此函数
   useEffect(() => {
-    if (graphData.edges.length > 0) {
-      updateKnownRelationshipTypes(graphData.edges);
+    if (graphDataState.edges.length > 0) {
+      updateKnownRelationshipTypes(graphDataState.edges);
     }
-  }, [graphData]);
+  }, [graphDataState]);
 
   // 刷新视图，返回到第一个节点
   const handleReset = () => {
-    if (graphData.nodes.length > 0) {
-      const firstNodeId = graphData.nodes[0].id;
+    if (graphDataState.nodes.length > 0) {
+      const firstNodeId = graphDataState.nodes[0].id;
       setCentralNodeId(firstNodeId);
       // 更新保存的节点ID
       ConfigService.saveCentralNodeId(firstNodeId);
@@ -624,7 +622,7 @@ const GraphViewDemo: React.FC = () => {
   // 处理关系标签显示方式变更
   const handleRelationshipLabelModeChange = (value: RelationshipLabelMode) => {
     const newConfig = {
-      ...viewConfig,
+      ...viewConfigState,
       showRelationshipLabels: value
     };
     setViewConfig(newConfig);
@@ -635,7 +633,7 @@ const GraphViewDemo: React.FC = () => {
   // 处理自动聚焦新节点配置变更
   const handleAutoFocusNewNodeChange = (value: boolean) => {
     const newConfig = {
-      ...viewConfig,
+      ...viewConfigState,
       autoFocusNewNode: value
     };
     setViewConfig(newConfig);
@@ -673,7 +671,7 @@ const GraphViewDemo: React.FC = () => {
   // 处理未分配关系类型显示位置更改
   const handleUnconfiguredPositionChange = (position: QuadrantPosition) => {
     const newConfig = {
-      ...quadrantConfig,
+      ...quadrantConfigState,
       unconfiguredTypesPosition: position
     };
     setQuadrantConfig(newConfig);
@@ -684,14 +682,14 @@ const GraphViewDemo: React.FC = () => {
   // 当关系类型配置变化时，更新四象限配置中的关系类型配置
   useEffect(() => {
     const updatedQuadrantConfig = {
-      ...quadrantConfig,
-      relationshipTypeConfig: relationshipTypeConfig
+      ...quadrantConfigState,
+      relationshipTypeConfig: relationshipTypeConfigState
     };
     setQuadrantConfig(updatedQuadrantConfig);
     
     // 保存更新后的配置
     ConfigService.saveQuadrantConfig(updatedQuadrantConfig);
-  }, [relationshipTypeConfig]);
+  }, [relationshipTypeConfigState]);
 
   // 处理关系类型相对性配置更新
   const handleRelationshipTypeConfigChange = (newConfig: RelationshipTypeConfig) => {
@@ -783,7 +781,7 @@ const GraphViewDemo: React.FC = () => {
   const handleDeveloperModeChange = (value: boolean) => {
     // 更新视图配置
     const newViewConfig = {
-      ...viewConfig,
+      ...viewConfigState,
       developerMode: value
     };
     
@@ -805,10 +803,10 @@ const GraphViewDemo: React.FC = () => {
           </IonButtons>
           <IonTitle>图形视图展示</IonTitle>
           <IonButtons slot="end">
-            <IonButton onClick={handleRefreshData} disabled={isLoading}>
+            <IonButton onClick={handleRefreshData} disabled={isLoadingState}>
               刷新数据
             </IonButton>
-            <IonButton onClick={handleReset} disabled={isLoading}>
+            <IonButton onClick={handleReset} disabled={isLoadingState}>
               <IonIcon icon={refreshOutline} />
             </IonButton>
             <ThemeToggle />
@@ -820,16 +818,16 @@ const GraphViewDemo: React.FC = () => {
         </IonToolbar>
       </IonHeader>
       <IonContent fullscreen>
-        {isLoading ? (
+        {isLoadingState ? (
           <div className="loading-container">
             <IonSpinner name="crescent" />
             <p>正在加载数据...</p>
           </div>
-        ) : error ? (
+        ) : errorState ? (
           <IonCard>
             <IonCardContent>
               <div className="error-container">
-                <p>出错了: {error}</p>
+                <p>出错了: {errorState}</p>
                 <p className="debug-info">请尝试先打开"图数据库演示"页面添加数据，然后再回到此页面。</p>
                 <div className="button-group">
                   <IonButton onClick={handleRefreshData}>刷新数据</IonButton>
@@ -838,7 +836,7 @@ const GraphViewDemo: React.FC = () => {
               </div>
             </IonCardContent>
           </IonCard>
-        ) : graphData.nodes.length === 0 ? (
+        ) : graphDataState.nodes.length === 0 ? (
           <IonCard>
             <IonCardContent>
               <div className="empty-container">
@@ -853,36 +851,36 @@ const GraphViewDemo: React.FC = () => {
         ) : (
           <div className="graph-view-demo-container">            
             <GraphView 
-              graphData={graphData} 
-              centralNodeId={centralNodeId} 
-              quadrantConfig={quadrantConfig}
-              depthConfig={depthConfig}
-              viewConfig={viewConfig}
-              navbarHeight={navbarHeight}
+              graphData={graphDataState} 
+              centralNodeId={centralNodeIdState} 
+              quadrantConfig={quadrantConfigState}
+              depthConfig={depthConfigState}
+              viewConfig={viewConfigState}
+              navbarHeight={navbarHeightState}
               onNodeClick={handleNodeClick}
               onEditNode={handleEditNode}
               onDeleteNode={handleDeleteNode}
               onEditEdge={handleEditEdge}
               onDeleteEdge={handleDeleteEdge}
               onCreateRelation={handleCreateRelation}
-              newNodeId={newNodeId}
+              newNodeId={newNodeId.current}
             />
           </div>
         )}
         
         <IonToast
-          isOpen={showToast}
+          isOpen={showToastState}
           onDidDismiss={() => setShowToast(false)}
-          message={toastMessage}
+          message={toastMessageState}
           duration={2000}
           position="bottom"
         />
         
         <IonAlert
-          isOpen={showAlert}
+          isOpen={showAlertState}
           onDidDismiss={() => setShowAlert(false)}
-          header={alertHeader}
-          message={alertMessage}
+          header={alertHeaderState}
+          message={alertMessageState}
           buttons={[
             {
               text: '取消',
@@ -892,7 +890,7 @@ const GraphViewDemo: React.FC = () => {
             {
               text: '确认',
               handler: () => {
-                confirmHandler();
+                confirmHandlerState();
                 setShowAlert(false);
               }
             }
@@ -901,13 +899,13 @@ const GraphViewDemo: React.FC = () => {
 
         {/* 设置弹窗 */}
         <SettingsModal
-          isOpen={showSettingsModal}
+          isOpen={showSettingsModalState}
           onClose={handleCloseSettings}
-          quadrantConfig={quadrantConfig}
-          depthConfig={depthConfig}
-          viewConfig={viewConfig}
-          relationshipTypeConfig={relationshipTypeConfig}
-          knownRelationshipTypes={knownRelationshipTypes}
+          quadrantConfig={quadrantConfigState}
+          depthConfig={depthConfigState}
+          viewConfig={viewConfigState}
+          relationshipTypeConfig={relationshipTypeConfigState}
+          knownRelationshipTypes={knownRelationshipTypesState}
           onQuadrantChange={handleQuadrantChange}
           onDepthChange={handleDepthChange}
           onRelationshipLabelModeChange={handleRelationshipLabelModeChange}
@@ -920,21 +918,21 @@ const GraphViewDemo: React.FC = () => {
         
         {/* 添加数据库状态弹窗 */}
         <IonAlert
-          isOpen={dbStatusModalOpen}
+          isOpen={dbStatusModalOpenState}
           onDidDismiss={() => setDbStatusModalOpen(false)}
           header={'数据库状态'}
           message={
-            dbStatus ? 
-            `平台: ${dbStatus.database?.platform || '未知'}\n` +
-            `数据库名称: ${dbStatus.database?.dbName || '未知'}\n` +
-            `连接状态: ${dbStatus.database?.isConnected ? '已连接' : '未连接'}\n` +
-            `标记的事务状态: ${dbStatus.database?.inTransaction ? '在事务中' : '无事务'}\n` +
-            `实际事务状态: ${dbStatus.database?.actualTransactionActive ? '活跃' : '未活跃'}\n` +
-            `引用计数: ${dbStatus.service?.referenceCount || 0}\n` +
-            `正在关闭: ${dbStatus.service?.closingInProgress ? '是' : '否'}\n` +
-            `已初始化: ${dbStatus.service?.initialized ? '是' : '否'}\n` +
-            `访问组件: ${dbStatus.service?.accessingComponents?.join(', ') || '无'}\n` +
-            `时间戳: ${dbStatus.timestamp || '未知'}`
+            dbStatusState ? 
+            `平台: ${dbStatusState.database?.platform || '未知'}\n` +
+            `数据库名称: ${dbStatusState.database?.dbName || '未知'}\n` +
+            `连接状态: ${dbStatusState.database?.isConnected ? '已连接' : '未连接'}\n` +
+            `标记的事务状态: ${dbStatusState.database?.inTransaction ? '在事务中' : '无事务'}\n` +
+            `实际事务状态: ${dbStatusState.database?.actualTransactionActive ? '活跃' : '未活跃'}\n` +
+            `引用计数: ${dbStatusState.service?.referenceCount || 0}\n` +
+            `正在关闭: ${dbStatusState.service?.closingInProgress ? '是' : '否'}\n` +
+            `已初始化: ${dbStatusState.service?.initialized ? '是' : '否'}\n` +
+            `访问组件: ${dbStatusState.service?.accessingComponents?.join(', ') || '无'}\n` +
+            `时间戳: ${dbStatusState.timestamp || '未知'}`
             : '无数据'
           }
           buttons={['关闭']}
@@ -942,13 +940,13 @@ const GraphViewDemo: React.FC = () => {
         
         {/* 添加事务提交结果弹窗 */}
         <IonAlert
-          isOpen={transactionResultModalOpen}
+          isOpen={transactionResultModalOpenState}
           onDidDismiss={() => setTransactionResultModalOpen(false)}
           header={'事务提交结果'}
           message={
-            transactionResult ? 
-            `状态: ${transactionResult.success ? '成功' : '失败'}\n` +
-            `消息: ${transactionResult.message || '无'}\n` +
+            transactionResultState ? 
+            `状态: ${transactionResultState.success ? '成功' : '失败'}\n` +
+            `消息: ${transactionResultState.message || '无'}\n` +
             `时间戳: ${new Date().toISOString()}`
             : '无数据'
           }
@@ -959,4 +957,4 @@ const GraphViewDemo: React.FC = () => {
   );
 };
 
-export default GraphViewDemo; 
+export default React.memo(GraphViewDemo); 
