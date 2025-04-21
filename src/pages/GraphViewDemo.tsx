@@ -779,6 +779,23 @@ const GraphViewDemo: React.FC = () => {
     }
   };
 
+  // 处理开发者模式变更
+  const handleDeveloperModeChange = (value: boolean) => {
+    // 更新视图配置
+    const newViewConfig = {
+      ...viewConfig,
+      developerMode: value
+    };
+    
+    // 保存配置
+    setViewConfig(newViewConfig);
+    ConfigService.saveViewConfig(newViewConfig);
+    
+    // 显示提示
+    setToastMessage(`开发者模式已${value ? '启用' : '禁用'}`);
+    setShowToast(true);
+  };
+
   return (
     <IonPage>
       <IonHeader>
@@ -895,6 +912,7 @@ const GraphViewDemo: React.FC = () => {
           onDepthChange={handleDepthChange}
           onRelationshipLabelModeChange={handleRelationshipLabelModeChange}
           onAutoFocusNewNodeChange={handleAutoFocusNewNodeChange}
+          onDeveloperModeChange={handleDeveloperModeChange}
           onUnconfiguredPositionChange={handleUnconfiguredPositionChange}
           onRelationshipTypeConfigChange={handleRelationshipTypeConfigChange}
           onResetAllConfigs={handleResetAllConfigs}

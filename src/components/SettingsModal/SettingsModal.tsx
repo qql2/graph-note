@@ -50,6 +50,7 @@ interface SettingsModalProps {
   onDepthChange: (relationshipType: string, value: number) => void;
   onRelationshipLabelModeChange: (value: RelationshipLabelMode) => void;
   onAutoFocusNewNodeChange: (value: boolean) => void;
+  onDeveloperModeChange: (value: boolean) => void;
   onUnconfiguredPositionChange: (position: QuadrantPosition) => void;
   onRelationshipTypeConfigChange: (newConfig: RelationshipTypeConfig) => void;
   onResetAllConfigs: () => void;
@@ -67,6 +68,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onDepthChange,
   onRelationshipLabelModeChange,
   onAutoFocusNewNodeChange,
+  onDeveloperModeChange,
   onUnconfiguredPositionChange,
   onRelationshipTypeConfigChange,
   onResetAllConfigs
@@ -138,6 +140,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       case ThemeMode.SYSTEM:
       default:
         return contrast;
+    }
+  };
+
+  // 处理开发者模式切换
+  const handleDeveloperModeChange = (checked: boolean) => {
+    if (checked) {
+      // 如果要启用开发者模式，先显示确认对话框
+      showConfirmDialog(
+        '启用开发者模式',
+        '开发者模式包含实验性功能和调试工具，可能影响应用稳定性。确定要启用吗？',
+        () => {
+          onDeveloperModeChange(true);
+        }
+      );
+    } else {
+      // 直接关闭开发者模式不需要确认
+      onDeveloperModeChange(false);
     }
   };
 
@@ -348,6 +367,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <IonToggle
                 checked={viewConfig.autoFocusNewNode}
                 onIonChange={e => onAutoFocusNewNodeChange(e.detail.checked)}
+              />
+            </IonItem>
+            
+            <IonItem lines="none" className="developer-mode-toggle">
+              <IonLabel>
+                开发者模式
+                <p className="setting-description">启用高级功能、调试工具和测试页面</p>
+              </IonLabel>
+              <IonToggle
+                checked={viewConfig.developerMode}
+                onIonChange={e => handleDeveloperModeChange(e.detail.checked)}
               />
             </IonItem>
           </div>

@@ -55,10 +55,29 @@ const App: React.FC = () => {
   const [presentAlert] = useIonAlert();
   // 搜索模态框控制状态
   const [showSearchModal, setShowSearchModal] = useState(false);
+  // 加载应用配置
+  const viewConfig = ConfigService.loadViewConfig();
+  // 开发者模式状态
+  const [developerMode, setDeveloperMode] = useState(viewConfig.developerMode);
 
   // 初始化主题
   useEffect(() => {
     ThemeService.initTheme();
+  }, []);
+
+  // 监听配置变化，更新开发者模式状态
+  useEffect(() => {
+    const checkConfig = () => {
+      const config = ConfigService.loadViewConfig();
+      setDeveloperMode(config.developerMode);
+    };
+    
+    // 每秒检查一次配置
+    const intervalId = setInterval(checkConfig, 1000);
+    
+    return () => {
+      clearInterval(intervalId);
+    };
   }, []);
 
   // Function to create a new node
@@ -194,6 +213,20 @@ const App: React.FC = () => {
     window.dispatchEvent(event);
   };
 
+  // 只有在开发者模式下才允许访问的路由守卫组件
+  const DeveloperRouteGuard = ({ component: Component, ...rest }: any) => (
+    <Route
+      {...rest}
+      render={(props) =>
+        developerMode ? (
+          <Component {...props} />
+        ) : (
+          <Redirect to="/graph-view-demo" />
+        )
+      }
+    />
+  );
+
   return (
     <SqliteServiceContext.Provider value={SqliteService}>
       <DbVersionServiceContext.Provider value={DbVersionService}>
@@ -207,6 +240,7 @@ const App: React.FC = () => {
                   onImportSuccess={handleImportSuccess}
                   onCheckDbStatus={handleCheckDbStatus}
                   onCommitTransaction={handleCommitTransaction}
+                  developerMode={developerMode}
                 />
                 {/* 搜索模态框 */}
                 <SearchModal 
@@ -219,8 +253,8 @@ const App: React.FC = () => {
                   <Route exact path="/">
                     <Redirect to="/graph-view-demo" />
                   </Route>
-                  <Route path="/users" component={UsersPage} />
-                  <Route path="/graph-demo" component={GraphDBDemo} />
+                  <DeveloperRouteGuard path="/users" component={UsersPage} />
+                  <DeveloperRouteGuard path="/graph-demo" component={GraphDBDemo} />
                   <Route path="/graph-view-demo" component={GraphViewDemo} />
                   <Route path="/search" component={SearchPage} />
                 </IonRouterOutlet>
