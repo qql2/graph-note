@@ -13,9 +13,10 @@ export interface SearchPanelProps {
   onClose: () => void;
   onSelectNode?: (node: GraphNode) => void;
   onSelectEdge?: (edge: GraphEdge) => void;
+  isModal?: boolean; // 是否在模态框中显示
 }
 
-export const SearchPanel: React.FC<SearchPanelProps> = ({ onClose, onSelectNode, onSelectEdge }) => {
+export const SearchPanel: React.FC<SearchPanelProps> = ({ onClose, onSelectNode, onSelectEdge, isModal = false }) => {
   // 搜索模式：节点搜索或关系搜索
   const [searchMode, setSearchMode] = useState<'nodes' | 'edges' | 'fulltext'>('nodes');
   
@@ -163,14 +164,16 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ onClose, onSelectNode,
 
   return (
     <div className="search-panel">
-      <IonHeader>
-        <IonToolbar>
-          <IonTitle>图谱检索</IonTitle>
-          <IonButton fill="clear" slot="end" onClick={onClose}>
-            <IonIcon icon={close} />
-          </IonButton>
-        </IonToolbar>
-      </IonHeader>
+      {!isModal && (
+        <IonHeader>
+          <IonToolbar>
+            <IonTitle>图谱检索</IonTitle>
+            <IonButton fill="clear" slot="end" onClick={onClose}>
+              <IonIcon icon={close} />
+            </IonButton>
+          </IonToolbar>
+        </IonHeader>
+      )}
       
       <IonContent>
         <IonGrid>
