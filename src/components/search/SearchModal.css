@@ -1,0 +1,30 @@
+.search-modal {
+  --width: 80%;
+  --height: 80%;
+  --max-width: 900px;
+  --max-height: 700px;
+  --border-radius: 12px;
+  --box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.search-modal ion-toolbar {
+  --background: var(--ion-color-light, #f4f5f8);
+}
+
+.search-modal ion-title {
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.search-modal-container {
+  height: 100%;
+  overflow: auto;
+}
+
+/* 移动设备适配 */
+@media (max-width: 576px) {
+  .search-modal {
+    --width: 95%;
+    --height: 95%;
+  }
+} 

@@ -16,6 +16,8 @@ import GraphDBDemo from './pages/GraphDBDemo';
 import GraphViewDemo from './pages/GraphViewDemo';
 import SearchPage from './pages/SearchPage';
 import AppMenu from './components/AppMenu/AppMenu';
+import { SearchModal } from './components/search';
+import { GraphNode, GraphEdge } from './models/GraphNode';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/react/css/core.css';
@@ -38,19 +40,21 @@ import './theme/variables.css';
 
 export const platform = Capacitor.getPlatform();
 
-// Singleton Services
+// 自定义事件类型
+export const DATA_IMPORT_SUCCESS_EVENT = 'data-import-success';
+
+// 创建数据库服务的上下文
 export const SqliteServiceContext = React.createContext(SqliteService);
 export const DbVersionServiceContext = React.createContext(DbVersionService);
 export const StorageServiceContext = React.createContext(new StorageService(SqliteService,DbVersionService));
 
-// 定义一个自定义事件名称，用于数据导入成功后通知
-export const DATA_IMPORT_SUCCESS_EVENT = 'data-import-success';
-
 setupIonicReact();
 
 const App: React.FC = () => {
-  const [presentAlert] = useIonAlert();
   const [presentToast] = useIonToast();
+  const [presentAlert] = useIonAlert();
+  // 搜索模态框控制状态
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   // 初始化主题
   useEffect(() => {
@@ -144,7 +148,29 @@ const App: React.FC = () => {
 
   // 搜索节点和关系
   const handleSearch = () => {
-    window.location.href = '/search';
+    // 显示搜索模态框，而不是导航到搜索页面
+    setShowSearchModal(true);
+  };
+
+  // 处理模态框关闭
+  const handleCloseSearchModal = () => {
+    setShowSearchModal(false);
+  };
+
+  // 处理搜索结果中的节点选择
+  const handleNodeSelect = (node: GraphNode) => {
+    // 关闭搜索模态框
+    setShowSearchModal(false);
+    // 跳转到图形视图页面，显示选中的节点
+    window.location.href = `/graph-view-demo?node=${node.id}`;
+  };
+
+  // 处理搜索结果中的关系选择
+  const handleEdgeSelect = (edge: GraphEdge) => {
+    // 关闭搜索模态框
+    setShowSearchModal(false);
+    // 跳转到图形视图页面，显示关系的源节点
+    window.location.href = `/graph-view-demo?node=${edge.source}`;
   };
 
   // 处理数据导入成功
@@ -181,6 +207,13 @@ const App: React.FC = () => {
                   onImportSuccess={handleImportSuccess}
                   onCheckDbStatus={handleCheckDbStatus}
                   onCommitTransaction={handleCommitTransaction}
+                />
+                {/* 搜索模态框 */}
+                <SearchModal 
+                  isOpen={showSearchModal}
+                  onClose={handleCloseSearchModal}
+                  onSelectNode={handleNodeSelect}
+                  onSelectEdge={handleEdgeSelect}
                 />
                 <IonRouterOutlet id="main-content">
                   <Route exact path="/">
