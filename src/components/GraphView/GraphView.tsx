@@ -248,6 +248,21 @@ const GraphView: React.FC<GraphViewProps> = ({
   // 添加state跟踪新节点
   const [newlyCreatedNodeIds, setNewlyCreatedNodeIds] = useState<string[]>([]);
 
+  // 添加长按相关状态
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const nodeUnderLongPressRef = useRef<{ cell: any, clientX: number, clientY: number } | null>(null);
+  const edgeUnderLongPressRef = useRef<{ cell: any, clientX: number, clientY: number } | null>(null);
+  
+  // 清除长按计时器的辅助函数
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    nodeUnderLongPressRef.current = null;
+    edgeUnderLongPressRef.current = null;
+  };
+
   // 在组件加载时收集所有现有的关系类型
   useEffect(() => {
     if (graphData && graphData.edges) {
@@ -288,22 +303,6 @@ const GraphView: React.FC<GraphViewProps> = ({
   // 关闭上下文菜单
   const closeContextMenu = () => {
     setContextMenu(prev => ({ ...prev, isOpen: false }));
-  };
-
-  // 在组件初始化Graph之后添加状态
-  const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
-  
-  // 添加长按相关状态
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const nodeUnderLongPressRef = useRef<{ cell: any, clientX: number, clientY: number } | null>(null);
-  
-  // 清除长按计时器的辅助函数
-  const clearLongPressTimer = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    nodeUnderLongPressRef.current = null;
   };
 
   // 修改handleNodeContextMenu来支持长按触发
@@ -534,6 +533,9 @@ const GraphView: React.FC<GraphViewProps> = ({
     });
   };
 
+  // 在组件初始化Graph之后添加状态
+  const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
+  
   // 初始化触摸事件处理
   useEffect(() => {
     if (!graph || !containerRef.current) return;
@@ -1101,6 +1103,12 @@ const GraphView: React.FC<GraphViewProps> = ({
 
     // 添加边点击事件
     graph.on('edge:click', ({ edge }) => {
+      // 如果是长按触发的点击，不执行通常的点击操作
+      if (isPress.current) {
+        isPress.current = false;
+        return;
+      }
+      
       // 显示工具
       edge.addTools({
         name: 'button',
@@ -1143,8 +1151,65 @@ const GraphView: React.FC<GraphViewProps> = ({
       setSelectedEdges([edge.id]);
     });
     
+    // 添加边长按事件 (通过mousedown/mouseup模拟)
+    graph.on('edge:mousedown', ({ cell, e }) => {
+      console.log('edge:mousedown', e);
+      // 记录当前长按的边和位置
+      edgeUnderLongPressRef.current = { 
+        cell, 
+        clientX: e.clientX || 0, 
+        clientY: e.clientY || 0 
+      };
+      
+      // 设置长按计时器 (600ms)
+      longPressTimerRef.current = setTimeout(() => {
+        // 长按时间到，触发菜单
+        if (edgeUnderLongPressRef.current) {
+          isPress.current = true;
+          const { cell, clientX, clientY } = edgeUnderLongPressRef.current;
+          // 创建自定义事件对象，包含必要的坐标信息
+          const customEvent = {
+            preventDefault: () => {},
+            clientX,
+            clientY,
+            // 标记为长按触发
+            isLongPress: true
+          };
+          
+          // 调用现有的右键菜单处理函数
+          handleEdgeContextMenu(cell, customEvent);
+          
+          // 显示长按反馈
+          cell.attr('line/strokeWidth', 3);
+          cell.attr('line/stroke-dasharray', '5,5');
+          
+          // 500ms后恢复原样
+          setTimeout(() => {
+            cell.attr('line/strokeWidth', 2);
+            cell.attr('line/stroke-dasharray', '');
+          }, 500);
+          
+          // 清除长按状态
+          clearLongPressTimer();
+        }
+      }, 600); // 长按阈值设为600ms
+    });
+    
+    // 监听边mouseup事件，结束长按
+    graph.on('edge:mouseup', () => {
+      console.log('edge:mouseup');
+      clearLongPressTimer();
+    });
+    
+    // 如果手指/鼠标移出了边，也取消长按
+    graph.on('edge:mouseleave', () => {
+      console.log('edge:mouseleave');
+      clearLongPressTimer();
+    });
+    
     // 添加节点长按事件 (通过mousedown/mouseup模拟)
     graph.on('node:mousedown', ({ cell, e }) => {
+      console.log('node:mousedown', e);
       // 记录当前长按的节点和位置
       nodeUnderLongPressRef.current = { 
         cell, 
@@ -1187,16 +1252,14 @@ const GraphView: React.FC<GraphViewProps> = ({
     
     // 监听mouseup事件，结束长按
     graph.on('node:mouseup', () => {
+      console.log('node:mouseup');
       clearLongPressTimer();
     });
     
-    // 监听移动事件，如果在长按期间移动，取消长按
-    graph.on('node:mousemove', () => {
-      clearLongPressTimer();
-    });
     
     // 如果手指/鼠标移出了节点，也取消长按
     graph.on('node:mouseleave', () => {
+      console.log('node:mouseleave');
       clearLongPressTimer();
     });
 
@@ -1232,6 +1295,9 @@ const GraphView: React.FC<GraphViewProps> = ({
     return () => {
       // 清理事件监听器
       graph.off('edge:click');
+      graph.off('edge:mousedown');
+      graph.off('edge:mouseup');
+      graph.off('edge:mouseleave');
       graph.off('node:mousedown');
       graph.off('node:mouseup');
       graph.off('node:mousemove');
@@ -1258,6 +1324,12 @@ const GraphView: React.FC<GraphViewProps> = ({
       /* 长按节点反馈样式 */
       .x6-node.long-press-highlight {
         filter: brightness(1.1);
+      }
+      
+      /* 长按边反馈样式 */
+      .x6-edge.long-press-highlight path {
+        stroke-width: 3px;
+        stroke-dasharray: 5,5;
       }
       
       @keyframes fade-in {
