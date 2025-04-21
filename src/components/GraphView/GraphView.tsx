@@ -203,6 +203,7 @@ const GraphView: React.FC<GraphViewProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [graph, setGraph] = useState<Graph | null>(null);
+  const isPress = useRef(false);
   
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -289,9 +290,26 @@ const GraphView: React.FC<GraphViewProps> = ({
     setContextMenu(prev => ({ ...prev, isOpen: false }));
   };
 
-  // 处理节点右键菜单
+  // 在组件初始化Graph之后添加状态
+  const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
+  
+  // 添加长按相关状态
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const nodeUnderLongPressRef = useRef<{ cell: any, clientX: number, clientY: number } | null>(null);
+  
+  // 清除长按计时器的辅助函数
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    nodeUnderLongPressRef.current = null;
+  };
+
+  // 修改handleNodeContextMenu来支持长按触发
   const handleNodeContextMenu = (node: any, event: any) => {
-    event.preventDefault();
+    // 如果有preventDefault方法就调用（阻止默认上下文菜单）
+    (event.preventDefault)?.();
     
     const nodeId = node.id;
     const isCenter = nodeId === centralNodeId;
@@ -398,9 +416,13 @@ const GraphView: React.FC<GraphViewProps> = ({
       });
     }
     
+    // 获取菜单位置
+    let menuX = event.clientX;
+    let menuY = event.clientY;
+    
     setContextMenu({
       isOpen: true,
-      position: { x: event.clientX, y: event.clientY },
+      position: { x: menuX, y: menuY },
       items: menuItems,
       targetId: nodeId,
       type: 'node'
@@ -448,7 +470,7 @@ const GraphView: React.FC<GraphViewProps> = ({
   
   // 处理边右键菜单
   const handleEdgeContextMenu = (edge: any, event: any) => {
-    event.preventDefault();
+    (event.preventDefault)?.();
     
     const edgeId = edge.id;
     const menuItems: MenuItem[] = [];
@@ -489,9 +511,23 @@ const GraphView: React.FC<GraphViewProps> = ({
       });
     }
     
+    // 计算菜单位置
+    let menuX = event.clientX;
+    let menuY = event.clientY;
+    
+    // 如果是通过按钮触发的事件（没有客户端坐标），则获取按钮的位置
+    if (!menuX && !menuY && event.target) {
+      const buttonElement = event.target.closest('.x6-edge-tool');
+      if (buttonElement) {
+        const rect = buttonElement.getBoundingClientRect();
+        menuX = rect.left + rect.width / 2;
+        menuY = rect.top + rect.height / 2;
+      }
+    }
+    
     setContextMenu({
       isOpen: true,
-      position: { x: event.clientX, y: event.clientY },
+      position: { x: menuX, y: menuY },
       items: menuItems,
       targetId: edgeId,
       type: 'edge'
@@ -755,6 +791,12 @@ const GraphView: React.FC<GraphViewProps> = ({
 
     // Register node click event
     newGraph.on('node:click', ({ node }) => {
+      console.log('node:click', isPress.current);
+      // 如果是长按触发的点击，不执行通常的点击操作
+      if (isPress.current) {
+        isPress.current = false;
+        return;
+      }
       if (onNodeClick) {
         onNodeClick(node.id);
       }
@@ -1006,6 +1048,7 @@ const GraphView: React.FC<GraphViewProps> = ({
           attrs: {
             line: {
               stroke: edgeColor,
+              cursor: 'pointer', // 添加指针样式，表示可点击
             },
           },
           data: {
@@ -1051,6 +1094,184 @@ const GraphView: React.FC<GraphViewProps> = ({
     graph.centerContent();
 
   }, [graph, graphData, centralNodeId, quadrantConfig, depthConfig, viewConfig, newlyCreatedNodeIds]);
+
+  // 初始化图形时添加边的点击事件监听和节点的长按事件监听
+  useEffect(() => {
+    if (!graph) return;
+
+    // 添加边点击事件
+    graph.on('edge:click', ({ edge }) => {
+      // 显示工具
+      edge.addTools({
+        name: 'button',
+        args: {
+          markup: [
+            {
+              tagName: 'circle',
+              selector: 'button',
+              attrs: {
+                r: 14,
+                stroke: 'var(--ion-color-primary, #3880ff)',
+                strokeWidth: 2,
+                fill: 'white',
+                cursor: 'pointer',
+              },
+            },
+            {
+              tagName: 'text',
+              textContent: '...',
+              selector: 'icon',
+              attrs: {
+                fill: 'var(--ion-color-primary, #3880ff)',
+                fontSize: 12,
+                fontWeight: 'bold',
+                textAnchor: 'middle',
+                pointerEvents: 'none',
+                y: '0.3em',
+              },
+            },
+          ],
+          distance: -40,
+          onClick: (args: any) => {
+            // 调用右键菜单处理函数，传递自定义事件对象
+            handleEdgeContextMenu(args.view.cell, { target: args.e.target });
+          },
+        },
+      });
+      
+      // 记录选中的边
+      setSelectedEdges([edge.id]);
+    });
+    
+    // 添加节点长按事件 (通过mousedown/mouseup模拟)
+    graph.on('node:mousedown', ({ cell, e }) => {
+      // 记录当前长按的节点和位置
+      nodeUnderLongPressRef.current = { 
+        cell, 
+        clientX: e.clientX || 0, 
+        clientY: e.clientY || 0 
+      };
+      
+      // 设置长按计时器 (600ms)
+      longPressTimerRef.current = setTimeout(() => {
+        // 长按时间到，触发菜单
+        if (nodeUnderLongPressRef.current) {
+          isPress.current = true;
+          const { cell, clientX, clientY } = nodeUnderLongPressRef.current;
+          // 创建自定义事件对象，包含必要的坐标信息
+          const customEvent = {
+            preventDefault: () => {},
+            clientX,
+            clientY,
+            // 标记为长按触发
+            isLongPress: true
+          };
+          
+          // 调用现有的右键菜单处理函数
+          handleNodeContextMenu(cell, customEvent);
+          
+          // 显示长按反馈
+          cell.attr('body/stroke', 'var(--ion-color-primary, #3880ff)');
+          cell.attr('body/strokeWidth', 2);
+          
+          // 500ms后恢复原样
+          setTimeout(() => {
+            cell.attr('body/strokeWidth', 1);
+          }, 500);
+          
+          // 清除长按状态
+          clearLongPressTimer();
+        }
+      }, 600); // 长按阈值设为600ms
+    });
+    
+    // 监听mouseup事件，结束长按
+    graph.on('node:mouseup', () => {
+      clearLongPressTimer();
+    });
+    
+    // 监听移动事件，如果在长按期间移动，取消长按
+    graph.on('node:mousemove', () => {
+      clearLongPressTimer();
+    });
+    
+    // 如果手指/鼠标移出了节点，也取消长按
+    graph.on('node:mouseleave', () => {
+      clearLongPressTimer();
+    });
+
+    // 点击空白区域时，移除所有边的工具和清除长按状态
+    graph.on('blank:click', () => {
+      // 清除选中的边
+      selectedEdges.forEach(edgeId => {
+        const edge = graph.getCellById(edgeId);
+        if (edge && edge.isEdge()) {
+          edge.removeTools();
+        }
+      });
+      setSelectedEdges([]);
+      clearLongPressTimer();
+    });
+
+    // 点击节点时，也移除所有边的工具
+    graph.on('node:click', ({ cell }) => {
+      
+      // 清除选中的边
+      selectedEdges.forEach(edgeId => {
+        const edge = graph.getCellById(edgeId);
+        if (edge && edge.isEdge()) {
+          edge.removeTools();
+        }
+      });
+      setSelectedEdges([]);
+      
+      // 此时如果有节点长按计时器，也应该清除
+      clearLongPressTimer();
+    });
+
+    return () => {
+      // 清理事件监听器
+      graph.off('edge:click');
+      graph.off('node:mousedown');
+      graph.off('node:mouseup');
+      graph.off('node:mousemove');
+      graph.off('node:mouseleave');
+      clearLongPressTimer();
+    };
+  }, [graph, selectedEdges]);
+
+  // 添加CSS样式
+  useEffect(() => {
+    // 添加自定义CSS样式
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+      /* 边点击样式 */
+      .x6-edge:hover {
+        cursor: pointer;
+      }
+      
+      /* 工具按钮动画效果 */
+      .x6-edge-tool {
+        animation: fade-in 0.2s ease-out;
+      }
+      
+      /* 长按节点反馈样式 */
+      .x6-node.long-press-highlight {
+        filter: brightness(1.1);
+      }
+      
+      @keyframes fade-in {
+        from { opacity: 0; transform: scale(0.8); }
+        to { opacity: 1; transform: scale(1); }
+      }
+    `;
+    document.head.appendChild(styleElement);
+    
+    return () => {
+      // 清理
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   return (
     <div className="graph-view-container">
