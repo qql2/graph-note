@@ -793,7 +793,6 @@ const GraphView: React.FC<GraphViewProps> = ({
 
     // Register node click event
     newGraph.on('node:click', ({ node }) => {
-      console.log('node:click', isPress.current);
       // 如果是长按触发的点击，不执行通常的点击操作
       if (isPress.current) {
         isPress.current = false;
@@ -1153,7 +1152,6 @@ const GraphView: React.FC<GraphViewProps> = ({
     
     // 添加边长按事件 (通过mousedown/mouseup模拟)
     graph.on('edge:mousedown', ({ cell, e }) => {
-      console.log('edge:mousedown', e);
       // 记录当前长按的边和位置
       edgeUnderLongPressRef.current = { 
         cell, 
@@ -1197,19 +1195,16 @@ const GraphView: React.FC<GraphViewProps> = ({
     
     // 监听边mouseup事件，结束长按
     graph.on('edge:mouseup', () => {
-      console.log('edge:mouseup');
       clearLongPressTimer();
     });
     
     // 如果手指/鼠标移出了边，也取消长按
     graph.on('edge:mouseleave', () => {
-      console.log('edge:mouseleave');
       clearLongPressTimer();
     });
     
     // 添加节点长按事件 (通过mousedown/mouseup模拟)
     graph.on('node:mousedown', ({ cell, e }) => {
-      console.log('node:mousedown', e);
       // 记录当前长按的节点和位置
       nodeUnderLongPressRef.current = { 
         cell, 
@@ -1252,14 +1247,12 @@ const GraphView: React.FC<GraphViewProps> = ({
     
     // 监听mouseup事件，结束长按
     graph.on('node:mouseup', () => {
-      console.log('node:mouseup');
       clearLongPressTimer();
     });
     
     
     // 如果手指/鼠标移出了节点，也取消长按
     graph.on('node:mouseleave', () => {
-      console.log('node:mouseleave');
       clearLongPressTimer();
     });
 
