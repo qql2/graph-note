@@ -82,6 +82,7 @@ export interface DepthConfig {
 export interface ViewConfig {
   showRelationshipLabels: RelationshipLabelMode; // 是否在连线上显示关系类型
   autoFocusNewNode: boolean; // 是否在创建新节点时自动聚焦于该节点
+  developerMode: boolean; // 是否启用开发者模式
 }
 
 // 默认关系类型相对性配置
@@ -120,4 +121,5 @@ export const defaultDepthConfig: DepthConfig = {
 export const defaultViewConfig: ViewConfig = {
   showRelationshipLabels: RelationshipLabelMode.SIMPLE, // 默认使用简洁模式显示关系标签
   autoFocusNewNode: true, // 默认创建新节点时自动聚焦于该节点
+  developerMode: false, // 默认不启用开发者模式
 };
