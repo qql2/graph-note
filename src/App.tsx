@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Redirect, Route } from 'react-router-dom';
 import { IonApp, IonRouterOutlet, setupIonicReact, useIonAlert, useIonToast } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
-import Home from './pages/Home';
 import { Capacitor } from '@capacitor/core';
 import SqliteService from './services/sqliteService';
 import DbVersionService from './services/dbVersionService';
@@ -184,11 +183,8 @@ const App: React.FC = () => {
                   onCommitTransaction={handleCommitTransaction}
                 />
                 <IonRouterOutlet id="main-content">
-                  <Route exact path="/home">
-                    <Home />
-                  </Route>
                   <Route exact path="/">
-                    <Redirect to="/home" />
+                    <Redirect to="/graph-view-demo" />
                   </Route>
                   <Route path="/users" component={UsersPage} />
                   <Route path="/graph-demo" component={GraphDBDemo} />

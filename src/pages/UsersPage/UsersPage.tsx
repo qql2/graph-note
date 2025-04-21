@@ -150,7 +150,7 @@ const UsersPage: React.FC = () => {
       <IonToolbar>
         <IonTitle>Managing Users</IonTitle>
         <IonButtons slot="start">
-          <IonBackButton text="home" defaultHref="/home"></IonBackButton>
+          <IonBackButton text="回到图表" defaultHref="/graph-view-demo"></IonBackButton>
         </IonButtons>
       </IonToolbar>
     </IonHeader>

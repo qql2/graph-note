@@ -784,9 +784,7 @@ const GraphViewDemo: React.FC = () => {
       <IonHeader>
         <IonToolbar>
           <IonButtons slot="start">
-            <IonButton routerLink="/home">
-              <IonIcon icon={arrowBack} />
-            </IonButton>
+            {/* Remove back button to home page */}
           </IonButtons>
           <IonTitle>图形视图展示</IonTitle>
           <IonButtons slot="end">
