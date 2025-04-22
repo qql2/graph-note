@@ -35,6 +35,7 @@ import graphDatabaseService from '../services/graph-database/GraphDatabaseServic
 import { ConfigService } from '../services/ConfigService';
 import './GraphViewDemo.css';
 import { DATA_IMPORT_SUCCESS_EVENT } from '../App';
+import { DeleteMode } from '../services/graph-database';
 
 // 转换数据库数据到我们的GraphView组件格式
 const convertDbDataToGraphData = (
@@ -401,7 +402,7 @@ const GraphViewDemo: React.FC = () => {
           const db = graphDatabaseService.getDatabase('GraphViewDemo');
           
           // 删除节点
-          await db.deleteNode(nodeId);
+          await db.deleteNode(nodeId,DeleteMode.CASCADE);
           
           setToastMessage('节点已删除');
           setShowToast(true);
