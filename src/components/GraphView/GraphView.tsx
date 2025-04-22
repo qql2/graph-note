@@ -206,7 +206,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
   const isPress = useRef(false);
   
   // 右键菜单状态
-  const contextMenu = useRef<ContextMenuState>({
+  const [contextMenuState,setContextMenuState] = useState<ContextMenuState>({
     isOpen: false,
     position: { x: 0, y: 0 },
     items: [],
@@ -303,7 +303,10 @@ const GraphView: React.FC<GraphViewProps> = memo(({
 
   // 关闭上下文菜单
   const closeContextMenu = () => {
-    contextMenu.current.isOpen = false;
+    setContextMenuState({
+      ...contextMenuState,
+      isOpen: false
+    });
   };
 
   // 修改handleNodeContextMenu来支持长按触发
@@ -420,13 +423,13 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     let menuX = event.clientX;
     let menuY = event.clientY;
     
-    contextMenu.current = {
+    setContextMenuState({
       isOpen: true,
       position: { x: menuX, y: menuY },
       items: menuItems,
       targetId: nodeId,
       type: 'node'
-    };
+    });
   };
 
   // 获取节点相对于中心节点的象限位置
@@ -525,13 +528,13 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       }
     }
     
-    contextMenu.current = {
+    setContextMenuState({
       isOpen: true,
       position: { x: menuX, y: menuY },
       items: menuItems,
       targetId: edgeId,
       type: 'edge'
-    };
+    });
   };
 
   // 在组件初始化Graph之后添加状态
@@ -849,6 +852,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     console.log('graph:',graphState?.getCells())
     // Cleanup on unmount
     return () => {
+      console.log('dispose graph')
       newGraph.dispose();
     };
   }, [containerRef, onNodeClick, onEditNode, onDeleteNode, onEditEdge, onDeleteEdge, onCreateRelation]);
@@ -926,11 +930,11 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       
       // 文本自动裁剪配置
       const textWrap = {
-        width: width - 16, // 留出边距
+        width: width - 8, // 留出边距
         height: height - 12,
         ellipsis: true,
         breakWord: true, // 允许在单词内换行，确保长文本能正确换行
-        maxLines: height > 50 ? 3 : 2, // 根据节点高度确定最大行数
+        maxLines: 3, // 根据节点高度确定最大行数
       };
 
       // 创建节点
@@ -1414,9 +1418,9 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       
       {/* 右键菜单组件 */}
       <ContextMenu 
-        isOpen={contextMenu.current.isOpen}
-        position={contextMenu.current.position}
-        items={contextMenu.current.items}
+        isOpen={contextMenuState.isOpen}
+        position={contextMenuState.position}
+        items={contextMenuState.items}
         onClose={closeContextMenu}
         navbarHeight={navbarHeight} // 传入导航栏高度
       />
