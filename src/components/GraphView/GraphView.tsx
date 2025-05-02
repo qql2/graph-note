@@ -24,6 +24,8 @@ interface GraphViewProps {
   newNodeId?: string;
 }
 
+type layoutData = {id: string, x: number, y: number, width: number, height: number, label: string, isCentralNode: boolean, quadrant: QuadrantPosition, depth: number}[]
+
 // 关系类型到简短标签的映射
 const relationshipToSimpleLabel: Record<string, string> = {
   [CommonRelationshipTypes.FATHER]: 'F',
@@ -204,7 +206,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
   const containerRef = useRef<HTMLDivElement>(null);
   const [graphState, setGraphState] = useState<Graph | null>(null);
   const isPress = useRef(false);
-  
+  const layoutDataRef = useRef<layoutData>([]);
   // 右键菜单状态
   const [contextMenuState,setContextMenuState] = useState<ContextMenuState>({
     isOpen: false,
@@ -313,7 +315,6 @@ const GraphView: React.FC<GraphViewProps> = memo(({
   const handleNodeContextMenu = (node: any, event: any) => {
     // 如果有preventDefault方法就调用（阻止默认上下文菜单）
     (event.preventDefault)?.();
-    
     const nodeId = node.id;
     const isCenter = nodeId === centralNodeId;
     const menuItems: MenuItem[] = [];
@@ -434,41 +435,9 @@ const GraphView: React.FC<GraphViewProps> = memo(({
 
   // 获取节点相对于中心节点的象限位置
   const getNodeQuadrant = (nodeId: string): QuadrantPosition | null => {
-    if (!graphState) return null;
-    
-    const nodeCell = graphState.getCellById(nodeId);
-    const centralNodeCell = graphState.getCellById(centralNodeId);
-    
-    if (!nodeCell || !centralNodeCell) return null;
-    
-    const nodeBBox = nodeCell.getBBox();
-    const centralBBox = centralNodeCell.getBBox();
-    
-    // 获取节点和中心节点的中心点
-    const nodeCenter = {
-      x: nodeBBox.x + nodeBBox.width / 2,
-      y: nodeBBox.y + nodeBBox.height / 2
-    };
-    
-    const centralCenter = {
-      x: centralBBox.x + centralBBox.width / 2,
-      y: centralBBox.y + centralBBox.height / 2
-    };
-    
-    // 判断节点相对于中心节点在哪个象限
-    if (nodeCenter.y < centralCenter.y) {
-      // 在中心节点上方
-      return QuadrantPosition.TOP;
-    } else if (nodeCenter.y > centralCenter.y) {
-      // 在中心节点下方
-      return QuadrantPosition.BOTTOM;
-    } else if (nodeCenter.x < centralCenter.x) {
-      // 在中心节点左侧
-      return QuadrantPosition.LEFT;
-    } else {
-      // 在中心节点右侧
-      return QuadrantPosition.RIGHT;
-    }
+    const node = layoutDataRef.current.find(node => node.id === nodeId);
+    if (!node) throw new Error(`Node with id ${nodeId} not found in layout data`);
+    return node.quadrant;
   };
   
   // 处理边右键菜单
@@ -855,7 +824,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       console.log('dispose graph')
       newGraph.dispose();
     };
-  }, [containerRef, onNodeClick, onEditNode, onDeleteNode, onEditEdge, onDeleteEdge, onCreateRelation]);
+  }, [ centralNodeId]);
 
   // 当有新节点ID传入时，更新状态
   useEffect(() => {
@@ -883,7 +852,6 @@ const GraphView: React.FC<GraphViewProps> = memo(({
 
   // Render the graph when data or central node changes
   useEffect(() => {
-    console.log('central node changed');
     if (!graphState || !graphData || !centralNodeId || !containerRef.current) return;
 
     // Clear the graph
@@ -898,18 +866,19 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     );
 
     // Calculate positions for each node with collision detection
-    const layoutData = GraphLayoutService.calculateQuadrantLayout(
+    let layoutData
+    layoutDataRef.current = layoutData = GraphLayoutService.calculateQuadrantLayout(
       organizedData,
       containerRef.current.offsetWidth,
       containerRef.current.offsetHeight
-    );
+    ) as layoutData;
 
     // 节点和其quadrant的映射，用于决定连接点
     const nodeQuadrantMap = new Map();
     const nodeDepthMap = new Map();
-    console.log('layoutData:',layoutData)
+
     // Add nodes to the graph
-    const nodes = layoutData.map((nodeData: any) => {
+    const nodes = layoutData.map((nodeData) => {
       const { id, x, y, width, height, label, isCentralNode, quadrant, depth } = nodeData;
       
       // 存储节点的象限和深度信息，用于后续确定边的连接点

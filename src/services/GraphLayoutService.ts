@@ -11,6 +11,16 @@ import {
   defaultRelationshipTypeConfig,
 } from "../models/GraphNode";
 
+type OrganizedData = {
+  centralNode: GraphNode;
+  quadrants: {
+    top: GraphNode[];
+    bottom: GraphNode[];
+    left: GraphNode[];
+    right: GraphNode[];
+  };
+};
+
 /**
  * Graph Layout Service - Handles the layout calculations for displaying nodes in quadrants
  */
@@ -639,7 +649,7 @@ export class GraphLayoutService {
     const centralNodeHeight = calculateNodeHeight(centralNode.label, centralNodeWidth);
 
     // Result will contain node data with their positions
-    const result: any[] = [
+    const result= [
       {
         ...centralNode,
         x: centerX - centralNodeWidth / 2,
