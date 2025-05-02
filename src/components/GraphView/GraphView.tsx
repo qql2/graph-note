@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { Graph } from '@antv/x6';
+import { register } from '@antv/x6-react-shape';
 import { GraphData, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, GraphEdge, CommonRelationshipTypes, QuadrantPosition } from '../../models/GraphNode';
 import { GraphLayoutService } from '../../services/GraphLayoutService';
 import ContextMenu from '../ContextMenu';
 import NodeEditModal from '../NodeEditModal';
 import EdgeEditModal from '../EdgeEditModal';
 import { pencil, trash, copy, add } from 'ionicons/icons';
+import GraphNodeComponent from '../GraphNodeComponent';
+import '../GraphNodeComponent.css';
 import './GraphView.css';
 
 interface GraphViewProps {
@@ -53,6 +56,15 @@ interface ContextMenuState {
   targetId: string;
   type: 'node' | 'edge' | '';
 }
+
+// 注册React节点
+register({
+  shape: 'react-graph-node',
+  width: 100,
+  height: 60,
+  component: GraphNodeComponent,
+  effect: ['data'],
+});
 
 // 注册自定义节点
 Graph.registerNode(
@@ -330,7 +342,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
           nodeEditModal.current = {
             isOpen: true,
             nodeId: nodeId,
-            nodeLabel: node.attrs.label.text,
+            nodeLabel: node.data.label,
             isNewNode: false,
             relationType: '',
             sourceNodeId: ''
@@ -380,7 +392,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       } else {
         // 非中心节点，根据节点所在象限来限制可创建的关系类型
         // 获取节点相对于中心节点的象限位置
-        const nodeQuadrant = getNodeQuadrant(nodeId);
+        const nodeQuadrant = getNodeQuadrant(node);
         
         if (nodeQuadrant) {
           // 获取该象限允许的关系类型
@@ -434,10 +446,8 @@ const GraphView: React.FC<GraphViewProps> = memo(({
   };
 
   // 获取节点相对于中心节点的象限位置
-  const getNodeQuadrant = (nodeId: string): QuadrantPosition | null => {
-    const node = layoutDataRef.current.find(node => node.id === nodeId);
-    if (!node) throw new Error(`Node with id ${nodeId} not found in layout data`);
-    return node.quadrant;
+  const getNodeQuadrant = (node: any): QuadrantPosition | null => {
+    return node.data.quadrant;
   };
   
   // 处理边右键菜单
@@ -822,6 +832,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     // Cleanup on unmount
     return () => {
       console.log('dispose graph')
+      // 使用setTimeout来确保在React渲染完成后再执行清理
       newGraph.dispose();
     };
   }, [ centralNodeId]);
@@ -836,12 +847,16 @@ const GraphView: React.FC<GraphViewProps> = memo(({
         console.log('new create node timer');
         newlyCreatedNodeIds.current = newlyCreatedNodeIds.current.filter(id => id !== newNodeId);
         
-        // 如果图存在，找到对应节点并移除新节点效果
+        // 如果图存在，找到对应节点并更新数据
         if (graphState) {
           const node = graphState.getCellById(newNodeId);
           if (node && node.isNode()) {
-            // 直接设置class属性为空
-            node.attr('body/class', '');
+            // 对于React节点，需要更新data
+            const currentData = node.getData() || {};
+            node.setData({
+              ...currentData,
+              isNewNode: false
+            });
           }
         }
       }, 4500); // 动画持续3次，每次1.5秒，总共4.5秒
@@ -877,7 +892,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     const nodeQuadrantMap = new Map();
     const nodeDepthMap = new Map();
 
-    // Add nodes to the graph
+    // Add nodes to the graph using React components
     const nodes = layoutData.map((nodeData) => {
       const { id, x, y, width, height, label, isCentralNode, quadrant, depth } = nodeData;
       
@@ -885,78 +900,85 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       nodeQuadrantMap.set(id, quadrant || 'center');
       nodeDepthMap.set(id, depth || 0);
       
-      // Different styles based on node type using Ionic theme variables
-      const nodeFill = isCentralNode ? 'var(--ion-color-warning, #FF9800)' : 
-                       quadrant === 'top' ? 'var(--ion-color-success, #4CAF50)' : 
-                       quadrant === 'bottom' ? 'var(--ion-color-primary, #2196F3)' : 
-                       quadrant === 'left' ? 'var(--ion-color-tertiary, #9C27B0)' : 
-                       quadrant === 'right' ? 'var(--ion-color-danger, #F44336)' : 
-                       'var(--ion-color-medium, #607D8B)';
-
-      // 计算合适的字体大小，根据节点宽度和文本长度动态调整
-      const baseFontSize = 14;
-      const fontSize = isCentralNode ? baseFontSize + 2 : baseFontSize;
+      // 检查是否是新创建的节点
+      const isNewNode = newlyCreatedNodeIds.current.includes(id);
       
-      // 文本自动裁剪配置
-      const textWrap = {
-        width: width - 8, // 留出边距
-        height: height - 12,
-        ellipsis: true,
-        breakWord: true, // 允许在单词内换行，确保长文本能正确换行
-        maxLines: 3, // 根据节点高度确定最大行数
-      };
-
-      // 创建节点
+      // 创建React节点
       const node = graphState.addNode({
         id,
         x,
         y,
         width,
         height,
-        shape: 'graph-node',
-        attrs: {
-          body: {
-            fill: nodeFill,
-          },
-          label: {
-            text: label || id,
-            fontWeight: isCentralNode ? 'bold' : 'normal',
-            fontSize: fontSize,
-            textWrap: textWrap,
-          },
-        },
+        shape: 'react-graph-node',
         data: {
+          id,
+          label: label || id,
           isCentralNode,
           quadrant,
           depth,
+          isNewNode
+        },
+        // 保留自定义锚点
+        ports: {
+          groups: {
+            top: {
+              position: 'top',
+              attrs: {
+                circle: {
+                  r: 0,
+                  magnet: false,
+                  stroke: '#31d0c6',
+                  fill: '#fff',
+                  strokeWidth: 0,
+                },
+              },
+            },
+            bottom: {
+              position: 'bottom',
+              attrs: {
+                circle: {
+                  r: 0,
+                  magnet: false,
+                  stroke: '#31d0c6',
+                  fill: '#fff',
+                  strokeWidth: 0,
+                },
+              },
+            },
+            left: {
+              position: 'left',
+              attrs: {
+                circle: {
+                  r: 0,
+                  magnet: false,
+                  stroke: '#31d0c6',
+                  fill: '#fff',
+                  strokeWidth: 0,
+                },
+              },
+            },
+            right: {
+              position: 'right',
+              attrs: {
+                circle: {
+                  r: 0,
+                  magnet: false,
+                  stroke: '#31d0c6',
+                  fill: '#fff',
+                  strokeWidth: 0,
+                },
+              },
+            },
+          },
+          items: [
+            { group: 'top', id: 'top' },
+            { group: 'bottom', id: 'bottom' },
+            { group: 'left', id: 'left' },
+            { group: 'right', id: 'right' },
+          ],
         },
       });
-
-      // 检查此节点是否是新节点，如果是，添加特殊类名来触发动画
-      if (newlyCreatedNodeIds.current.includes(id)) {
-        // 使用 attr 方法添加类
-        node.attr('body/class', 'new-node');
-        
-        // 可以选择性地添加额外的边框效果
-        const bbox = node.getBBox();
-        const padding = 4; // 边框与节点的距离
-        // 添加一个动画边框作为特效
-        graphState.addNode({
-          shape: 'rect',
-          x: bbox.x - padding,
-          y: bbox.y - padding,
-          width: bbox.width + padding * 2,
-          height: bbox.height + padding * 2,
-          attrs: {
-            body: {
-              fill: 'none',
-              class: 'new-node-effect'
-            }
-          },
-          zIndex: -1, // 确保在节点下方
-          interacting: false, // 禁用交互
-        });
-      }
       
       return node;
     });

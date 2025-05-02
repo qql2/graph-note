@@ -308,3 +308,31 @@
     opacity: 0;
   }
 }
+
+/* React节点相关样式 */
+.x6-node .react-graph-node {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+/* React节点hover状态 */
+.x6-node:hover .react-graph-node {
+  filter: brightness(1.1);
+  transform: scale(1.02);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.23);
+}
+
+/* React节点激活状态 */
+.x6-node.x6-node-selected .react-graph-node {
+  filter: brightness(1.05);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.23), 0 3px 10px rgba(0, 0, 0, 0.16);
+  border: 2px solid var(--ion-color-primary, #3880ff);
+}
+
+/* 确保X6的节点容器背景透明 */
+.x6-node[data-shape="react-graph-node"] > rect {
+  fill: transparent;
+  stroke: none;
+}
