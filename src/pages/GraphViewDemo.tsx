@@ -29,7 +29,7 @@ import GraphView from '../components/GraphView';
 import RelationshipConfig from '../components/RelationshipConfig';
 import SettingsModal from '../components/SettingsModal';
 import ThemeToggle from '../components/ThemeToggle';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useHistory } from 'react-router-dom';
 import { GraphData, GraphNode, GraphEdge, CommonRelationshipTypes, QuadrantConfig, defaultQuadrantConfig, DepthConfig, defaultDepthConfig, ViewConfig, defaultViewConfig, RelationshipLabelMode, QuadrantPosition, RelationshipTypeConfig, defaultRelationshipTypeConfig } from '../models/GraphNode';
 import graphDatabaseService from '../services/graph-database/GraphDatabaseService';
 import { ConfigService } from '../services/ConfigService';
@@ -84,6 +84,7 @@ const convertDbDataToGraphData = (
 
 const GraphViewDemo: React.FC = () => {
   const location = useLocation();
+  const history = useHistory();
   const [graphDataState, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [centralNodeIdState, setCentralNodeId] = useState<string>('');
   const [isLoadingState, setLoading] = useState<boolean>(false);
@@ -313,7 +314,12 @@ const GraphViewDemo: React.FC = () => {
     ConfigService.saveCentralNodeId(nodeId);
     setToastMessage(`正在查看节点: ${nodeId}`);
     setShowToast(true);
-  }, []);
+    // 更新url参数但不刷新页面
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.set('node', nodeId);
+    // 保留其他参数
+    history.replace({ search: searchParams.toString() });
+  }, [location.search, history]);
 
   // 显示确认对话框
   const showConfirmDialog = (header: string, message: string, onConfirm: () => void) => {
@@ -557,6 +563,10 @@ const GraphViewDemo: React.FC = () => {
         setCentralNodeId(createdNodeId);
         // 保存当前聚焦节点
         ConfigService.saveCentralNodeId(createdNodeId);
+        // 更新url参数但不刷新页面
+        const searchParams = new URLSearchParams(location.search);
+        searchParams.set('node', createdNodeId);
+        history.replace({ search: searchParams.toString() });
       }
     } catch (error) {
       console.error('创建关系失败:', error);
@@ -565,7 +575,7 @@ const GraphViewDemo: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [location.search, history, knownRelationshipTypesState, viewConfigState.autoFocusNewNode, loadGraphData]);
 
   // 处理关系组配置更改
   const handleQuadrantChange = useCallback((position: QuadrantPosition, value: string[]) => {
