@@ -3,6 +3,7 @@ export interface GraphNode {
   type: string;
   label: string;
   properties?: Record<string, any>;
+  is_independent?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -116,4 +117,7 @@ export interface GraphDatabaseInterface {
     totalNodeCount: number;
     totalEdgeCount: number;
   }>;
+
+  // New method for finding parent independent node
+  findParentIndependentNode(nodeId: string): Promise<GraphNode | null>;
 } 

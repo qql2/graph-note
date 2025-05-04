@@ -134,11 +134,21 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     // 定义添加节点的操作
     const addNodeOperation = async (db: SQLiteEngine) => {
-      // 插入节点基本信息
+      // 检查标签唯一性以确定 is_independent 的默认值
+      let isIndependent = true; // 默认为 true
+      const existingNodeResult = await db.query(
+        "SELECT 1 FROM nodes WHERE label = ? LIMIT 1",
+        [node.label]
+      );
+      if (existingNodeResult?.values && existingNodeResult.values.length > 0) {
+        isIndependent = false; // 如果标签已存在，则不独立
+      }
+
+      // 插入节点基本信息，包括 is_independent
       await db.run(
-        `INSERT INTO nodes (id, type, label, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [id, node.type, node.label, now, now]
+        `INSERT INTO nodes (id, type, label, is_independent, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`, // 添加 is_independent 的占位符
+        [id, node.type, node.label, isIndependent ? 1 : 0, now, now] // 传递 is_independent 的值
       );
 
       // 插入节点属性
@@ -187,18 +197,33 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       // 更新节点基本属性
       if (
         updates.label !== undefined ||
-        updates.type !== undefined
+        updates.type !== undefined ||
+        updates.is_independent !== undefined // Also check if is_independent is explicitly provided
       ) {
         const sets: string[] = [];
         const params: any[] = [];
+        let isIndependent = updates.is_independent; // Start with explicitly provided value
 
         if (updates.label !== undefined) {
           sets.push("label = ?");
           params.push(updates.label);
+          // If is_independent wasn't explicitly set, recalculate based on new label
+          if (isIndependent === undefined) { 
+            const existingNodeResult = await db.query(
+              "SELECT id FROM nodes WHERE label = ? AND id != ? LIMIT 1",
+              [updates.label, id] // Exclude the current node being updated
+            );
+            isIndependent = !(existingNodeResult?.values && existingNodeResult.values.length > 0);
+          }
         }
         if (updates.type !== undefined) {
           sets.push("type = ?");
           params.push(updates.type);
+        }
+        // Only set is_independent if it was explicitly provided or recalculated
+        if (isIndependent !== undefined) {
+          sets.push("is_independent = ?");
+          params.push(isIndependent ? 1 : 0);
         }
 
         if (sets.length > 0) {
@@ -370,7 +395,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     try {
       // 获取所有节点基本信息
-      const nodesResult = await this.db.query("SELECT * FROM nodes");
+      const nodesResult = await this.db.query("SELECT *, is_independent FROM nodes");
       
       if (!nodesResult?.values || nodesResult.values.length === 0) {
         return [];
@@ -384,6 +409,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
           id: nodeRow.id,
           label: nodeRow.label,
           type: nodeRow.type || "node", // 确保有type字段
+          is_independent: nodeRow.is_independent === 1, // Convert 0/1 to boolean
           created_at: nodeRow.created_at,
           updated_at: nodeRow.updated_at,
           properties: {} // 确保一定有properties对象
@@ -1295,7 +1321,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     const db = this.db
     if (!db) throw new DatabaseError("Database not initialized");
     const result = await db.query(
-      'SELECT * FROM nodes WHERE id = ?',
+      'SELECT *, is_independent FROM nodes WHERE id = ?',
       [id]
     );
 
@@ -1303,7 +1329,14 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       throw new Error(`Node with id ${id} not found`);
     }
 
-    return result.values[0] as GraphNode;
+    const nodeRow = result.values[0];
+    const properties = await this._getNodeProperties(id);
+
+    return {
+      ...nodeRow,
+      is_independent: nodeRow.is_independent === 1,
+      properties: properties
+    } as GraphNode;
   }
 
   // 搜索节点
@@ -1314,7 +1347,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       return await this.withTransaction(async () => {
         // 构建基本查询
         let query = `
-          SELECT n.id, n.type, n.label, n.created_at, n.updated_at
+          SELECT n.id, n.type, n.label, n.is_independent, n.created_at, n.updated_at -- Select is_independent
           FROM nodes n
           WHERE 1=1
         `;
@@ -1464,9 +1497,10 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         // 获取节点属性
         const nodeObjects: GraphNode[] = [];
         for (const node of nodes) {
-          const properties = await this.getNodeProperties(node.id);
+          const properties = await this._getNodeProperties(node.id);
           nodeObjects.push({
             ...node,
+            is_independent: node.is_independent === 1,
             properties
           });
         }
@@ -1673,13 +1707,15 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         const edges = result.values || [];
         
         // 查询总数
-        const countResult = await this.db!.query(countQuery, params.slice(0, params.length - (criteria.limit ? (criteria.offset ? 2 : 1) : 0)));
+        // Correctly slice params for count query
+        const countParams = params.slice(0, params.length - (criteria.limit !== undefined ? (criteria.offset !== undefined ? 2 : 1) : 0));
+        const countResult = await this.db!.query(countQuery, countParams);
         const totalCount = countResult.values?.[0]?.count || 0;
         
         // 获取关系属性
         const edgeObjects: GraphEdge[] = [];
         for (const edge of edges) {
-          const properties = await this.getEdgeProperties(edge.id);
+          const properties = await this._getEdgeProperties(edge.id); // Use renamed helper
           edgeObjects.push({
             ...edge,
             properties
@@ -1692,6 +1728,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       throw new DatabaseError(`Failed to search edges: ${error}`, error as Error);
     }
   }
+
   // 全文搜索
   async fullTextSearch(query: string, options?: FullTextSearchOptions): Promise<{ 
     nodes: GraphNode[];
@@ -1716,60 +1753,62 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         const likePattern = `%${searchPattern}%`;
         
         // 节点搜索
-        let nodeQuery = `SELECT n.id FROM nodes n WHERE 0=0`;
+        let nodeQuery = `SELECT n.id FROM nodes n WHERE 1=1`;
+        const nodeConditions: string[] = [];
         const nodeParams: any[] = [];
-        
+
+
         if (opts.includeTitles) {
-          nodeQuery += ` AND ${opts.caseSensitive ? 'n.label' : 'LOWER(n.label)'} LIKE ?`;
-          nodeParams.push(likePattern);
+            nodeConditions.push(`${opts.caseSensitive ? 'n.label' : 'LOWER(n.label)'} LIKE ?`);
+            nodeParams.push(likePattern);
         }
         
         // 属性搜索
         if (opts.includeProperties) {
-          nodeQuery += ` OR EXISTS (
-            SELECT 1 FROM node_properties np 
-            WHERE np.node_id = n.id AND ${opts.caseSensitive ? 'np.value' : 'LOWER(np.value)'} LIKE ?
-          )`;
-          nodeParams.push(likePattern);
+            nodeConditions.push(`EXISTS (SELECT 1 FROM node_properties np WHERE np.node_id = n.id AND ${opts.caseSensitive ? 'np.value' : 'LOWER(np.value)'} LIKE ?)`);
+            nodeParams.push(likePattern);
+        }
+
+        if (nodeConditions.length > 0) {
+            nodeQuery += ` AND (${nodeConditions.join(' OR ')})`;
         }
         
-        nodeQuery += ` LIMIT ? OFFSET ?`;
-        nodeParams.push(opts.limit, opts.offset);
-        
         // 边搜索
-        let edgeQuery = `SELECT e.id FROM relationships e WHERE 0=0`;
+        let edgeQuery = `SELECT e.id FROM relationships e WHERE 1=1`;
+        const edgeConditions: string[] = [];
         const edgeParams: any[] = [];
         
         // 类型匹配搜索
         if (opts.includeTitles) {
-          edgeQuery += ` AND ${opts.caseSensitive ? 'e.type' : 'LOWER(e.type)'} LIKE ?`;
-          edgeParams.push(likePattern);
+            edgeConditions.push(`${opts.caseSensitive ? 'e.type' : 'LOWER(e.type)'} LIKE ?`);
+            edgeParams.push(likePattern);
         }
         
         // 属性搜索
         if (opts.includeProperties) {
-          edgeQuery += ` OR EXISTS (
-            SELECT 1 FROM relationship_properties ep 
-            WHERE ep.relationship_id = e.id AND ${opts.caseSensitive ? 'ep.value' : 'LOWER(ep.value)'} LIKE ?
-          )`;
-          edgeParams.push(likePattern);
+            edgeConditions.push(`EXISTS (SELECT 1 FROM relationship_properties ep WHERE ep.relationship_id = e.id AND ${opts.caseSensitive ? 'ep.value' : 'LOWER(ep.value)'} LIKE ?)`);
+            edgeParams.push(likePattern);
+        }
+
+        if (edgeConditions.length > 0) {
+            edgeQuery += ` AND (${edgeConditions.join(' OR ')})`;
         }
         
-        edgeQuery += ` LIMIT ? OFFSET ?`;
-        edgeParams.push(opts.limit, opts.offset);
-        
-        // 执行查询
+        // 查询ID
         const nodeResult = await this.db!.query(nodeQuery, nodeParams);
         const edgeResult = await this.db!.query(edgeQuery, edgeParams);
         
         const nodeIds = (nodeResult.values || []).map((row: any) => row.id);
         const edgeIds = (edgeResult.values || []).map((row: any) => row.id);
-        
-        // 获取完整节点和边数据
+
+        // 获取完整数据 - 使用分页限制
+        const limitedNodeIds = nodeIds.slice(opts.offset, opts.offset + opts.limit);
+        const limitedEdgeIds = edgeIds.slice(opts.offset, opts.offset + opts.limit);
+
         const nodes: GraphNode[] = [];
-        for (const id of nodeIds) {
+        for (const id of limitedNodeIds) {
           try {
-            const node = await this.getNode(id);
+            const node = await this.getNode(id); // Uses _getNodeProperties internally
             nodes.push(node);
           } catch (e) {
             // 忽略不存在的节点
@@ -1777,24 +1816,18 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         }
         
         const edges: GraphEdge[] = [];
-        for (const id of edgeIds) {
+        for (const id of limitedEdgeIds) {
           try {
-            const edge = await this.getEdge(id);
+            const edge = await this.getEdge(id); // Uses _getEdgeProperties internally
             edges.push(edge);
           } catch (e) {
             // 忽略不存在的边
           }
         }
         
-        // 计算总数
-        const nodeTotalQuery = `SELECT COUNT(*) as count FROM (${nodeQuery.split('LIMIT')[0]}) as subquery`;
-        const edgeTotalQuery = `SELECT COUNT(*) as count FROM (${edgeQuery.split('LIMIT')[0]}) as subquery`;
-        
-        const nodeTotalResult = await this.db!.query(nodeTotalQuery, nodeParams.slice(0, nodeParams.length - 2));
-        const edgeTotalResult = await this.db!.query(edgeTotalQuery, edgeParams.slice(0, edgeParams.length - 2));
-        
-        const totalNodeCount = nodeTotalResult.values?.[0]?.count || 0;
-        const totalEdgeCount = edgeTotalResult.values?.[0]?.count || 0;
+        // 总数是未分页前的ID数量
+        const totalNodeCount = nodeIds.length;
+        const totalEdgeCount = edgeIds.length;
         
         return {
           nodes,
@@ -1808,8 +1841,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     }
   }
 
-  // 辅助方法：获取节点属性
-  private async getNodeProperties(nodeId: string): Promise<Record<string, any>> {
+  // 辅助方法：获取节点属性 - Renamed
+  private async _getNodeProperties(nodeId: string): Promise<Record<string, any>> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     
     const result = await this.db.query(
@@ -1829,8 +1862,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     return properties;
   }
   
-  // 辅助方法：获取关系属性
-  private async getEdgeProperties(edgeId: string): Promise<Record<string, any>> {
+  // 辅助方法：获取关系属性 - Renamed
+  private async _getEdgeProperties(edgeId: string): Promise<Record<string, any>> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     
     const result = await this.db.query(
@@ -2011,6 +2044,75 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         throw error;
       }
       throw new DatabaseError(`Failed to get edges between nodes: ${error}`, error as Error);
+    }
+  }
+
+  // Find the parent independent node for a given non-independent node
+  async findParentIndependentNode(nodeId: string): Promise<GraphNode | null> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+
+    try {
+      // 1. Verify the current node exists and is NOT independent
+      const currentNode = await this.getNode(nodeId);
+      if (!currentNode || currentNode.is_independent) {
+        // Not found or is already independent, return null
+        return null;
+      }
+
+      // 2. Find all parent nodes (nodes pointing TO this node)
+      const parentEdgesResult = await this.db.query(
+        `SELECT source_id FROM relationships WHERE target_id = ?`,
+        [nodeId]
+      );
+
+      if (!parentEdgesResult?.values || parentEdgesResult.values.length === 0) {
+        return null; // No parents found
+      }
+
+      const parentIds = parentEdgesResult.values.map((row: any) => row.source_id).filter(id => id);
+
+      if (parentIds.length === 0) {
+        return null; // No valid parent IDs
+      }
+
+      // 3. Fetch details of parent nodes, filtering for independent ones
+      const parentNodesResult = await this.db.query(
+        `SELECT *, is_independent FROM nodes WHERE id IN (${parentIds.map(() => '?').join(', ')}) AND is_independent = 1`,
+        parentIds
+      );
+
+      if (!parentNodesResult?.values || parentNodesResult.values.length === 0) {
+        return null; // No independent parents found
+      }
+
+      // 4. Convert raw results to GraphNode objects and parse is_independent
+      const independentParents: GraphNode[] = parentNodesResult.values.map((row: any) => ({
+        ...row,
+        is_independent: row.is_independent === 1,
+        // Note: Properties are not fetched here for simplicity, 
+        // as we primarily need created_at for sorting.
+        // Fetch properties if needed later.
+      }));
+
+      // 5. Sort independent parents by created_at (ascending)
+      independentParents.sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateA - dateB;
+      });
+
+      // 6. Return the earliest independent parent
+      return independentParents[0];
+
+    } catch (error) {
+      if (error instanceof NodeNotFoundError) {
+        // If the original node wasn't found by getNode
+        return null; 
+      }
+      // Log the error for debugging, but might return null to the caller
+      console.error(`Failed to find parent independent node for ${nodeId}:`, error);
+      // Rethrow or return null based on desired error handling
+      throw new DatabaseError(`Failed to find parent independent node: ${error}`, error as Error);
     }
   }
 } 

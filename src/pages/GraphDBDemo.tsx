@@ -67,6 +67,9 @@ const GraphDBDemo: React.FC = () => {
   const [incompleteEdges, setIncompleteEdges] = useState<GraphEdge[]>([]);
   const [showIncompleteEdgesModal, setShowIncompleteEdgesModal] = useState<boolean>(false);
 
+  // Add state for parent nodes
+  const [parentNodes, setParentNodes] = useState<Record<string, GraphNode | null>>({});
+
   // 初始化数据库
   useEffect(() => {
     // 添加标志，防止组件卸载后仍执行操作
@@ -126,10 +129,25 @@ const GraphDBDemo: React.FC = () => {
     setShowToast(true);
   };
 
-  // 获取数据
+  // Fetch parent independent node if needed
+  const fetchParentNode = async (node: GraphNode) => {
+    if (!node.is_independent && node.id && !parentNodes[node.id]) { // Only fetch if needed and not already fetched
+      try {
+        const db = graphDatabaseService.getDatabase('GraphDBDemo');
+        const parent = await db.findParentIndependentNode(node.id);
+        setParentNodes(prev => ({ ...prev, [node.id!]: parent }));
+      } catch (error) {
+        console.error(`Failed to fetch parent node for ${node.label}:`, error);
+        setParentNodes(prev => ({ ...prev, [node.id!]: null })); // Store null on error
+      }
+    }
+  };
+
+  // Fetch initial data and parent nodes for non-independent ones
   const fetchData = async () => {
     try {
       loading.current = true;
+      setParentNodes({}); // Reset parent nodes on fetch
       
       // 确保数据库已初始化
       if (!graphDatabaseService.isInitialized()) {
@@ -153,6 +171,13 @@ const GraphDBDemo: React.FC = () => {
       
       setNodes(fetchedNodes);
       setEdges(fetchedEdges);
+
+      // After fetching nodes, trigger parent fetch for non-independent ones
+      fetchedNodes.forEach(node => {
+        if (!node.is_independent) {
+          fetchParentNode(node);
+        }
+      });
     } catch (error) {
       console.error('获取数据失败:', error);
       showMessage(`获取数据失败: ${error instanceof Error ? error.message : String(error)}`, 'error');
@@ -642,7 +667,19 @@ const GraphDBDemo: React.FC = () => {
                         <React.Fragment key={node.id}>
                           <IonItem>
                             <IonLabel>
-                              <h2>{node.label} ({node.type})</h2>
+                              <h2>{node.label} ({node.type}) {node.is_independent ? '(Independent)' : '(Dependent)'}</h2>
+                              {/* Display parent node info if dependent and fetched */}
+                              {!node.is_independent && node.id && parentNodes[node.id] && (
+                                <p style={{ color: 'gray', fontStyle: 'italic' }}>
+                                  Parent: {parentNodes[node.id]?.label} (ID: {parentNodes[node.id]?.id})
+                                </p>
+                              )}
+                              {!node.is_independent && node.id && parentNodes[node.id] === undefined && (
+                                <p style={{ color: 'orange', fontStyle: 'italic' }}>Loading parent...</p>
+                              )}
+                              {!node.is_independent && node.id && parentNodes[node.id] === null && (
+                                 <p style={{ color: 'red', fontStyle: 'italic' }}>No independent parent found.</p>
+                              )}
                               <p>ID: {node.id}</p>
                               <p>属性: {JSON.stringify(node.properties)}</p>
                             </IonLabel>
