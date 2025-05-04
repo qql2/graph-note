@@ -132,7 +132,7 @@ export class GraphLayoutService {
           // 获取反转关系类型
           const invertedRelationship = GraphLayoutService.getOppositeRelationType(
             edge.relationshipType,
-            config
+            config.relationshipTypeConfig
           );
 
           const relatedNode = graphData.nodes.find(
@@ -185,7 +185,7 @@ export class GraphLayoutService {
         // 入站关系：当前节点作为目标节点
         else if (edge.target === nodeId) {
           // 获取反转关系类型
-          const invertedType = GraphLayoutService.getOppositeRelationType(edge.relationshipType, config);
+          const invertedType = GraphLayoutService.getOppositeRelationType(edge.relationshipType, config.relationshipTypeConfig);
 
           // 只有当反转后的类型与我们要查找的类型相同时才继续
           if (invertedType === relationshipType) {
@@ -321,10 +321,10 @@ export class GraphLayoutService {
       },
     };
   }
-  static getOppositeRelationType = (relationType: string, config: QuadrantConfig): string => {
+  static getOppositeRelationType = (relationType: string, config: RelationshipTypeConfig): string => {
     // 检查是否在配置中定义了相对类型
-    if (config.relationshipTypeConfig.oppositeTypes[relationType]) {
-      return config.relationshipTypeConfig.oppositeTypes[relationType];
+    if (config.oppositeTypes[relationType]) {
+      return config.oppositeTypes[relationType];
     }
     // 如果没有配置相对类型，则返回原类型（视为未知类型）
     return "unknown";
@@ -1054,7 +1054,7 @@ export class GraphLayoutService {
     let effectiveRelationType = edgeType;
     if (!isDirectFromCentral && targetId === centralNodeId) {
       // 入链，使用相对关系类型
-      effectiveRelationType = GraphLayoutService.getOppositeRelationType(edgeType, quadrantConfig);
+      effectiveRelationType = GraphLayoutService.getOppositeRelationType(edgeType, quadrantConfig.relationshipTypeConfig);
     }
     
     // 获取关系类型所属象限

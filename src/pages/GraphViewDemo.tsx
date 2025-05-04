@@ -57,6 +57,7 @@ const convertDbDataToGraphData = (
     label: dbNode.label || '无标签',
     description: dbNode.properties?.description || '',
     metadata: dbNode.properties || {},
+    is_independent: dbNode.is_independent
   }));
 
   const edges: GraphEdge[] = dbEdges.map(dbEdge => {

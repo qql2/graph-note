@@ -40,6 +40,8 @@ export interface GraphNode {
   metadata?: Record<string, any>;
   // 节点在关系图中的深度层级
   depth?: number;
+  // 节点是否独立，独立节点可以独立显示，非独立节点需要依赖其他节点进行阐述
+  is_independent?: boolean;
 }
 
 // 带有层级信息的节点，用于布局
@@ -61,6 +63,8 @@ export interface GraphEdge {
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  // 非独立节点的父独立节点映射，key是非独立节点ID，value是父独立节点
+  parentNodes?: Record<string, GraphNode | null>;
 }
 
 // 配置关系组布局

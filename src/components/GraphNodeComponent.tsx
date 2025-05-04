@@ -16,12 +16,14 @@ interface NodeData {
   quadrant: QuadrantPosition;
   depth: number;
   isNewNode?: boolean;
+  is_independent?: boolean;
+  displayLabel: string;
 }
 
 const GraphNodeComponent: React.FC<GraphNodeComponentProps> = ({ node }) => {
   // 从节点的data属性中获取数据
   const data = node.getData() as NodeData;
-  const { id, label, isCentralNode, quadrant, isNewNode } = data;
+  const { isCentralNode, quadrant, isNewNode, displayLabel } = data;
 
   // 根据节点类型选择不同的样式
   const getNodeColor = () => {
@@ -81,7 +83,7 @@ const GraphNodeComponent: React.FC<GraphNodeComponentProps> = ({ node }) => {
           width: '100%',
         }}
       >
-        {label || id}
+        {displayLabel}
       </div>
     </div>
   );

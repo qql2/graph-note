@@ -41,10 +41,12 @@ const GraphDBDemo: React.FC = () => {
     type: string;
     label: string;
     properties: string;
+    is_independent: boolean;
   }>({
     type: 'default',
     label: '',
-    properties: '{}'
+    properties: '{}',
+    is_independent: true // 默认为独立节点
   });
 
   // 边表单状态
@@ -223,11 +225,11 @@ const GraphDBDemo: React.FC = () => {
       const node: Omit<GraphNode, 'created_at' | 'updated_at'> = {
         type: nodeForm.type,
         label: nodeForm.label,
-        properties: parsedProperties
+        properties: parsedProperties,
+        is_independent: nodeForm.is_independent // 添加独立性属性
       };
       
-		const db = graphDatabaseService.getDatabase('GraphDBDemo');
-		// debugger
+      const db = graphDatabaseService.getDatabase('GraphDBDemo');
       const nodeId = await db.addNode(node);
       
       showMessage(`节点添加成功，ID: ${nodeId}`, 'success');
@@ -237,7 +239,8 @@ const GraphDBDemo: React.FC = () => {
       setNodeForm({
         type: 'default',
         label: '',
-        properties: '{}'
+        properties: '{}',
+        is_independent: true // 添加独立性属性
       });
     } catch (error) {
       console.error('添加节点失败:', error);
@@ -543,6 +546,19 @@ const GraphDBDemo: React.FC = () => {
                     ></IonInput>
                   </IonItem>
                   <IonItem>
+                    <IonLabel position="floating">是否为独立节点</IonLabel>
+                    <IonSelect 
+                      value={nodeForm.is_independent}
+                      onIonChange={(e) => handleNodeFormChange('is_independent', e.detail.value)}
+                      interfaceOptions={{
+                        header: '选择节点独立性',
+                      }}
+                    >
+                      <IonSelectOption value={true}>独立节点</IonSelectOption>
+                      <IonSelectOption value={false}>非独立节点</IonSelectOption>
+                    </IonSelect>
+                  </IonItem>
+                  <IonItem>
                     <IonLabel position="floating">属性 (JSON格式)</IonLabel>
                     <IonTextarea
                       value={nodeForm.properties}
@@ -667,18 +683,26 @@ const GraphDBDemo: React.FC = () => {
                         <React.Fragment key={node.id}>
                           <IonItem>
                             <IonLabel>
-                              <h2>{node.label} ({node.type}) {node.is_independent ? '(Independent)' : '(Dependent)'}</h2>
+                              <h2>
+                                {node.label} ({node.type}) 
+                                <IonBadge 
+                                  color={node.is_independent ? "success" : "warning"} 
+                                  style={{ marginLeft: '8px', fontSize: '10px' }}
+                                >
+                                  {node.is_independent ? '独立节点' : '非独立节点'}
+                                </IonBadge>
+                              </h2>
                               {/* Display parent node info if dependent and fetched */}
                               {!node.is_independent && node.id && parentNodes[node.id] && (
                                 <p style={{ color: 'gray', fontStyle: 'italic' }}>
-                                  Parent: {parentNodes[node.id]?.label} (ID: {parentNodes[node.id]?.id})
+                                  父节点: {parentNodes[node.id]?.label} (ID: {parentNodes[node.id]?.id})
                                 </p>
                               )}
                               {!node.is_independent && node.id && parentNodes[node.id] === undefined && (
-                                <p style={{ color: 'orange', fontStyle: 'italic' }}>Loading parent...</p>
+                                <p style={{ color: 'orange', fontStyle: 'italic' }}>加载父节点中...</p>
                               )}
                               {!node.is_independent && node.id && parentNodes[node.id] === null && (
-                                 <p style={{ color: 'red', fontStyle: 'italic' }}>No independent parent found.</p>
+                                <p style={{ color: 'red', fontStyle: 'italic' }}>未找到独立父节点</p>
                               )}
                               <p>ID: {node.id}</p>
                               <p>属性: {JSON.stringify(node.properties)}</p>
@@ -869,7 +893,15 @@ const GraphDBDemo: React.FC = () => {
               <div style={{ padding: '16px' }}>
                 <IonCard>
                   <IonCardHeader>
-                    <IonCardTitle>{selectedNode.label}</IonCardTitle>
+                    <IonCardTitle>
+                      {selectedNode.label}
+                      <IonBadge 
+                        color={selectedNode.is_independent ? "success" : "warning"} 
+                        style={{ marginLeft: '8px', fontSize: '12px' }}
+                      >
+                        {selectedNode.is_independent ? '独立节点' : '非独立节点'}
+                      </IonBadge>
+                    </IonCardTitle>
                     <IonCardSubtitle>类型: {selectedNode.type}</IonCardSubtitle>
                   </IonCardHeader>
                   <IonCardContent>
@@ -878,6 +910,12 @@ const GraphDBDemo: React.FC = () => {
                       <IonLabel>
                         <h2>基本信息</h2>
                         <p>ID: {selectedNode.id}</p>
+                        {!selectedNode.is_independent && selectedNode.id && parentNodes[selectedNode.id] && (
+                          <p>
+                            父节点: {parentNodes[selectedNode.id]?.label} 
+                            (ID: {parentNodes[selectedNode.id]?.id})
+                          </p>
+                        )}
                       </IonLabel>
                     </IonItem>
 
