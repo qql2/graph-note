@@ -3,10 +3,11 @@ import { DatabaseConfig, SQLiteEngine } from "../core/types";
 import { DatabaseError, TransactionError } from "../core/errors";
 import sqliteService from "../../sqliteService";
 import { SQLiteDBConnection } from "@capacitor-community/sqlite";
+import { GraphUpgradeStatements, getLatestGraphDbVersion } from "../upgrades/graph.upgrade.statements";
 
 export class SQLiteGraphDB extends BaseGraphDB {
   private dbName: string = "graph_database";
-  private dbVersion: number = 1;
+  private dbVersion: number = getLatestGraphDbVersion();
   private connection: SQLiteDBConnection | null = null;
   private transactionQueue: Promise<any> = Promise.resolve();
   private isInTransaction: boolean = false;
@@ -61,19 +62,28 @@ export class SQLiteGraphDB extends BaseGraphDB {
   protected async createEngine(config: DatabaseConfig): Promise<SQLiteEngine> {
     try {
       this.dbName = config.dbName || this.dbName;
-      this.dbVersion = config.version || this.dbVersion;
+      this.dbVersion = getLatestGraphDbVersion();
+      console.log(`SQLiteGraphDB: Setting DB version to ${this.dbVersion}`);
 
-      // 初始化WebStore (仅针对Web平台)
+      // Initialize WebStore (only for Web platform)
       if (sqliteService.getPlatform() === "web") {
         await sqliteService.initWebStore();
       }
 
-      // 打开数据库连接
+      // Add upgrade statements before opening the database
+      await sqliteService.addUpgradeStatement({
+        database: this.dbName,
+        upgrade: GraphUpgradeStatements,
+      });
+      console.log(`SQLiteGraphDB: Added ${GraphUpgradeStatements.length} upgrade statements for ${this.dbName}.`);
+
+      // Open database connection, allowing upgrades up to the specified version
       this.connection = await sqliteService.openDatabase(
         this.dbName,
         this.dbVersion,
         false
       );
+      console.log(`SQLiteGraphDB: Database ${this.dbName} opened successfully at version ${this.dbVersion}.`);
 
       // 返回SQLite引擎接口
       return {
