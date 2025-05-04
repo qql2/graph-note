@@ -76,7 +76,7 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
         if (edge.source !== edge.target) {
           // 判断关系的方向性
           // TODO: (AI请勿擅自实现或修改)未来可以统一定义一个API, 可以把隐式关系类型也考虑进来获取关联节点
-          const oppositeType = GraphLayoutService.getOppositeRelationType(edge.relationshipType, quadrantConfig);
+          const oppositeType = GraphLayoutService.getOppositeRelationType(edge.relationshipType, quadrantConfig.relationshipTypeConfig);
           
           
           if (oppositeType === CommonRelationshipTypes.FATHER) {

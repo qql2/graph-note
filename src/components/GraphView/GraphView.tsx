@@ -10,6 +10,7 @@ import { pencil, trash, copy, add } from 'ionicons/icons';
 import GraphNodeComponent from '../GraphNodeComponent';
 import '../GraphNodeComponent.css';
 import './GraphView.css';
+import { getIndependentParentNode } from '../../mixin/graphView';
 
 interface GraphViewProps {
   graphData: GraphData;
@@ -27,7 +28,7 @@ interface GraphViewProps {
   newNodeId?: string;
 }
 
-type layoutData = {id: string, x: number, y: number, width: number, height: number, label: string, isCentralNode: boolean, quadrant: QuadrantPosition, depth: number}[]
+type layoutData = {id: string, x: number, y: number, width: number, height: number, label: string, isCentralNode: boolean, quadrant: QuadrantPosition, depth: number, is_independent?: boolean}[]
 
 // 关系类型到简短标签的映射
 const relationshipToSimpleLabel: Record<string, string> = {
@@ -902,6 +903,23 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       
       // 检查是否是新创建的节点
       const isNewNode = newlyCreatedNodeIds.current.includes(id);
+
+      // 找到原始节点以获取独立性信息
+      const originalNode = graphData.nodes.find(node => node.id === id);
+      const is_independent = originalNode?.is_independent;
+      if (label === '适用范围') {
+        debugger
+      }
+
+      // 构建节点显示标签，对于非独立节点添加父独立节点前缀
+      let displayLabel = label || id;
+      if (is_independent === false) {
+        
+        const parentNode = getIndependentParentNode(id,graphData,quadrantConfig.relationshipTypeConfig);
+        if (parentNode && parentNode.label) {
+          displayLabel = `${parentNode.label}/${displayLabel}`;
+        }
+      }
       
       // 创建React节点
       const node = graphState.addNode({
@@ -913,11 +931,13 @@ const GraphView: React.FC<GraphViewProps> = memo(({
         shape: 'react-graph-node',
         data: {
           id,
-          label: label || id,
+          label: label,
+          displayLabel,
           isCentralNode,
           quadrant,
           depth,
-          isNewNode
+          isNewNode,
+          is_independent
         },
         // 保留自定义锚点
         ports: {
@@ -1017,7 +1037,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
         let edgeColor;
         
         // 确定关系类型所属的关系组
-        const relationType = GraphLayoutService.getOppositeRelationType(edgeData.relationshipType, quadrantConfig);
+        const relationType = GraphLayoutService.getOppositeRelationType(edgeData.relationshipType, quadrantConfig.relationshipTypeConfig);
         
         // 检查关系类型属于哪个关系组
         const isTopType = quadrantConfig[QuadrantPosition.TOP].includes(relationType);
