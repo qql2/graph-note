@@ -1,6 +1,8 @@
 /* Ionic Variables and Theming. For more info, please see:
 http://ionicframework.com/docs/theming/ */
 
+/* TODO: (AI不要擅自实现) 可以用scss减少冗余 */
+
 /** Ionic CSS Variables **/
 :root {
   /** primary **/

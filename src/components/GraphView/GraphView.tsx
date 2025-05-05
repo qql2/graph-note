@@ -917,7 +917,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       // 构建节点显示标签，对于非独立节点添加父独立节点前缀
       let displayLabel = label || id;
       if (is_independent === false) {
-        
+        // TODO: (AI不要擅自实现) 如果已经在视图中出现了父独立节点, 则不需要再加前缀了
         const parentNode = getIndependentParentNode(id,graphData,quadrantConfig.relationshipTypeConfig);
         if (parentNode && parentNode.label) {
           displayLabel = `${parentNode.label}/${displayLabel}`;
@@ -1212,7 +1212,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     return {nodes: [], edges: []};
   }, [graphData.edges]);
   
-  // 高亮到中心节点的路径
+  // 高亮到中心节点的路径 - 使用CSS类实现
   const highlightPathToCentral = useCallback((nodeId: string) => {
     if (!graphState || nodeId === centralNodeId) return;
     
@@ -1220,115 +1220,84 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     const path = findPathToCentralNode(nodeId, centralNodeId);
     highlightedPathRef.current = path;
     
-    // 性能优化：对所有节点和边应用批量操作，而不是逐个操作
-    const allNodeIds = new Set(graphData.nodes.map(node => node.id));
-    const allEdgeIds = new Set(graphData.edges.map(edge => edge.id));
+    // 获取当前视图中的所有节点和边
+    const allCells = graphState.getCells();
+    const allNodeIds = new Set(allCells.filter(cell => cell.isNode()).map(node => node.id));
+    const allEdgeIds = new Set(allCells.filter(cell => cell.isEdge()).map(edge => edge.id));
     
     const nodesToHighlight = new Set(path.nodes);
     const edgesToHighlight = new Set(path.edges);
     
-    // 批量处理节点
+    // 应用CSS类而不是直接修改属性
     graphState.batchUpdate(() => {
       // 高亮路径上的节点
-      path.nodes.forEach(id => {
-        const node = graphState.getCellById(id);
-        if (node && node.isNode()) {
-          node.attr('body/opacity', 1);
-          node.attr('body/stroke', 'var(--ion-color-primary, #3880ff)');
-          node.attr('body/strokeWidth', 2);
-          node.attr('label/opacity', 1);
-          
-          // 特殊标记起点和终点
-          if (id === nodeId) {
-            node.attr('body/strokeDasharray', '5,5');
-          }
-        }
-      });
-      
-      // 暗化其他节点
-      allNodeIds.forEach(id => {
-        if (!nodesToHighlight.has(id)) {
-          const node = graphState.getCellById(id);
-          if (node && node.isNode()) {
-            node.attr('body/opacity', 0.3);
-            node.attr('body/stroke', '#999');
-            node.attr('body/strokeWidth', 1);
-            node.attr('label/opacity', 0.3);
-          }
-        }
-      });
-      
-      // 高亮路径上的边
-      path.edges.forEach(id => {
-        const edge = graphState.getCellById(id);
-        if (edge && edge.isEdge()) {
-          edge.attr('line/opacity', 1);
-          edge.attr('line/strokeWidth', 3);
-          
-          // 确保边上的标签也保持高亮
-          const labels = edge.getLabels();
-          if (labels && labels.length > 0) {
-            edge.attr('label/opacity', 1);
-          }
-        }
-      });
-      
-      // 暗化其他边
-      allEdgeIds.forEach(id => {
-        if (!edgesToHighlight.has(id)) {
-          const edge = graphState.getCellById(id);
-          if (edge && edge.isEdge()) {
-            edge.attr('line/opacity', 0.2);
-            edge.attr('line/strokeWidth', 1);
+      allCells.forEach(cell => {
+        // 处理节点
+        if (cell.isNode()) {
+          const cellView = graphState.findViewByCell(cell);
+          if (cellView) {
+            const cellId = cell.id;
             
-            // 同时暗化边上的标签
-            const labels = edge.getLabels();
-            if (labels && labels.length > 0) {
-              edge.attr('label/opacity', 0.2);
+            // 移除所有相关类
+            cellView.removeClass('highlight-node highlight-source dimmed');
+            
+            if (nodesToHighlight.has(cellId)) {
+              // 添加高亮类
+              cellView.addClass('highlight-node');
+              
+              // 特殊标记起点
+              if (cellId === nodeId) {
+                cellView.addClass('highlight-source');
+              }
+            } else {
+              // 非路径节点添加暗化类
+              cellView.addClass('dimmed');
+            }
+          }
+        } 
+        // 处理边
+        else if (cell.isEdge()) {
+          const cellView = graphState.findViewByCell(cell);
+          if (cellView) {
+            const cellId = cell.id;
+            
+            // 移除所有相关类
+            cellView.removeClass('highlight-edge dimmed');
+            
+            if (edgesToHighlight.has(cellId)) {
+              // 添加高亮类
+              cellView.addClass('highlight-edge');
+            } else {
+              // 非路径边添加暗化类
+              cellView.addClass('dimmed');
             }
           }
         }
       });
     });
-  }, [graphState, centralNodeId, findPathToCentralNode, graphData.nodes, graphData.edges]);
+  }, [graphState, centralNodeId, findPathToCentralNode]);
   
   // 重置所有高亮，恢复节点和边的原始状态
   const resetHighlights = useCallback(() => {
     if (!graphState || !highlightedPathRef.current) return;
     
+    // 获取当前所有单元格
+    const allCells = graphState.getCells();
+    
     // 性能优化：批量更新
     graphState.batchUpdate(() => {
-      // 重置所有节点
-      graphData.nodes.forEach(({id}) => {
-        const node = graphState.getCellById(id);
-        if (node && node.isNode()) {
-          node.attr('body/opacity', 1);
-          node.attr('body/stroke', '#000');
-          node.attr('body/strokeWidth', 1);
-          node.attr('body/strokeDasharray', '');
-          node.attr('label/opacity', 1);
-        }
-      });
-      
-      // 重置所有边
-      graphData.edges.forEach(({id}) => {
-        const edge = graphState.getCellById(id);
-        if (edge && edge.isEdge()) {
-          edge.attr('line/opacity', 1);
-          edge.attr('line/strokeWidth', 2);
-          
-          // 恢复边的标签
-          const labels = edge.getLabels();
-          if (labels && labels.length > 0) {
-            edge.attr('label/opacity', 1);
-          }
+      // 移除所有节点和边的高亮和暗化类
+      allCells.forEach(cell => {
+        const cellView = graphState.findViewByCell(cell);
+        if (cellView) {
+          cellView.removeClass('highlight-node highlight-source highlight-edge dimmed');
         }
       });
     });
     
     // 清除当前高亮路径
     highlightedPathRef.current = null;
-  }, [graphState, graphData.nodes, graphData.edges]);
+  }, [graphState]);
 
   // 初始化图形时添加边的点击事件监听和节点的长按事件监听
   useEffect(() => {
@@ -1485,6 +1454,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     });
 
     // 添加节点鼠标悬停和离开事件
+    // TODO: (AI不要擅自实现) 可以加防抖优化
     graphState.on('node:mouseenter', ({ cell }) => {
       const nodeId = cell.id;
       highlightPathToCentral(nodeId);

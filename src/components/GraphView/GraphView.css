@@ -336,3 +336,51 @@
   fill: transparent;
   stroke: none;
 }
+
+/* 路径高亮效果 */
+.x6-node.highlight-node .x6-node-body {
+  stroke: var(--ion-color-primary, #3880ff) !important;
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 0 3px rgba(56, 128, 255, 0.3));
+}
+
+.x6-node.highlight-source .x6-node-body {
+  stroke-dasharray: 5,5 !important;
+  animation: pulse 1.5s infinite;
+}
+
+.x6-node.dimmed {
+  opacity: 0.3 !important;
+}
+
+.x6-edge.highlight-edge path {
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 2px rgba(56, 128, 255, 0.3));
+}
+
+.x6-edge.highlight-edge .x6-edge-label {
+  opacity: 1 !important;
+}
+
+.x6-edge.dimmed path {
+  opacity: 0.2 !important;
+}
+
+.x6-edge.dimmed .x6-edge-label {
+  opacity: 0.2 !important;
+}
+
+@keyframes pulse {
+  0% {
+    stroke-width: 2px;
+    stroke-opacity: 1;
+  }
+  50% {
+    stroke-width: 3px;
+    stroke-opacity: 0.8;
+  }
+  100% {
+    stroke-width: 2px;
+    stroke-opacity: 1;
+  }
+}
