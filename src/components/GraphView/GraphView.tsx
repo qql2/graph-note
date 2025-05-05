@@ -268,6 +268,9 @@ const GraphView: React.FC<GraphViewProps> = memo(({
   const nodeUnderLongPressRef = useRef<{ cell: any, clientX: number, clientY: number } | null>(null);
   const edgeUnderLongPressRef = useRef<{ cell: any, clientX: number, clientY: number } | null>(null);
   
+  // 添加用于跟踪当前高亮路径的状态
+  const highlightedPathRef = useRef<{nodes: string[], edges: string[]} | null>(null);
+  
   // 清除长按计时器的辅助函数
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -914,7 +917,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       // 构建节点显示标签，对于非独立节点添加父独立节点前缀
       let displayLabel = label || id;
       if (is_independent === false) {
-        
+        // TODO: (AI不要擅自实现) 如果已经在视图中出现了父独立节点, 则不需要再加前缀了
         const parentNode = getIndependentParentNode(id,graphData,quadrantConfig.relationshipTypeConfig);
         if (parentNode && parentNode.label) {
           displayLabel = `${parentNode.label}/${displayLabel}`;
@@ -1139,6 +1142,163 @@ const GraphView: React.FC<GraphViewProps> = memo(({
 
   }, [graphState, graphData, centralNodeId, quadrantConfig, depthConfig, viewConfig, newlyCreatedNodeIds]);
 
+  // 查找从节点到中心节点的路径
+  const findPathToCentralNode = useCallback((nodeId: string, centralId: string): {nodes: string[], edges: string[]} => {
+    const visited = new Set<string>();
+    const nodeQueue: string[] = [nodeId];
+    const edgesInPath = new Set<string>();
+    const nodesInPath = new Set<string>([nodeId]);
+    const parentMap = new Map<string, {nodeId: string, edgeId: string}>();
+    
+    // 构建边的查找映射
+    // TODO: (AI不要擅自实现) 这个算法使用的是全库的图，而不是当前视图的图，需要优化
+    const edgesByNode = new Map<string, {edgeId: string, connectedNodeId: string}[]>();
+    graphData.edges.forEach(edge => {
+      const source = edge.source;
+      const target = edge.target;
+      
+      if (!edgesByNode.has(source)) {
+        edgesByNode.set(source, []);
+      }
+      edgesByNode.get(source)?.push({edgeId: edge.id, connectedNodeId: target});
+      
+      if (!edgesByNode.has(target)) {
+        edgesByNode.set(target, []);
+      }
+      edgesByNode.get(target)?.push({edgeId: edge.id, connectedNodeId: source});
+    });
+    
+    // BFS查找路径
+    while (nodeQueue.length > 0) {
+      const currentNode = nodeQueue.shift();
+      if (!currentNode || visited.has(currentNode)) continue;
+      
+      visited.add(currentNode);
+      
+      // 如果找到中心节点，构建路径并返回
+      if (currentNode === centralId) {
+        const pathNodes = [currentNode];
+        const pathEdges: string[] = [];
+        
+        let current = currentNode;
+        while (parentMap.has(current)) {
+          const parent = parentMap.get(current);
+          if (parent) {
+            pathNodes.push(parent.nodeId);
+            pathEdges.push(parent.edgeId);
+            current = parent.nodeId;
+          }
+        }
+        
+        return {
+          nodes: pathNodes, 
+          edges: pathEdges
+        };
+      }
+      
+      // 探索相邻节点
+      const connections = edgesByNode.get(currentNode) || [];
+      for (const {edgeId, connectedNodeId} of connections) {
+        if (!visited.has(connectedNodeId)) {
+          nodeQueue.push(connectedNodeId);
+          nodesInPath.add(connectedNodeId);
+          edgesInPath.add(edgeId);
+          parentMap.set(connectedNodeId, {nodeId: currentNode, edgeId});
+        }
+      }
+    }
+    
+    // 如果没有找到路径，返回空数组
+    return {nodes: [], edges: []};
+  }, [graphData.edges]);
+  
+  // 高亮到中心节点的路径 - 使用CSS类实现
+  const highlightPathToCentral = useCallback((nodeId: string) => {
+    if (!graphState || nodeId === centralNodeId) return;
+    
+    // 找出路径
+    const path = findPathToCentralNode(nodeId, centralNodeId);
+    highlightedPathRef.current = path;
+    
+    // 获取当前视图中的所有节点和边
+    const allCells = graphState.getCells();
+    const allNodeIds = new Set(allCells.filter(cell => cell.isNode()).map(node => node.id));
+    const allEdgeIds = new Set(allCells.filter(cell => cell.isEdge()).map(edge => edge.id));
+    
+    const nodesToHighlight = new Set(path.nodes);
+    const edgesToHighlight = new Set(path.edges);
+    
+    // 应用CSS类而不是直接修改属性
+    graphState.batchUpdate(() => {
+      // 高亮路径上的节点
+      allCells.forEach(cell => {
+        // 处理节点
+        if (cell.isNode()) {
+          const cellView = graphState.findViewByCell(cell);
+          if (cellView) {
+            const cellId = cell.id;
+            
+            // 移除所有相关类
+            cellView.removeClass('highlight-node highlight-source dimmed');
+            
+            if (nodesToHighlight.has(cellId)) {
+              // 添加高亮类
+              cellView.addClass('highlight-node');
+              
+              // 特殊标记起点
+              if (cellId === nodeId) {
+                cellView.addClass('highlight-source');
+              }
+            } else {
+              // 非路径节点添加暗化类
+              cellView.addClass('dimmed');
+            }
+          }
+        } 
+        // 处理边
+        else if (cell.isEdge()) {
+          const cellView = graphState.findViewByCell(cell);
+          if (cellView) {
+            const cellId = cell.id;
+            
+            // 移除所有相关类
+            cellView.removeClass('highlight-edge dimmed');
+            
+            if (edgesToHighlight.has(cellId)) {
+              // 添加高亮类
+              cellView.addClass('highlight-edge');
+            } else {
+              // 非路径边添加暗化类
+              cellView.addClass('dimmed');
+            }
+          }
+        }
+      });
+    });
+  }, [graphState, centralNodeId, findPathToCentralNode]);
+  
+  // 重置所有高亮，恢复节点和边的原始状态
+  const resetHighlights = useCallback(() => {
+    if (!graphState || !highlightedPathRef.current) return;
+    
+    // 获取当前所有单元格
+    const allCells = graphState.getCells();
+    
+    // 性能优化：批量更新
+    graphState.batchUpdate(() => {
+      // 移除所有节点和边的高亮和暗化类
+      allCells.forEach(cell => {
+        const cellView = graphState.findViewByCell(cell);
+        if (cellView) {
+          cellView.removeClass('highlight-node highlight-source highlight-edge dimmed');
+        }
+      });
+    });
+    
+    // 清除当前高亮路径
+    highlightedPathRef.current = null;
+  }, [graphState]);
+
   // 初始化图形时添加边的点击事件监听和节点的长按事件监听
   useEffect(() => {
     if (!graphState) return;
@@ -1292,10 +1452,16 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     graphState.on('node:mouseup', () => {
       clearLongPressTimer();
     });
+
+    // 添加节点鼠标悬停和离开事件
+    // TODO: (AI不要擅自实现) 可以加防抖优化
+    graphState.on('node:mouseenter', ({ cell }) => {
+      const nodeId = cell.id;
+      highlightPathToCentral(nodeId);
+    });
     
-    
-    // 如果手指/鼠标移出了节点，也取消长按
     graphState.on('node:mouseleave', () => {
+      resetHighlights();
       clearLongPressTimer();
     });
 
@@ -1338,9 +1504,10 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       graphState.off('node:mouseup');
       graphState.off('node:mousemove');
       graphState.off('node:mouseleave');
+      graphState.off('node:mouseenter'); // 新增清理
       clearLongPressTimer();
     };
-  }, [graphState, selectedEdges]);
+  }, [graphState, selectedEdges, highlightPathToCentral, resetHighlights]);
 
   // 添加CSS样式
   useEffect(() => {
