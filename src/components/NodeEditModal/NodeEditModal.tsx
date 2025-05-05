@@ -55,6 +55,8 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
   const inputRef = useRef<HTMLIonSearchbarElement>(null);
   const [label, setLabel] = useState(nodeLabel);
   const [searchText, setSearchText] = useState(nodeLabel);
+  // TODO: (AI不要擅自修改或实现) 现在有bug: 用户输入搜索关键字的时候, 会意外匹配注释路径
+  // TODO: (AI请勿擅自实现) 现阶段同名就是非独立节点, 可以用非独立节点那套注释前缀法
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<NodeWithPath[]>([]);
   const [selectedNode, setSelectedNode] = useState<NodeWithPath | null>(null);

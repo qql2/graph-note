@@ -316,15 +316,9 @@ export class SQLiteGraphDB extends BaseGraphDB {
         await sqliteService.saveToStore(this.dbName);
         
       } else if (platform === "android") {
-        // TODO: (AI不要擅自实现)这是个临时解决方案(危险), 未来需要彻底解决Android平台上事务管理的问题
-        // 在Android平台上, 如果有意外的事务处于活跃状态, 则强制提交事务
-        // if((await this.connection?.isTransactionActive())?.result){
-        //   await this.connection?.commitTransaction()
-        // }
+
       } else {
         // electron 平台不用手动保存到本地磁盘
-        
-        // await sqliteService.saveToLocalDisk(this.dbName);
       }
     } catch (error) {
       console.error(`[SQLiteGraphDB] 保存数据失败: ${error}`);
