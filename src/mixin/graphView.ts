@@ -83,7 +83,7 @@ function getParentNode(nodeId: string, graphData: GraphData, config: Relationshi
 			// 出边(当前节点 -> 其他节点)
 			// 使用GraphLayoutService获取关系类型的相对类型
 			const oppositeType = GraphLayoutService.getOppositeRelationType(edge.relationshipType, config);
-			if(oppositeType === CommonRelationshipTypes.FATHER) parentIds.push(edge.target);
+			if(oppositeType === CommonRelationshipTypes.CHILD) parentIds.push(edge.target);
 		}
 	}
 	

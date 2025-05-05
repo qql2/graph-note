@@ -135,13 +135,24 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     // 定义添加节点的操作
     const addNodeOperation = async (db: SQLiteEngine) => {
       // 检查标签唯一性以确定 is_independent 的默认值
-      let isIndependent = true; // 默认为 true
+      let isIndependent = node.is_independent !== undefined ? node.is_independent : true; // 默认为 true，除非显式指定
+      
       const existingNodeResult = await db.query(
-        "SELECT 1 FROM nodes WHERE label = ? LIMIT 1",
+        "SELECT id FROM nodes WHERE label = ? LIMIT 1",
         [node.label]
       );
-      if (existingNodeResult?.values && existingNodeResult.values.length > 0) {
+      
+      // 如果标签已存在且未显式设置independence，则设为非独立
+      if (existingNodeResult?.values && existingNodeResult.values.length > 0 && node.is_independent === undefined) {
         isIndependent = false; // 如果标签已存在，则不独立
+      }
+      
+      // 如果是独立节点，则将所有同名节点更新为非独立
+      if (existingNodeResult?.values && existingNodeResult.values.length > 0) {
+        await db.run(
+          "UPDATE nodes SET is_independent = 0, updated_at = ? WHERE label = ? AND id != ?",
+          [now, node.label, id]
+        );
       }
 
       // 插入节点基本信息，包括 is_independent
@@ -178,7 +189,6 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       throw error;
     }
   }
-
   async updateNode(id: string, updates: Partial<GraphNode>): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
@@ -207,13 +217,28 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         if (updates.label !== undefined) {
           sets.push("label = ?");
           params.push(updates.label);
-          // If is_independent wasn't explicitly set, recalculate based on new label
+          
+          // 如果修改了标签，需要检查这个新标签是否已存在于其他同名节点
           if (isIndependent === undefined) { 
             const existingNodeResult = await db.query(
               "SELECT id FROM nodes WHERE label = ? AND id != ? LIMIT 1",
               [updates.label, id] // Exclude the current node being updated
             );
             isIndependent = !(existingNodeResult?.values && existingNodeResult.values.length > 0);
+            
+            // 如果当前节点变为独立节点，查找所有同名节点并更新它们为非独立
+            if (isIndependent) {
+              // 找出当前节点的标签
+              const currentNodeLabel = updates.label;
+              
+              // 更新所有与新标签同名的其他节点为非独立
+              if (currentNodeLabel) {
+                await db.run(
+                  "UPDATE nodes SET is_independent = 0, updated_at = ? WHERE label = ? AND id != ?",
+                  [new Date().toISOString(), currentNodeLabel, id]
+                );
+              }
+            }
           }
         }
         if (updates.type !== undefined) {
