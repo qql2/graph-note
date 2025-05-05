@@ -45,7 +45,25 @@ const GraphNodeComponent: React.FC<GraphNodeComponentProps> = ({ node }) => {
 
   // 计算文本样式
   const getFontSize = () => {
-    return isCentralNode ? '16px' : '14px';
+    return '14px';
+  };
+
+  // 根据背景色选择对比度高的字体颜色（使用CSS变量）
+  const getFontColor = () => {
+    if (isCentralNode) return 'var(--ion-color-warning-contrast, #000000)';
+    
+    switch (quadrant) {
+      case QuadrantPosition.TOP:
+        return 'var(--ion-color-success-contrast, #ffffff)';
+      case QuadrantPosition.BOTTOM:
+        return 'var(--ion-color-primary-contrast, #ffffff)';
+      case QuadrantPosition.LEFT:
+        return 'var(--ion-color-tertiary-contrast, #ffffff)';
+      case QuadrantPosition.RIGHT:
+        return 'var(--ion-color-danger-contrast, #ffffff)';
+      default:
+        return 'var(--ion-color-medium-contrast, #ffffff)';
+    }
   };
 
   // 新节点的动画样式
@@ -72,7 +90,7 @@ const GraphNodeComponent: React.FC<GraphNodeComponentProps> = ({ node }) => {
       <div
         style={{
           fontSize: getFontSize(),
-          color: 'white',
+          color: getFontColor(),
           textAlign: 'center',
           wordBreak: 'break-word',
           overflow: 'hidden',

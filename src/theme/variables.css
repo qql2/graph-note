@@ -75,6 +75,18 @@ http://ionicframework.com/docs/theming/ */
   --ion-color-light-shade: #d7d8da;
   --ion-color-light-tint: #f5f6f9;
   
+  /* 节点阴影颜色 */
+  --node-shadow-color: rgba(0, 0, 0, 0.4);
+  --node-shadow-color-pulse: rgba(66, 153, 225, 0.7);
+  --node-shadow-color-pulse-fade: rgba(66, 153, 225, 0);
+  
+  /* 界面元素阴影颜色 */
+  --shadow-color-soft: rgba(0, 0, 0, 0.12);
+  --shadow-color-soft-2: rgba(0, 0, 0, 0.24);
+  --shadow-color-medium: rgba(0, 0, 0, 0.2);
+  --shadow-color-strong: rgba(0, 0, 0, 0.23);
+  --shadow-color-strong-2: rgba(0, 0, 0, 0.16);
+  
   /* 默认使用亮色方案 */
   color-scheme: light;
 }
@@ -152,6 +164,18 @@ http://ionicframework.com/docs/theming/ */
   --ion-border-color: #d7d8da;
   --ion-item-background: #ffffff;
   --ion-card-background: #ffffff;
+  
+  /* 亮色模式下的节点阴影 - 使用黑色阴影 */
+  --node-shadow-color: rgba(0, 0, 0, 0.4);
+  --node-shadow-color-pulse: rgba(66, 153, 225, 0.7);
+  --node-shadow-color-pulse-fade: rgba(66, 153, 225, 0);
+  
+  /* 亮色模式下的界面元素阴影 */
+  --shadow-color-soft: rgba(0, 0, 0, 0.12);
+  --shadow-color-soft-2: rgba(0, 0, 0, 0.24);
+  --shadow-color-medium: rgba(0, 0, 0, 0.2);
+  --shadow-color-strong: rgba(0, 0, 0, 0.23);
+  --shadow-color-strong-2: rgba(0, 0, 0, 0.16);
   
   /* 明确指定亮色方案 */
   color-scheme: light;
@@ -232,6 +256,18 @@ http://ionicframework.com/docs/theming/ */
   --ion-toolbar-background: #1f1f1f;
   --ion-tab-bar-background: #1f1f1f;
   
+  /* 暗色模式下的节点阴影 - 使用亮色阴影 */
+  --node-shadow-color: rgba(255, 255, 255, 0.4);
+  --node-shadow-color-pulse: rgba(100, 181, 246, 0.7);
+  --node-shadow-color-pulse-fade: rgba(100, 181, 246, 0);
+  
+  /* 暗色模式下的界面元素阴影 - 使用亮色阴影 */
+  --shadow-color-soft: rgba(255, 255, 255, 0.08);
+  --shadow-color-soft-2: rgba(255, 255, 255, 0.12);
+  --shadow-color-medium: rgba(255, 255, 255, 0.15);
+  --shadow-color-strong: rgba(255, 255, 255, 0.18);
+  --shadow-color-strong-2: rgba(255, 255, 255, 0.10);
+  
   /* 明确指定暗色方案 */
   color-scheme: dark;
 }
@@ -301,6 +337,18 @@ http://ionicframework.com/docs/theming/ */
     --ion-color-light-contrast-rgb: 255,255,255;
     --ion-color-light-shade: #1e2023;
     --ion-color-light-tint: #383a3e;
+    
+    /* 系统暗色模式下的节点阴影 - 使用亮色阴影 */
+    --node-shadow-color: rgba(255, 255, 255, 0.4);
+    --node-shadow-color-pulse: rgba(100, 181, 246, 0.7);
+    --node-shadow-color-pulse-fade: rgba(100, 181, 246, 0);
+    
+    /* 系统暗色模式下的界面元素阴影 - 使用亮色阴影 */
+    --shadow-color-soft: rgba(255, 255, 255, 0.08);
+    --shadow-color-soft-2: rgba(255, 255, 255, 0.12);
+    --shadow-color-medium: rgba(255, 255, 255, 0.15);
+    --shadow-color-strong: rgba(255, 255, 255, 0.18);
+    --shadow-color-strong-2: rgba(255, 255, 255, 0.10);
     
     /* 跟随系统时，设置为暗色方案 */
     color-scheme: dark;
