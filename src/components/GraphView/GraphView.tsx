@@ -930,10 +930,15 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       // 构建节点显示标签，对于非独立节点添加父独立节点前缀
       let displayLabel = label || id;
       if (is_independent === false) {
-        // TODO: (AI不要擅自实现) 如果已经在视图中出现了父独立节点, 则不需要再加前缀了
+        // 如果已经在视图中出现了父独立节点, 则不需要再加前缀了
         const parentNode = getIndependentParentNode(id,graphData,quadrantConfig.relationshipTypeConfig);
         if (parentNode && parentNode.label) {
-          displayLabel = `${parentNode.label}/${displayLabel}`;
+          // 检查父独立节点是否已经在当前视图中
+          const isParentNodeInView = currentViewNodesRef.current.has(parentNode.id);
+          // 只有当父节点不在当前视图中时，才添加前缀
+          if (!isParentNodeInView) {
+            displayLabel = `${parentNode.label}/${displayLabel}`;
+          }
         }
       }
       
