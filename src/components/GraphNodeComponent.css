@@ -5,18 +5,18 @@
 /* 添加新节点动画 */
 .react-graph-node.new-node {
   animation: pulse 1.5s infinite alternate;
-  box-shadow: 0 0 0 rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 var(--node-shadow-color);
 }
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(66, 153, 225, 0.7);
+    box-shadow: 0 0 0 0 var(--node-shadow-color-pulse);
   }
   70% {
-    box-shadow: 0 0 0 10px rgba(66, 153, 225, 0);
+    box-shadow: 0 0 0 10px var(--node-shadow-color-pulse-fade);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(66, 153, 225, 0);
+    box-shadow: 0 0 0 0 var(--node-shadow-color-pulse-fade);
   }
 }
 

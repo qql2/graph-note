@@ -4,7 +4,7 @@
   height: 100%;
   overflow: hidden;
   border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 1px 3px var(--shadow-color-soft), 0 1px 2px var(--shadow-color-soft-2);
   background-color: var(--ion-background-color, #ffffff);
 }
 
@@ -58,21 +58,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 3px var(--shadow-color-soft);
   transition: all 0.2s ease-in-out;
   color: var(--ion-text-color, #000);
 }
 
 .graph-view-control-button:hover {
   background-color: var(--ion-color-light, #f5f5f5);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 5px var(--shadow-color-medium);
 }
 
 /* 节点上下文菜单样式 */
 .graph-node-context-menu {
   background-color: var(--ion-background-color, white);
   border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 10px var(--shadow-color-medium);
   overflow: hidden;
   width: 150px;
   animation: fade-in 0.2s ease-in-out;
@@ -116,7 +116,7 @@
   background-color: var(--ion-background-color, white);
   padding: 10px;
   border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 10px var(--shadow-color-medium);
   animation: fade-in 0.2s ease-in-out;
 }
 
@@ -140,7 +140,7 @@
   background-color: var(--ion-background-color, white);
   padding: 10px;
   border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 10px var(--shadow-color-medium);
   animation: fade-in 0.2s ease-in-out;
 }
 
@@ -321,13 +321,13 @@
 .x6-node:hover .react-graph-node {
   filter: brightness(1.1);
   transform: scale(1.02);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.23);
+  box-shadow: 0 3px 6px var(--shadow-color-strong-2), 0 3px 6px var(--shadow-color-strong);
 }
 
 /* React节点激活状态 */
 .x6-node.x6-node-selected .react-graph-node {
   filter: brightness(1.05);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.23), 0 3px 10px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 3px 10px var(--shadow-color-strong), 0 3px 10px var(--shadow-color-strong-2);
   border: 2px solid var(--ion-color-primary, #3880ff);
 }
 
