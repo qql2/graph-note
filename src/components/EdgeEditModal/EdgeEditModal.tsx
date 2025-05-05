@@ -150,7 +150,7 @@ const EdgeEditModal: React.FC<EdgeEditModalProps> = ({
   
   // Save on Enter key press if suggestions are not shown
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !showSuggestions) {
+    if (e.key === 'Enter') {
       handleSave();
     }
   };
@@ -237,7 +237,7 @@ const EdgeEditModal: React.FC<EdgeEditModalProps> = ({
             onIonInput={handleSearchInput}
             onKeyDown={handleKeyDown}
             placeholder={showFullType ? "完整关系类型名称" : "关系类型名称"}
-            debounce={300}
+            debounce={100}
             animated
             showCancelButton="never"
           />

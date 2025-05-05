@@ -229,8 +229,8 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     type: ''
   });
 
-  // 节点编辑模态框状态
-  const nodeEditModal = useRef({
+  // 节点编辑模态框状态 - 改用useState管理状态
+  const [nodeEditModal, setNodeEditModal] = useState({
     isOpen: false,
     nodeId: '',
     nodeLabel: '',
@@ -239,8 +239,8 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     sourceNodeId: ''
   });
 
-  // 边编辑模态框状态
-  const edgeEditModal = useRef({
+  // 边编辑模态框状态 - 改用useState管理状态
+  const [edgeEditModal, setEdgeEditModal] = useState({
     isOpen: false,
     edgeId: '',
     relationshipType: '',
@@ -348,14 +348,14 @@ const GraphView: React.FC<GraphViewProps> = memo(({
         icon: pencil,
         onClick: () => {
           // 打开节点编辑模态框
-          nodeEditModal.current = {
+          setNodeEditModal({
             isOpen: true,
             nodeId: nodeId,
             nodeLabel: node.data.label,
             isNewNode: false,
             relationType: '',
             sourceNodeId: ''
-          };
+          });
         }
       });
     }
@@ -370,14 +370,14 @@ const GraphView: React.FC<GraphViewProps> = memo(({
             label: `添加${commonRelationshipType}节点`,
             icon: add,
             onClick: () => {
-              nodeEditModal.current = {
+              setNodeEditModal({
                 isOpen: true,
                 nodeId: '',
                 nodeLabel: `新${commonRelationshipType}节点`,
                 isNewNode: true,
                 relationType: commonRelationshipType,
                 sourceNodeId: nodeId
-              };
+              });
             }
           });
         }
@@ -388,14 +388,14 @@ const GraphView: React.FC<GraphViewProps> = memo(({
           label: '添加自定义关系',
           icon: add,
           onClick: () => {
-            edgeEditModal.current = {
+            setEdgeEditModal({
               isOpen: true,
               edgeId: '',
               relationshipType: '',
               edge: {} as GraphEdge,
               isNewRelation: true,
               sourceNodeId: nodeId
-            };
+            });
           }
         });
       } else {
@@ -414,14 +414,14 @@ const GraphView: React.FC<GraphViewProps> = memo(({
               label: `添加${relationType}节点`,
               icon: add,
               onClick: () => {
-                nodeEditModal.current = {
+                setNodeEditModal({
                   isOpen: true,
                   nodeId: '',
                   nodeLabel: `新${relationType}节点`,
                   isNewNode: true,
                   relationType: relationType,
                   sourceNodeId: nodeId
-                };
+                });
               }
             });
           }
@@ -478,14 +478,14 @@ const GraphView: React.FC<GraphViewProps> = memo(({
           // 获取当前显示的标签
           const currentLabel = edge.data.relationshipType || '';
           // 打开边编辑模态框
-          edgeEditModal.current = {
+          setEdgeEditModal({
             isOpen: true,
             edgeId: edgeId,
             relationshipType: currentLabel,
             edge: edgeData,
             isNewRelation: false,
             sourceNodeId: edgeData.source
-          };
+          });
         }
       });
     }
@@ -1631,50 +1631,71 @@ const GraphView: React.FC<GraphViewProps> = memo(({
 
       {/* 节点编辑模态框 */}
       <NodeEditModal
-        isOpen={nodeEditModal.current.isOpen}
-        onClose={() => nodeEditModal.current.isOpen = false}
-        nodeId={nodeEditModal.current.nodeId}
-        nodeLabel={nodeEditModal.current.nodeLabel}
+        isOpen={nodeEditModal.isOpen}
+        onClose={() => setNodeEditModal({
+          isOpen: false,
+          nodeId: '',
+          nodeLabel: '',
+          isNewNode: false,
+          relationType: '',
+          sourceNodeId: ''
+        })}
+        nodeId={nodeEditModal.nodeId}
+        nodeLabel={nodeEditModal.nodeLabel}
         existingNodes={graphData.nodes}
         existingEdges={graphData.edges}
-        isNewNode={nodeEditModal.current.isNewNode}
-        relationType={nodeEditModal.current.relationType}
-        sourceNodeId={nodeEditModal.current.sourceNodeId}
+        isNewNode={nodeEditModal.isNewNode}
+        relationType={nodeEditModal.relationType}
+        sourceNodeId={nodeEditModal.sourceNodeId}
         onSave={(nodeId, newLabel, targetNodeId) => {
-          if (onEditNode && !targetNodeId && !nodeEditModal.current.isNewNode) {
+          if (onEditNode && !targetNodeId && !nodeEditModal.isNewNode) {
             onEditNode(nodeId, newLabel);
           } else if (targetNodeId) {
-            if (nodeEditModal.current.isNewNode && onCreateRelation) {
-              onCreateRelation(nodeEditModal.current.sourceNodeId, nodeEditModal.current.relationType, targetNodeId);
-            } else if (!nodeEditModal.current.isNewNode && onEditNode) {
+            if (nodeEditModal.isNewNode && onCreateRelation) {
+              onCreateRelation(nodeEditModal.sourceNodeId, nodeEditModal.relationType, targetNodeId);
+            } else if (!nodeEditModal.isNewNode && onEditNode) {
               onEditNode(nodeId, `MERGE:${targetNodeId}`);
             }
-          } else if (nodeEditModal.current.isNewNode && onCreateRelation) {
-            onCreateRelation(nodeEditModal.current.sourceNodeId, nodeEditModal.current.relationType, undefined, newLabel);
+          } else if (nodeEditModal.isNewNode && onCreateRelation) {
+            onCreateRelation(nodeEditModal.sourceNodeId, nodeEditModal.relationType, undefined, newLabel);
           }
         }}
       />
 
       {/* 边编辑模态框 */}
       <EdgeEditModal
-        isOpen={edgeEditModal.current.isOpen}
-        onClose={() => edgeEditModal.current.isOpen = false}
-        edgeId={edgeEditModal.current.edgeId}
-        relationshipType={edgeEditModal.current.relationshipType}
+        isOpen={edgeEditModal.isOpen}
+        onClose={() => setEdgeEditModal({
+          isOpen: false,
+          edgeId: '',
+          relationshipType: '',
+          edge: {} as GraphEdge,
+          isNewRelation: false,
+          sourceNodeId: ''
+        })}
+        edgeId={edgeEditModal.edgeId}
+        relationshipType={edgeEditModal.relationshipType}
         existingEdges={graphData.edges}
         labelMode={viewConfig.showRelationshipLabels}
-        isNewRelation={edgeEditModal.current.isNewRelation}
+        isNewRelation={edgeEditModal.isNewRelation}
         onSave={(edgeId, newRelationshipType, isSimpleLabel) => {
-          if (edgeEditModal.current.isNewRelation) {
+          if (edgeEditModal.isNewRelation) {
             if (onCreateRelation) {
-              onCreateRelation(edgeEditModal.current.sourceNodeId, newRelationshipType, undefined, `新${newRelationshipType}节点`);
+              onCreateRelation(edgeEditModal.sourceNodeId, newRelationshipType, undefined, `新${newRelationshipType}节点`);
             }
           } else {
             if (onEditEdge) {
               onEditEdge(edgeId, newRelationshipType, isSimpleLabel);
             }
           }
-          edgeEditModal.current.isOpen = false;
+          setEdgeEditModal({
+            isOpen: false,
+            edgeId: '',
+            relationshipType: '',
+            edge: {} as GraphEdge,
+            isNewRelation: false,
+            sourceNodeId: ''
+          });
         }}
       />
     </div>

@@ -53,9 +53,8 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
 }) => {
   // Reference to input for auto-focus
   const inputRef = useRef<HTMLIonSearchbarElement>(null);
-  const [label, setLabel] = useState(nodeLabel);
+  const labelRef = useRef(nodeLabel);
   const [searchText, setSearchText] = useState(nodeLabel);
-  // TODO: (AI不要擅自修改或实现) 现在有bug: 用户输入搜索关键字的时候, 会意外匹配注释路径
   // TODO: (AI请勿擅自实现) 现阶段同名就是非独立节点, 可以用非独立节点那套注释前缀法
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<NodeWithPath[]>([]);
@@ -165,36 +164,37 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
       });
     }
     // Reset states when modal opens with new node
-    setLabel(nodeLabel);
+    labelRef.current = nodeLabel;
     setSearchText(nodeLabel);
     setSelectedNode(null);
   }, [isOpen, nodeLabel]);
 
+  useEffect(() => {
+    // 过滤建议
+    if (searchText.trim() !== '') {
+      const filtered = nodesWithPath.filter(
+        node => node.id !== nodeId && 
+               (node.label.includes(searchText))
+      );
+      setFilteredSuggestions(filtered);
+      setShowSuggestions(filtered.length > 0);
+        } else {
+      setFilteredSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [searchText]);
   // 处理搜索输入变化
   const handleSearchInput = (e: any) => {
     const value = e.detail.value || '';
     setSearchText(value);
-    setLabel(value);
-    
-    // 过滤建议
-    if (value.trim() !== '') {
-      const filtered = nodesWithPath.filter(
-        node => node.id !== nodeId && 
-               (node.label.toLowerCase().includes(value.toLowerCase()) || 
-                node.path.toLowerCase().includes(value.toLowerCase()))
-      );
-      setFilteredSuggestions(filtered);
-      setShowSuggestions(filtered.length > 0);
-    } else {
-      setFilteredSuggestions([]);
-      setShowSuggestions(false);
-    }
+    labelRef.current = value;
+    console.log('handleSearchInput', labelRef.current);
   };
 
   // 选择建议
   const selectSuggestion = (node: NodeWithPath) => {
     setSearchText(node.path);
-    setLabel(node.label);
+    labelRef.current = node.label;
     setSelectedNode(node);
     setShowSuggestions(false);
     
@@ -208,13 +208,13 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
   };
 
   const handleSave = () => {
-    if (label.trim() !== '') {
+    if (labelRef.current.trim() !== '') {
       if (selectedNode) {
         // 如果选择了现有节点，传递目标节点ID
-        onSave(nodeId, label.trim(), selectedNode.id);
+        onSave(nodeId, labelRef.current.trim(), selectedNode.id);
       } else {
         // 正常编辑/创建节点
-        onSave(nodeId, label.trim());
+        onSave(nodeId, labelRef.current.trim());
       }
       onClose();
     }
@@ -222,7 +222,8 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
   
   // Save on Enter key press if suggestions are not shown
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !showSuggestions) {
+    
+    if (e.key === 'Enter') {
       handleSave();
     }
   };
@@ -249,9 +250,9 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
             ref={inputRef}
             value={searchText}
             onIonInput={handleSearchInput}
-            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyDown}
             placeholder="输入节点名称"
-            debounce={300}
+            debounce={100}
             animated
             showCancelButton="never"
           />
