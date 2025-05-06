@@ -91,7 +91,6 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   }
 
   // 事务支持 - 这些方法现在是抽象的，由具体平台实现
-  // TODO (AI切勿擅自修改)将来移除这些套层方法, 直接通过this.db.transaction方法
   async beginTransaction(): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     await this.db.beginTransaction();
@@ -114,16 +113,6 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   }
 
   // TODO (AI不要自动修改)将来不要再额外包一层了, 直接用db.transaction方法
-  protected async withTransaction<T>(operation: () => Promise<T>): Promise<T> {
-    if (!this.db) throw new DatabaseError("Database not initialized");
-    
-    // 直接使用db.transaction方法，该方法会在具体实现中提供
-    try {
-      return await this.db.transaction(operation);
-    } catch (error) {
-      throw error;
-    }
-  }
 
   // 节点操作
   async addNode(node: Omit<GraphNode, "created_at" | "updated_at">): Promise<string> {
@@ -178,7 +167,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     // 使用事务执行操作
     try {
-      return await this.withTransaction(async () => {
+      return await this.db.transaction(async () => {
         try {
           return await addNodeOperation(this.db!);
         } catch (error) {
@@ -400,7 +389,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     try {
       // 使用事务来执行删除操作
-      await this.withTransaction(async () => {
+      await this.db.transaction(async () => {
         try {
           await deleteOperation(this.db!);
         } catch (error) {
@@ -554,7 +543,6 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
       // 否则，使用事务执行操作
       ;
-      // TODO: 这里只要在事务中执行就会导致事务提交失败
       return await this.db.transaction(async () => {
         try {
           const result = await addEdgeOperation(this.db!);
@@ -725,7 +713,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     try {
       // 使用事务执行删除操作
-      await this.withTransaction(async () => {
+      await this.db.transaction(async () => {
         try {
           await deleteEdgeOperation(this.db!);
         } catch (error) {
@@ -1369,7 +1357,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
     try {
-      return await this.withTransaction(async () => {
+      return await this.db.transaction(async () => {
         // 构建基本查询
         let query = `
           SELECT n.id, n.type, n.label, n.is_independent, n.created_at, n.updated_at -- Select is_independent
@@ -1542,7 +1530,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     if (!this.db) throw new DatabaseError("Database not initialized");
     
     try {
-      return await this.withTransaction(async () => {
+      return await this.db.transaction(async () => {
         // 构建基本查询
         let query = `
           SELECT e.id, e.source_id, e.target_id, e.type, e.created_at
@@ -1773,7 +1761,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     };
     
     try {
-      return await this.withTransaction(async () => {
+      return await this.db.transaction(async () => {
         const searchPattern = opts.caseSensitive ? query : query.toLowerCase();
         const likePattern = `%${searchPattern}%`;
         

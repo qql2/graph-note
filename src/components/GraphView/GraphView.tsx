@@ -310,7 +310,6 @@ const GraphView: React.FC<GraphViewProps> = memo(({
   const handleZoomOut = () => {
     if (graphState) {
       const zoom = graphState.zoom();
-      console.log('zoom', zoom);
       if (zoom > 0.5) {
         graphState.zoom(-0.1);
       }
@@ -733,33 +732,26 @@ const GraphView: React.FC<GraphViewProps> = memo(({
   }, [graphState]);
 
   useEffect(() => {
-    console.log('containerRef changed');
   }, [containerRef]);
 
   useEffect(() => {
-    console.log('graphData changed');
   }, [graphData]);
 
   useEffect(() => {
-    console.log('centralNodeId changed');
   }, [centralNodeId]);
 
   useEffect(() => {
-    console.log('quadrantConfig changed');
   }, [quadrantConfig]);
 
   useEffect(() => {
-    console.log('depthConfig changed');
   }, [depthConfig]);
 
   useEffect(() => {
-    console.log('graph changed');
   },[graphState]);
 
   // Initialize the graph when the component mounts
   useEffect(() => {
     if (!containerRef.current) return;
-    console.log('some listener changed');
 
     // Clear any existing graph
     if (graphState) {
@@ -834,13 +826,10 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     newGraph.on('blank:click', () => {
       closeContextMenu();
     });
-    console.log('change graph')
     setGraphState(newGraph);
 
-    console.log('graph:',graphState?.getCells())
     // Cleanup on unmount
     return () => {
-      console.log('dispose graph')
       // 使用setTimeout来确保在React渲染完成后再执行清理
       newGraph.dispose();
     };
@@ -853,7 +842,6 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       
       // 设置定时器，一段时间后移除新节点状态
       const timer = setTimeout(() => {
-        console.log('new create node timer');
         newlyCreatedNodeIds.current = newlyCreatedNodeIds.current.filter(id => id !== newNodeId);
         
         // 如果图存在，找到对应节点并更新数据

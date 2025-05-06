@@ -11,59 +11,20 @@ export class SQLiteGraphDB extends BaseGraphDB {
   private connection: SQLiteDBConnection | null = null;
   private transactionQueue: Promise<any> = Promise.resolve();
   private isInTransaction: boolean = false;
+  private engine: SQLiteEngine | null = null;
 
   // 添加实现抽象方法getEngine，修复linter错误
   protected async getEngine(): Promise<SQLiteEngine> {
-    // 如果没有连接，抛出错误
-    if (!this.connection) {
-      throw new DatabaseError("Database connection not established");
+    if (!this.engine) {
+      throw new DatabaseError("Database engine not initialized");
     }
-
-    // 返回当前引擎实例
-    return {
-      query: async (sql: string, params?: any[]): Promise<{ values?: any[] }> => {
-        return await this.connection!.query(sql, params);
-      },
-      run: async (sql: string, params?: any[]): Promise<void> => {
-        await this.connection!.run(sql, params, false);
-      },
-      isOpen: (): boolean => {
-        return !!this.connection;
-      },
-      open: async (): Promise<void> => {
-        if (this.connection) {
-          await this.connection.open();
-        }
-      },
-      close: async (): Promise<void> => {
-        if (this.connection) {
-          await sqliteService.closeDatabase(this.dbName, false);
-          this.connection = null;
-        }
-      },
-      beginTransaction: async (): Promise<void> => {
-        await this.beginTransaction();
-      },
-      commitTransaction: async (): Promise<void> => {
-        await this.commitTransaction();
-      },
-      rollbackTransaction: async (): Promise<void> => {
-        await this.rollbackTransaction();
-      },
-      export: (): Uint8Array => {
-        return new Uint8Array(0);
-      },
-      transaction: async <T>(operation: () => T | Promise<T>): Promise<T> => {
-        return this.transaction(operation);
-      },
-    };
+    return this.engine;
   }
 
   protected async createEngine(config: DatabaseConfig): Promise<SQLiteEngine> {
     try {
       this.dbName = config.dbName || this.dbName;
       this.dbVersion = getLatestGraphDbVersion();
-      console.log(`SQLiteGraphDB: Setting DB version to ${this.dbVersion}`);
 
       // Initialize WebStore (only for Web platform)
       if (sqliteService.getPlatform() === "web") {
@@ -75,7 +36,6 @@ export class SQLiteGraphDB extends BaseGraphDB {
         database: this.dbName,
         upgrade: GraphUpgradeStatements,
       });
-      console.log(`SQLiteGraphDB: Added ${GraphUpgradeStatements.length} upgrade statements for ${this.dbName}.`);
 
       // Open database connection, allowing upgrades up to the specified version
       this.connection = await sqliteService.openDatabase(
@@ -83,7 +43,6 @@ export class SQLiteGraphDB extends BaseGraphDB {
         this.dbVersion,
         false
       );
-      console.log(`SQLiteGraphDB: Database ${this.dbName} opened successfully at version ${this.dbVersion}.`);
 
       // 返回SQLite引擎接口
       return {
@@ -125,13 +84,13 @@ export class SQLiteGraphDB extends BaseGraphDB {
           }
         },
         beginTransaction: async (): Promise<void> => {
-          await this.beginTransaction();
+          await this.beginTransaction()
         },
         commitTransaction: async (): Promise<void> => {
-          await this.commitTransaction();
+          await this.commitTransaction()
         },
         rollbackTransaction: async (): Promise<void> => {
-          await this.rollbackTransaction();
+          await this.rollbackTransaction()
         },
         export: (): Uint8Array => {
           // 返回一个空的Uint8Array作为占位符
@@ -315,10 +274,6 @@ export class SQLiteGraphDB extends BaseGraphDB {
         
         await sqliteService.saveToStore(this.dbName);
         
-      } else if (platform === "android") {
-
-      } else {
-        // electron 平台不用手动保存到本地磁盘
       }
     } catch (error) {
       console.error(`[SQLiteGraphDB] 保存数据失败: ${error}`);
