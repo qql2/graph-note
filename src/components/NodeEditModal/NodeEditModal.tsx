@@ -188,7 +188,6 @@ const NodeEditModal: React.FC<NodeEditModalProps> = ({
     const value = e.detail.value || '';
     setSearchText(value);
     labelRef.current = value;
-    console.log('handleSearchInput', labelRef.current);
   };
 
   // 选择建议

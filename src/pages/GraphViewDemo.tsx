@@ -178,7 +178,6 @@ const GraphViewDemo: React.FC = () => {
           newNodeId.current = urlNodeId;
           // 设置定时器，5秒后清除新节点标记
           setTimeout(() => {
-            console.log('newnodeid timer1');
             newNodeId.current = '';
           }, 5000);
         }
@@ -528,7 +527,6 @@ const GraphViewDemo: React.FC = () => {
         
         // 设置定时器，5秒后清除新节点标记
         setTimeout(() => {
-          console.log('newnodeid timer2');
           newNodeId.current = '';
         }, 5000);
       }
