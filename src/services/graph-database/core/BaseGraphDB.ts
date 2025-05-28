@@ -20,6 +20,8 @@ import {
   ValidationError,
   TransactionError,
 } from "./errors";
+// Added imports for new node and relationship types
+import { GraphNodeType, RelayRelationshipType } from '../../../models/GraphNode'; // Corrected path
 
 // TODO: 嵌套事务的处理交给transaction Service
 
@@ -302,106 +304,219 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   async deleteNode(id: string, mode: DeleteMode = DeleteMode.KEEP_CONNECTED): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
-    // 创建删除操作的函数
     const deleteOperation = async (db: SQLiteEngine) => {
-      // 检查节点是否存在
-      const nodeExistsResult = await db.query(
-        "SELECT 1 FROM nodes WHERE id = ?",
-        [id]
-      );
-      
-      if (!nodeExistsResult?.values || nodeExistsResult.values.length === 0) {
-        throw new NodeNotFoundError(id);
+      let nodeToDelete: GraphNode;
+      try {
+        nodeToDelete = await this.getNode(id); // Fetch node details including type
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("not found")) { // getNode throws generic Error
+          throw new NodeNotFoundError(id);
+        }
+        throw error; // Re-throw other errors
       }
 
-      // 添加日志以便调试
-      ;
+      // Case 1: Deleting a RELATIONSHIP_TYPE node
+      if (nodeToDelete.type === GraphNodeType.RELATIONSHIP_TYPE) {
+        // Regardless of mode, a RELATIONSHIP_TYPE node and its _relay edges are fully deleted.
+        // This is because a RELATIONSHIP_TYPE node represents the relationship itself.
 
+        // a. Find and delete incoming _relay edge
+        const incomingRelayResult = await db.query(
+          `SELECT id FROM relationships WHERE target_id = ? AND type = ?`,
+          [id, RelayRelationshipType.RELAY]
+        );
+        if (incomingRelayResult?.values && incomingRelayResult.values.length > 0) {
+          const incomingRelayId = incomingRelayResult.values[0].id;
+          await db.run("DELETE FROM relationship_properties WHERE relationship_id = ?", [incomingRelayId]);
+          await db.run("DELETE FROM relationships WHERE id = ?", [incomingRelayId]);
+        }
+
+        // b. Find and delete outgoing _relay edge
+        const outgoingRelayResult = await db.query(
+          `SELECT id FROM relationships WHERE source_id = ? AND type = ?`,
+          [id, RelayRelationshipType.RELAY]
+        );
+        if (outgoingRelayResult?.values && outgoingRelayResult.values.length > 0) {
+          const outgoingRelayId = outgoingRelayResult.values[0].id;
+          await db.run("DELETE FROM relationship_properties WHERE relationship_id = ?", [outgoingRelayId]);
+          await db.run("DELETE FROM relationships WHERE id = ?", [outgoingRelayId]);
+        }
+
+        // c. Delete RELATIONSHIP_TYPE node's properties
+        await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+        // d. Delete RELATIONSHIP_TYPE node itself
+        await db.run("DELETE FROM nodes WHERE id = ?", [id]);
+        return; //RELATIONSHIP_TYPE node deletion is complete
+      }
+
+      // Case 2: Deleting a regular node
       if (mode === DeleteMode.CASCADE) {
-        // 级联删除模式：删除所有相关数据
-        // 1. 获取与节点相关的所有边ID
-        const relatedEdgesResult = await db.query(
-          `SELECT id FROM relationships 
-           WHERE source_id = ? OR target_id = ?`,
-          [id, id]
-        );
-        
-        // 记录相关边的ID
-        const edgeIds: string[] = [];
-        if (relatedEdgesResult?.values && relatedEdgesResult.values.length > 0) {
-          relatedEdgesResult.values.forEach(row => {
-            if (row.id) edgeIds.push(row.id);
-          });
-        }
-        
-        ;
+        // CASCADE mode for regular nodes
 
-        // 2. 删除与节点相关的所有边的属性
-        for (const edgeId of edgeIds) {
-          await db.run(
-            `DELETE FROM relationship_properties 
-             WHERE relationship_id = ?`,
-            [edgeId]
-          );
-          ;
+        // a. Handle outgoing structured relationships
+        const outgoingRelays = await db.query(
+          `SELECT target_id FROM relationships WHERE source_id = ? AND type = ?`,
+          [id, RelayRelationshipType.RELAY]
+        );
+        if (outgoingRelays?.values) {
+          for (const relay of outgoingRelays.values) {
+            const relNodeId = relay.target_id;
+            try {
+              const relNode = await this.getNode(relNodeId);
+              if (relNode.type === GraphNodeType.RELATIONSHIP_TYPE) {
+                // Recursively delete the RELATIONSHIP_TYPE node. This will handle its _relay edges.
+                // Pass the db instance to ensure it's part of the same transaction.
+                await this.deleteNodeInternal(relNodeId, DeleteMode.CASCADE, db);
+              }
+            } catch (e) { /* relNode not found or other issue, ignore */ }
+          }
         }
 
-        // 3. 删除与节点相关的所有边
-        await db.run(
-          "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
-          [id, id]
+        // b. Handle incoming structured relationships
+        const incomingRelays = await db.query(
+          `SELECT source_id FROM relationships WHERE target_id = ? AND type = ?`,
+          [id, RelayRelationshipType.RELAY]
         );
-        ;
+        if (incomingRelays?.values) {
+          for (const relay of incomingRelays.values) {
+            const relNodeId = relay.source_id;
+            try {
+              const relNode = await this.getNode(relNodeId);
+              if (relNode.type === GraphNodeType.RELATIONSHIP_TYPE) {
+                await this.deleteNodeInternal(relNodeId, DeleteMode.CASCADE, db);
+              }
+            } catch (e) { /* relNode not found or other issue, ignore */ }
+          }
+        }
 
-        // 4. 删除节点的属性
+        // c. Standard CASCADE: Delete direct edges and their properties
+        const relatedDirectEdgesResult = await db.query(
+          `SELECT id FROM relationships WHERE (source_id = ? OR target_id = ?) AND type != ?`,
+          [id, id, RelayRelationshipType.RELAY] // Exclude already handled _relay edges
+        );
+        if (relatedDirectEdgesResult?.values) {
+          for (const edgeRow of relatedDirectEdgesResult.values) {
+            await db.run("DELETE FROM relationship_properties WHERE relationship_id = ?", [edgeRow.id]);
+            await db.run("DELETE FROM relationships WHERE id = ?", [edgeRow.id]);
+          }
+        }
+        
+        // d. Delete node's properties
         await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
-        ;
-
-        // 5. 删除节点本身
+        // e. Delete node itself
         await db.run("DELETE FROM nodes WHERE id = ?", [id]);
-        ;
-      } else {
-        // 保留关联数据模式：只删除节点本身和它的属性
-        // 1. 删除节点的属性
+
+      } else { // KEEP_CONNECTED mode for regular nodes
+        // Standard KEEP_CONNECTED: only delete node and its properties, nullify connections
         await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
-        ;
-
-        // 2. 将相关边的源节点或目标节点设为 NULL
-        await db.run(
-          `UPDATE relationships 
-           SET source_id = NULL 
-           WHERE source_id = ?`,
-          [id]
-        );
-        await db.run(
-          `UPDATE relationships 
-           SET target_id = NULL 
-           WHERE target_id = ?`,
-          [id]
-        );
-        ;
-
-        // 3. 删除节点本身
+        await db.run("UPDATE relationships SET source_id = NULL WHERE source_id = ?", [id]);
+        await db.run("UPDATE relationships SET target_id = NULL WHERE target_id = ?", [id]);
         await db.run("DELETE FROM nodes WHERE id = ?", [id]);
-        ;
       }
     };
 
     try {
-      // 使用事务来执行删除操作
       await this.db.transaction(async () => {
-        try {
-          await deleteOperation(this.db!);
-        } catch (error) {
-          if (error instanceof NodeNotFoundError) {
-            throw error;
-          }
-          throw new DatabaseError(`Failed to delete node: ${error}`, error as Error);
-        }
+        // Pass this.db! which is the transactional db instance
+        await deleteOperation(this.db!); 
       });
     } catch (error) {
-      throw error;
+      if (error instanceof NodeNotFoundError) {
+        throw error;
+      }
+      throw new DatabaseError(`Failed to delete node: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  // Helper method for recursive deletion within a transaction
+  private async deleteNodeInternal(id: string, mode: DeleteMode, db: SQLiteEngine): Promise<void> {
+    // This is a simplified version for internal calls, assuming db is already provided (transactional)
+    // Replicates the logic of the main deleteNode but uses the passed 'db' and avoids starting a new transaction
+
+    let nodeToDelete: GraphNode;
+    try {
+      // Note: this.getNode uses this.db, which might not be the transactional 'db' if getNode isn't refactored.
+      // For safety, direct query or pass 'db' to getNode if possible.
+      // Assuming getNode can work correctly in this context for now.
+      const nodeRow = await db.query("SELECT id, type FROM nodes WHERE id = ? LIMIT 1", [id]);
+      if (!nodeRow?.values || nodeRow.values.length === 0) {
+        throw new NodeNotFoundError(id);
+      }
+      nodeToDelete = { id: nodeRow.values[0].id, type: nodeRow.values[0].type, label: '', properties: {} }; // Minimal GraphNode
+    } catch (error) {
+      if (error instanceof NodeNotFoundError) throw error;
+      throw new DatabaseError(`Error fetching node ${id} in deleteNodeInternal: ${error}`);
+    }
+
+    if (nodeToDelete.type === GraphNodeType.RELATIONSHIP_TYPE) {
+        const incomingRelayResult = await db.query(
+          `SELECT id FROM relationships WHERE target_id = ? AND type = ?`,
+          [id, RelayRelationshipType.RELAY]
+        );
+        if (incomingRelayResult?.values && incomingRelayResult.values.length > 0) {
+          const incomingRelayId = incomingRelayResult.values[0].id;
+          await db.run("DELETE FROM relationship_properties WHERE relationship_id = ?", [incomingRelayId]);
+          await db.run("DELETE FROM relationships WHERE id = ?", [incomingRelayId]);
+        }
+        const outgoingRelayResult = await db.query(
+          `SELECT id FROM relationships WHERE source_id = ? AND type = ?`,
+          [id, RelayRelationshipType.RELAY]
+        );
+        if (outgoingRelayResult?.values && outgoingRelayResult.values.length > 0) {
+          const outgoingRelayId = outgoingRelayResult.values[0].id;
+          await db.run("DELETE FROM relationship_properties WHERE relationship_id = ?", [outgoingRelayId]);
+          await db.run("DELETE FROM relationships WHERE id = ?", [outgoingRelayId]);
+        }
+        await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+        await db.run("DELETE FROM nodes WHERE id = ?", [id]);
+        return;
+    }
+
+    // For regular nodes in CASCADE (this internal helper is primarily for cascading RELATIONSHIP_TYPE deletion)
+    if (mode === DeleteMode.CASCADE) {
+        // Outgoing structured
+        const outgoingRelays = await db.query(
+          `SELECT target_id FROM relationships WHERE source_id = ? AND type = ?`,
+          [id, RelayRelationshipType.RELAY]
+        );
+        if (outgoingRelays?.values) {
+          for (const relay of outgoingRelays.values) {
+            // Check if target is RELATIONSHIP_TYPE before recursive call
+            const relNodeRow = await db.query("SELECT type FROM nodes WHERE id = ? LIMIT 1", [relay.target_id]);
+            if (relNodeRow?.values && relNodeRow.values[0].type === GraphNodeType.RELATIONSHIP_TYPE) {
+                 await this.deleteNodeInternal(relay.target_id, DeleteMode.CASCADE, db);
+            }
+          }
+        }
+        // Incoming structured
+        const incomingRelays = await db.query(
+          `SELECT source_id FROM relationships WHERE target_id = ? AND type = ?`,
+          [id, RelayRelationshipType.RELAY]
+        );
+        if (incomingRelays?.values) {
+          for (const relay of incomingRelays.values) {
+             const relNodeRow = await db.query("SELECT type FROM nodes WHERE id = ? LIMIT 1", [relay.source_id]);
+            if (relNodeRow?.values && relNodeRow.values[0].type === GraphNodeType.RELATIONSHIP_TYPE) {
+                await this.deleteNodeInternal(relay.source_id, DeleteMode.CASCADE, db);
+            }
+          }
+        }
+        // Standard cascade for direct edges
+        const relatedDirectEdgesResult = await db.query(
+          `SELECT id FROM relationships WHERE (source_id = ? OR target_id = ?) AND type != ?`,
+          [id, id, RelayRelationshipType.RELAY]
+        );
+        if (relatedDirectEdgesResult?.values) {
+          for (const edgeRow of relatedDirectEdgesResult.values) {
+            await db.run("DELETE FROM relationship_properties WHERE relationship_id = ?", [edgeRow.id]);
+          }
+          // Batch delete relationships after properties
+           await db.run("DELETE FROM relationships WHERE (source_id = ? OR target_id = ?) AND type != ?", [id, id, RelayRelationshipType.RELAY]);
+        }
+        await db.run("DELETE FROM node_properties WHERE node_id = ?", [id]);
+        await db.run("DELETE FROM nodes WHERE id = ?", [id]);
+    }
+    // KEEP_CONNECTED for regular nodes is handled by the main deleteOperation
   }
 
   async getNodes(): Promise<GraphNode[]> {
@@ -1896,167 +2011,245 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     return properties;
   }
 
-  // 获取与指定节点相关的所有边
+  // 获取与指定节点相关的所有边 (Modified to handle structured relationships)
   public async getEdgesForNode(nodeId: string): Promise<GraphEdge[]> {
     if (!this.db) throw new DatabaseError("Database not initialized");
-    
+
     try {
-      // 检查节点是否存在
       const nodeExistsResult = await this.db.query(
         "SELECT 1 FROM nodes WHERE id = ?",
         [nodeId]
       );
-      
       if (!nodeExistsResult?.values || nodeExistsResult.values.length === 0) {
         throw new NodeNotFoundError(nodeId);
       }
-      
-      // 查询与该节点相关的所有边（作为源节点或目标节点）
-      const edgesResult = await this.db.query(
+
+      const directEdgesResult = await this.db.query(
         `SELECT * FROM relationships WHERE source_id = ? OR target_id = ?`,
         [nodeId, nodeId]
       );
-      
-      if (!edgesResult?.values || edgesResult.values.length === 0) {
+
+      if (!directEdgesResult?.values || directEdgesResult.values.length === 0) {
         return [];
       }
-      
-      const edges: GraphEdge[] = [];
-      
-      for (const edgeRow of edgesResult.values) {
-        // 构建边对象
-        const edge: GraphEdge = {
-          id: edgeRow.id,
-          source_id: edgeRow.source_id,
-          target_id: edgeRow.target_id,
-          type: edgeRow.type,
-          created_at: edgeRow.created_at,
-          properties: {}
-        };
-        
-        // 获取边的属性
-        const propsResult = await this.db.query(
-          "SELECT key, value FROM relationship_properties WHERE relationship_id = ?",
-          [edge.id]
-        );
-        
-        if (propsResult?.values && propsResult.values.length > 0) {
-          for (const propRow of propsResult.values) {
-            let key: string;
-            let rawValue: string;
-            
-            if (Array.isArray(propRow)) {
-              key = propRow[0];
-              rawValue = propRow[1];
-            } else {
-              key = propRow.key;
-              rawValue = propRow.value;
-            }
-            
-            try {
-              edge.properties![key] = JSON.parse(rawValue);
-            } catch (e) {
-              edge.properties![key] = rawValue;
-            }
-          }
+
+      const processedEdgeIds = new Set<string>();
+      const mergedEdges: GraphEdge[] = [];
+      const allDirectEdges: any[] = directEdgesResult.values;
+
+      for (const edgeRow of allDirectEdges) {
+        if (processedEdgeIds.has(edgeRow.id)) {
+          continue;
         }
-        
-        edges.push(edge);
+
+        let handledAsStructured = false;
+
+        // Case 1: Current edge is an outgoing _relay edge from nodeId
+        if (edgeRow.source_id === nodeId && edgeRow.type === RelayRelationshipType.RELAY) {
+          const potentialRelNodeId = edgeRow.target_id;
+          try {
+            const relNode = await this.getNode(potentialRelNodeId);
+            if (relNode && relNode.type === GraphNodeType.RELATIONSHIP_TYPE) {
+              const secondRelayEdgesResult = await this.db.query(
+                `SELECT * FROM relationships WHERE source_id = ? AND type = ?`,
+                [potentialRelNodeId, RelayRelationshipType.RELAY]
+              );
+              if (secondRelayEdgesResult?.values && secondRelayEdgesResult.values.length > 0) {
+                for (const secondEdgeRow of secondRelayEdgesResult.values) {
+                  mergedEdges.push({
+                    id: relNode.id,
+                    source_id: nodeId,
+                    target_id: secondEdgeRow.target_id,
+                    type: relNode.label!, // relNode.label should exist for RELATIONSHIP_TYPE node
+                    created_at: relNode.created_at || edgeRow.created_at, // Prioritize relNode creation time
+                    properties: relNode.properties || {},
+                  });
+                  processedEdgeIds.add(edgeRow.id);
+                  processedEdgeIds.add(secondEdgeRow.id);
+                  handledAsStructured = true;
+                }
+              }
+            }
+          } catch (e) { /* getNode might throw if not found, ignore */ }
+        }
+        // Case 2: Current edge is an incoming _relay edge to nodeId
+        else if (edgeRow.target_id === nodeId && edgeRow.type === RelayRelationshipType.RELAY) {
+          const potentialRelNodeId = edgeRow.source_id;
+          try {
+            const relNode = await this.getNode(potentialRelNodeId);
+            if (relNode && relNode.type === GraphNodeType.RELATIONSHIP_TYPE) {
+              const firstRelayEdgesResult = await this.db.query(
+                `SELECT * FROM relationships WHERE target_id = ? AND type = ?`,
+                [potentialRelNodeId, RelayRelationshipType.RELAY]
+              );
+              if (firstRelayEdgesResult?.values && firstRelayEdgesResult.values.length > 0) {
+                for (const firstEdgeRow of firstRelayEdgesResult.values) {
+                   // Avoid reconstructing the same logical edge if source and target are the same node via this RelNode
+                  if (firstEdgeRow.source_id === nodeId) continue;
+
+                  mergedEdges.push({
+                    id: relNode.id,
+                    source_id: firstEdgeRow.source_id,
+                    target_id: nodeId,
+                    type: relNode.label!, // relNode.label should exist
+                    created_at: relNode.created_at || edgeRow.created_at,
+                    properties: relNode.properties || {},
+                  });
+                  processedEdgeIds.add(edgeRow.id);
+                  processedEdgeIds.add(firstEdgeRow.id);
+                  handledAsStructured = true;
+                }
+              }
+            }
+          } catch (e) { /* getNode might throw if not found, ignore */ }
+        }
+
+        // Case 3: It's a direct edge or a _relay not part of a fully processed structure
+        if (!handledAsStructured) {
+          const directEdgeProperties = await this._getEdgeProperties(edgeRow.id);
+          mergedEdges.push({
+            id: edgeRow.id,
+            source_id: edgeRow.source_id,
+            target_id: edgeRow.target_id,
+            type: edgeRow.type,
+            created_at: edgeRow.created_at,
+            properties: directEdgeProperties || {},
+          });
+          processedEdgeIds.add(edgeRow.id); // Ensure it's marked if not already by structured handling
+        }
       }
-      
-      return edges;
+      // Deduplicate edges based on ID (RelNode ID for structured, edge ID for direct)
+      // This is important if a node is connected to a RelNode and also directly via another _relay edge
+      // or if different paths lead to processing the same structured relationship.
+      const finalEdges: GraphEdge[] = [];
+      const finalEdgeIds = new Set<string>();
+      for (const edge of mergedEdges) {
+        if (!finalEdgeIds.has(edge.id!)) {
+          finalEdges.push(edge);
+          finalEdgeIds.add(edge.id!);
+        }
+      }
+      return finalEdges;
     } catch (error) {
       if (error instanceof NodeNotFoundError) {
         throw error;
       }
-      throw new DatabaseError(`Failed to get edges for node: ${error}`, error as Error);
+      throw new DatabaseError(`Failed to get edges for node: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  // 获取两个节点之间的边
+  // 获取两个节点之间的边 (Modified to handle structured relationships)
   public async getEdgesBetweenNodes(sourceId: string, targetId: string): Promise<GraphEdge[]> {
     if (!this.db) throw new DatabaseError("Database not initialized");
-    
+
     try {
-      // 检查两个节点是否都存在
-      const sourceExistsResult = await this.db.query(
-        "SELECT 1 FROM nodes WHERE id = ?",
-        [sourceId]
-      );
-      
+      // 1. Validate source and target nodes exist
+      const sourceExistsResult = await this.db.query("SELECT 1 FROM nodes WHERE id = ?", [sourceId]);
       if (!sourceExistsResult?.values || sourceExistsResult.values.length === 0) {
         throw new NodeNotFoundError(sourceId);
       }
-      
-      const targetExistsResult = await this.db.query(
-        "SELECT 1 FROM nodes WHERE id = ?",
-        [targetId]
-      );
-      
+      const targetExistsResult = await this.db.query("SELECT 1 FROM nodes WHERE id = ?", [targetId]);
       if (!targetExistsResult?.values || targetExistsResult.values.length === 0) {
         throw new NodeNotFoundError(targetId);
       }
-      
-      // 查询两个节点之间的所有边（双向）
-      const edgesResult = await this.db.query(
-        `SELECT * FROM relationships 
-         WHERE (source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?)`,
-        [sourceId, targetId, targetId, sourceId]
-      );
-      
-      if (!edgesResult?.values || edgesResult.values.length === 0) {
-        return [];
-      }
-      
-      const edges: GraphEdge[] = [];
-      
-      for (const edgeRow of edgesResult.values) {
-        // 构建边对象
-        const edge: GraphEdge = {
-          id: edgeRow.id,
-          source_id: edgeRow.source_id,
-          target_id: edgeRow.target_id,
-          type: edgeRow.type,
-          created_at: edgeRow.created_at,
-          properties: {}
-        };
-        
-        // 获取边的属性
-        const propsResult = await this.db.query(
-          "SELECT key, value FROM relationship_properties WHERE relationship_id = ?",
-          [edge.id]
+
+      const foundEdges: GraphEdge[] = [];
+      const processedRelNodeIds = new Set<string>(); // Tracks RelNode IDs already processed
+
+      // Helper function to find and add structured relationships for a given direction
+      const findStructuredRelations = async (fromId: string, toId: string) => {
+        const outgoingRelays = await this.db!.query(
+          `SELECT * FROM relationships WHERE source_id = ? AND type = ?`,
+          [fromId, RelayRelationshipType.RELAY]
         );
-        
-        if (propsResult?.values && propsResult.values.length > 0) {
-          for (const propRow of propsResult.values) {
-            let key: string;
-            let rawValue: string;
-            
-            if (Array.isArray(propRow)) {
-              key = propRow[0];
-              rawValue = propRow[1];
-            } else {
-              key = propRow.key;
-              rawValue = propRow.value;
-            }
-            
+
+        if (outgoingRelays?.values) {
+          for (const firstRelay of outgoingRelays.values) {
+            const potentialRelNodeId = firstRelay.target_id;
+            if (processedRelNodeIds.has(potentialRelNodeId)) continue;
+
             try {
-              edge.properties![key] = JSON.parse(rawValue);
-            } catch (e) {
-              edge.properties![key] = rawValue;
-            }
+              const relNode = await this.getNode(potentialRelNodeId);
+              if (relNode && relNode.type === GraphNodeType.RELATIONSHIP_TYPE) {
+                const secondRelayResult = await this.db!.query(
+                  `SELECT * FROM relationships WHERE source_id = ? AND target_id = ? AND type = ?`,
+                  [potentialRelNodeId, toId, RelayRelationshipType.RELAY]
+                );
+
+                if (secondRelayResult?.values && secondRelayResult.values.length > 0) {
+                  // Found A -> Rel -> B structure
+                  foundEdges.push({
+                    id: relNode.id, // RelNode ID represents the relationship
+                    source_id: fromId,
+                    target_id: toId,
+                    type: relNode.label!,
+                    created_at: relNode.created_at || firstRelay.created_at,
+                    properties: relNode.properties || {},
+                  });
+                  processedRelNodeIds.add(relNode.id!);
+                }
+              }
+            } catch (e) { /* getNode failed for potentialRelNodeId, ignore */ }
           }
         }
-        
-        edges.push(edge);
+      };
+
+      // Find structured: sourceId ---> targetId
+      await findStructuredRelations(sourceId, targetId);
+      // Find structured: targetId ---> sourceId (handles cases where relationship is defined other way)
+      await findStructuredRelations(targetId, sourceId);
+
+      // Now, find direct, non-_relay edges, ensuring not to duplicate if a structured one effectively represents it.
+      const directEdgesResult = await this.db.query(
+        `SELECT * FROM relationships 
+         WHERE type != ? AND ((source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?))`,
+        [RelayRelationshipType.RELAY, sourceId, targetId, targetId, sourceId]
+      );
+
+      if (directEdgesResult?.values) {
+        for (const edgeRow of directEdgesResult.values) {
+          // Check if this direct edge is already represented by a structured one found earlier
+          const isRepresented = foundEdges.some(fe => 
+            fe.id !== edgeRow.id && // Avoid self-comparison if IDs could overlap by chance
+            fe.source_id === edgeRow.source_id && 
+            fe.target_id === edgeRow.target_id && 
+            fe.type === edgeRow.type 
+            // We could also compare properties for a stricter check, but type is usually enough for logical identity.
+          );
+
+          if (!isRepresented) {
+            const props = await this._getEdgeProperties(edgeRow.id);
+            foundEdges.push({
+              id: edgeRow.id,
+              source_id: edgeRow.source_id,
+              target_id: edgeRow.target_id,
+              type: edgeRow.type,
+              created_at: edgeRow.created_at,
+              properties: props || {},
+            });
+          }
+        }
       }
       
-      return edges;
+      // Final deduplication based on unique edge ID (RelNode ID for structured, actual edge ID for direct)
+      const finalEdges: GraphEdge[] = [];
+      const finalEdgeIds = new Set<string>();
+      for (const edge of foundEdges) {
+        const currentEdgeId = edge.id;
+        if (typeof currentEdgeId === 'string') { 
+          if (!finalEdgeIds.has(currentEdgeId!)) { // Non-null assertion for .has
+            finalEdges.push(edge);
+            finalEdgeIds.add(currentEdgeId!); // Non-null assertion for .add
+          }
+        }
+      }
+      return finalEdges;
+
     } catch (error) {
       if (error instanceof NodeNotFoundError) {
         throw error;
       }
-      throw new DatabaseError(`Failed to get edges between nodes: ${error}`, error as Error);
+      throw new DatabaseError(`Failed to get edges between nodes: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -2126,6 +2319,78 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       console.error(`Failed to find parent independent node for ${nodeId}:`, error);
       // Rethrow or return null based on desired error handling
       throw new DatabaseError(`Failed to find parent independent node: ${error}`, error as Error);
+    }
+  }
+
+  async createStructuredRelationship(
+    sourceNodeId: string,
+    targetNodeId: string,
+    relationshipLabel: string,
+    properties?: Record<string, any>
+  ): Promise<string> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+
+    // This inner function will operate assuming this.db is transactional
+    // if called within the this.db.transaction block.
+    const operation = async () => { 
+      // 1. Validate source and target nodes exist
+      // It's important that this.db (or this.db!) refers to the transactional DB connection here.
+      const sourceExists = await this.db!.query("SELECT 1 FROM nodes WHERE id = ?", [sourceNodeId]);
+      if (!sourceExists?.values || sourceExists.values.length === 0) {
+        throw new NodeNotFoundError(`Source node with id ${sourceNodeId} not found.`);
+      }
+
+      const targetExists = await this.db!.query("SELECT 1 FROM nodes WHERE id = ?", [targetNodeId]);
+      if (!targetExists?.values || targetExists.values.length === 0) {
+        throw new NodeNotFoundError(`Target node with id ${targetNodeId} not found.`);
+      }
+
+      // 2. Create the relationship type node
+      const relationshipNodeId = uuidv4();
+      
+      // These calls to this.addNode and this.addEdge will use their own internal transaction logic.
+      // If this.addNode/this.addEdge are called while this.db is already part of an outer transaction
+      // (started by this.db.transaction below), their behavior regarding nested transactions
+      // depends on the specific SQLiteEngine implementation (e.g., sql.js, capacitor-sqlite).
+      // Ideally, they would join the existing transaction.
+      await this.addNode({
+        id: relationshipNodeId,
+        label: relationshipLabel,
+        type: GraphNodeType.RELATIONSHIP_TYPE,
+        is_independent: true,
+        properties: properties,
+      });
+
+      // 3. Create the first relay edge
+      await this.addEdge({
+        source_id: sourceNodeId,
+        target_id: relationshipNodeId,
+        type: RelayRelationshipType.RELAY,
+      });
+
+      // 4. Create the second relay edge
+      await this.addEdge({
+        source_id: relationshipNodeId,
+        target_id: targetNodeId,
+        type: RelayRelationshipType.RELAY,
+      });
+
+      return relationshipNodeId;
+    };
+
+    // Execute the entire operation within a single transaction if possible.
+    // This relies on the this.db.transaction() method correctly setting up a transactional context
+    // that this.addNode and this.addEdge can participate in, or that their individual transactions
+    // are acceptable within this larger conceptual operation.
+    try {
+      // Assuming this.db.transaction makes this.db transactional for the scope of the callback.
+      return await this.db.transaction(operation); 
+    } catch (error) {
+      console.error("Failed to create structured relationship:", error);
+      if (error instanceof NodeNotFoundError || error instanceof DatabaseError) {
+        throw error;
+      }
+      throw new DatabaseError(`Failed to create structured relationship: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 } 
