@@ -18,11 +18,22 @@ export const CommonRelationshipTypes = {
   MENTIONED_BY: 'mentioned_by',
 };
 
+// Specific relationship types used by the system for structured relationships
+export const RelayRelationshipType = {
+  RELAY: '_relay',
+};
+
 // 关系类型的显示方式
 export enum RelationshipLabelMode {
   NONE = 'none', // 不显示关系标签
   SIMPLE = 'simple', // 简单显示（首字母）
   FULL = 'full', // 完整显示关系名称
+}
+
+// Node types
+export enum GraphNodeType {
+  // TODO: Consider adding a default/general type for other nodes if their 'type' field needs a specific value.
+  RELATIONSHIP_TYPE = '类型节点', // Represents a node that embodies a relationship
 }
 
 // 关系类型相对性定义
@@ -35,6 +46,7 @@ export interface RelationshipTypeConfig {
 export interface GraphNode {
   id: string;
   label: string;
+  type?: string; // Type of the node, e.g., "concept", "event", "类型节点"
   // Additional properties like description, created date, etc. can be added here
   description?: string;
   metadata?: Record<string, any>;

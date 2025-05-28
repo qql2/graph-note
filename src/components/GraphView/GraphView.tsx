@@ -911,9 +911,6 @@ const GraphView: React.FC<GraphViewProps> = memo(({
       // 找到原始节点以获取独立性信息
       const originalNode = graphData.nodes.find(node => node.id === id);
       const is_independent = originalNode?.is_independent;
-      if (label === '适用范围') {
-        debugger
-      }
 
       // 构建节点显示标签，对于非独立节点添加父独立节点前缀
       let displayLabel = label || id;
