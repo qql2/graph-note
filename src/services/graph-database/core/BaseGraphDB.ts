@@ -23,7 +23,6 @@ import {
 // Added imports for new node and relationship types
 import { GraphNodeType, RelayRelationshipType } from '../../../models/GraphNode'; // Corrected path
 
-// TODO: 嵌套事务的处理交给transaction Service
 
 // 新增导入搜索相关类型
 import {
@@ -115,7 +114,6 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     return false;
   }
 
-  // TODO (AI不要自动修改)将来不要再额外包一层了, 直接用db.transaction方法
 
   // 节点操作
   async addNode(node: Omit<GraphNode, "created_at" | "updated_at">,isTransaction:boolean = true): Promise<string> {
