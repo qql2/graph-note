@@ -495,6 +495,33 @@ const GraphViewDemo: React.FC = () => {
     );
   }, []);
 
+  const handleConvertToStructuredRelationship = useCallback(async (edgeId: string, newLabel?: string) => {
+    showConfirmDialog(
+      '确认转换',
+      `确定要将此关系转换为结构化关系吗？原始关系将被删除。${newLabel ? `新关系标签为: ${newLabel}` : '将使用默认标签。'}`,
+      async () => {
+        try {
+          debugger
+          setLoading(true);
+          const db = graphDatabaseService.getDatabase('GraphViewDemo');
+          
+          const newRelNodeId = await db.convertToStructuredRelationship(edgeId, newLabel);
+          
+          setToastMessage(`关系 ${edgeId} 已成功转换为结构化关系 (新ID: ${newRelNodeId})`);
+          setShowToast(true);
+          
+          await loadGraphData();
+        } catch (error) {
+          console.error('转换为结构化关系失败:', error);
+          setToastMessage(`转换失败: ${error instanceof Error ? error.message : String(error)}`);
+          setShowToast(true);
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
+  }, [loadGraphData]);
+
   // 处理创建关系
   const handleCreateRelation = useCallback(async (sourceNodeId: string, relationType: string, targetNodeId?: string, nodeLabel?: string) => {
     try {
@@ -512,7 +539,6 @@ const GraphViewDemo: React.FC = () => {
         const label = nodeLabel && nodeLabel.trim() !== '' 
           ? nodeLabel 
           : `新${relationType}节点`;
-        
         createdNodeId = await db.addNode({
           type: 'knowledge',
           label: label,
@@ -873,6 +899,7 @@ const GraphViewDemo: React.FC = () => {
               onEditEdge={handleEditEdge}
               onDeleteEdge={handleDeleteEdge}
               onCreateRelation={handleCreateRelation}
+              onConvertToStructured={handleConvertToStructuredRelationship}
               newNodeId={newNodeId.current}
             />
           </div>

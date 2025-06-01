@@ -10,7 +10,7 @@ import {
   ExportOptions,
   ImportMode,
   ImportResult,
-  ValidationResult
+  ValidationResult,
 } from "./types";
 import { DATABASE_SCHEMA } from "./schema";
 import {
@@ -310,7 +310,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         nodeToDelete = await this.getNode(id); // Fetch node details including type
       } catch (error) {
         if (error instanceof Error && error.message.includes("not found")) { // getNode throws generic Error
-          throw new NodeNotFoundError(id);
+        throw new NodeNotFoundError(id);
         }
         throw error; // Re-throw other errors
       }
@@ -2392,5 +2392,73 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       }
       throw new DatabaseError(`Failed to create structured relationship: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  public async convertToStructuredRelationship(
+    edgeId: string,
+    relationshipLabel?: string,
+    properties?: Record<string, any>
+  ): Promise<string> {
+    if (!this.db) throw new DatabaseError("Database not initialized");
+
+    return await this.db.transaction(async () => {
+      // 1. Get the existing edge
+      let edgeToConvert: GraphEdge;
+      try {
+        edgeToConvert = await this.getEdge(edgeId);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("not found")) {
+          throw new EdgeNotFoundError(edgeId);
+        }
+        throw new DatabaseError(`Failed to retrieve edge ${edgeId} for conversion: ${error}`);
+      }
+
+      // 2. Validate it's not a _relay edge
+      if (edgeToConvert.type === RelayRelationshipType.RELAY) {
+        // Use the globally available ValidationError
+        throw new ValidationError(`Edge ${edgeId} is already a _relay edge and cannot be converted.`);
+      }
+      
+      // Ensure source_id and target_id exist
+      if (!edgeToConvert.source_id || !edgeToConvert.target_id) {
+        // Use the globally available ValidationError
+        throw new ValidationError(`Edge ${edgeId} is missing source_id or target_id and cannot be converted.`);
+      }
+
+      // 3. Determine label and properties for the new RELATIONSHIP_TYPE node
+      const newRelNodeLabel = relationshipLabel || edgeToConvert.type || 'converted_relationship'; // Use provided, original type, or default
+      const newRelNodeProperties = properties || edgeToConvert.properties || {}; // Use provided, original properties, or empty
+
+      // 4. Create the RELATIONSHIP_TYPE node
+      // Note: Using internal this.addNode which might start its own sub-transaction.
+      // For true atomicity, direct DB operations might be preferred if sub-transactions are an issue.
+      // However, addNode handles ID generation and property insertion correctly.
+      const relationshipNodeId = await this.addNode({
+        // id: uuidv4(), // addNode will generate an ID if not provided
+        label: newRelNodeLabel,
+        type: GraphNodeType.RELATIONSHIP_TYPE,
+        is_independent: true, // RELATIONSHIP_TYPE nodes are typically independent entities
+        properties: newRelNodeProperties,
+      });
+
+      // 5. Create the first relay edge (source -> RELATIONSHIP_TYPE_NODE)
+      await this.addEdge({
+        source_id: edgeToConvert.source_id,
+        target_id: relationshipNodeId,
+        type: RelayRelationshipType.RELAY,
+      });
+
+      // 6. Create the second relay edge (RELATIONSHIP_TYPE_NODE -> target)
+      await this.addEdge({
+        source_id: relationshipNodeId,
+        target_id: edgeToConvert.target_id,
+        type: RelayRelationshipType.RELAY,
+      });
+
+      // 7. Delete the original edge and its properties
+      await this.deleteEdge(edgeId); // deleteEdge handles properties and the edge itself in a transaction
+
+      return relationshipNodeId;
+    });
   }
 } 

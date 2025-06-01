@@ -120,4 +120,19 @@ export interface GraphDatabaseInterface {
 
   // New method for finding parent independent node
   findParentIndependentNode(nodeId: string): Promise<GraphNode | null>;
+
+  // Method to create a structured relationship
+  createStructuredRelationship(
+    sourceNodeId: string,
+    targetNodeId: string,
+    relationshipLabel: string,
+    properties?: Record<string, any>
+  ): Promise<string>;
+
+  // Method to convert an existing edge to a structured relationship
+  convertToStructuredRelationship(
+    edgeId: string,
+    relationshipLabel?: string,
+    properties?: Record<string, any>
+  ): Promise<string>;
 } 

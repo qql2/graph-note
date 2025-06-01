@@ -4,7 +4,7 @@ import App from './App';
 
 import { Capacitor } from '@capacitor/core';
 import { JeepSqlite } from 'jeep-sqlite/dist/components/jeep-sqlite';
-import { defineCustomElements as pwaElements} from '@ionic/pwa-elements/loader';
+import { defineCustomElements as pwaElements } from '@ionic/pwa-elements/loader';
 
 pwaElements(window);
 customElements.define('jeep-sqlite', JeepSqlite);

@@ -25,6 +25,7 @@ interface GraphViewProps {
   onEditEdge?: (edgeId: string, label: string, isSimpleLabel?: boolean) => void;
   onDeleteEdge?: (edgeId: string) => void;
   onCreateRelation?: (sourceNodeId: string, relationType: string, targetNodeId?: string, nodeLabel?: string) => void;
+  onConvertToStructured?: (edgeId: string, newLabel?: string) => void; // 保留此回调
   newNodeId?: string;
 }
 
@@ -214,6 +215,7 @@ const GraphView: React.FC<GraphViewProps> = memo(({
   onEditEdge,
   onDeleteEdge,
   onCreateRelation,
+  onConvertToStructured, 
   newNodeId = ''  // 默认为空字符串
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -485,6 +487,23 @@ const GraphView: React.FC<GraphViewProps> = memo(({
             isNewRelation: false,
             sourceNodeId: edgeData.source
           });
+        }
+      });
+    }
+
+    // 添加 "转换为结构化关系" 菜单项 (仅在调试模式下)
+    if (viewConfig.developerMode && onConvertToStructured) { 
+      menuItems.push({
+        id: 'convert-to-structured',
+        label: '转换为结构化关系 (Dev)',
+        icon: copy, // 使用 copy 图标，也可以选其他如 add
+        onClick: () => {
+          if (onConvertToStructured) {
+            // 触发转换，暂时不从UI获取 newLabel，让后端使用默认逻辑
+            onConvertToStructured(edgeId);
+            // 关闭菜单
+            closeContextMenu();
+          }
         }
       });
     }
