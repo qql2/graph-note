@@ -501,7 +501,6 @@ const GraphViewDemo: React.FC = () => {
       `确定要将此关系转换为结构化关系吗？原始关系将被删除。${newLabel ? `新关系标签为: ${newLabel}` : '将使用默认标签。'}`,
       async () => {
         try {
-          debugger
           setLoading(true);
           const db = graphDatabaseService.getDatabase('GraphViewDemo');
           

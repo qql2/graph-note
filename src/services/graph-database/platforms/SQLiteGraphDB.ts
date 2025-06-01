@@ -171,6 +171,7 @@ export class SQLiteGraphDB extends BaseGraphDB {
   // 优化的事务执行方法，使用队列确保事务按顺序执行
   // 注意：不要在事务操作中调用persistData()，因为它已经在这个方法的成功路径上自动调用了
   // 在事务中调用persistData()会导致"Transaction has been ended unexpectedly"错误
+  // TODO: (优化) (AI不要自动执行) 不需要嵌套事务的判断逻辑, 直接报错就行
   async transaction<T>(operation: () => T | Promise<T>): Promise<T> {
     return (this.transactionQueue = this.transactionQueue.catch((error: any) => {
       return null;

@@ -109,6 +109,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   }
 
   // 判断是否在事务中 - 这个方法也由具体平台实现
+  // TODO: (优化) (AI不要自动执行) 不需要这个变量
   protected get inTransaction(): boolean {
     // 这个需要在具体实现中提供，默认返回false
     return false;
@@ -117,7 +118,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   // TODO (AI不要自动修改)将来不要再额外包一层了, 直接用db.transaction方法
 
   // 节点操作
-  async addNode(node: Omit<GraphNode, "created_at" | "updated_at">): Promise<string> {
+  async addNode(node: Omit<GraphNode, "created_at" | "updated_at">,isTransaction:boolean = true): Promise<string> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     
     const id = node.id || uuidv4();
@@ -169,18 +170,22 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     // 使用事务执行操作
     try {
-      return await this.db.transaction(async () => {
-        try {
-          return await addNodeOperation(this.db!);
+      if (isTransaction) {
+        return await this.db.transaction(async () => {
+          try {
+            return await addNodeOperation(this.db!);
         } catch (error) {
           throw new DatabaseError(`Failed to add node: ${error}`, error as Error);
         }
       });
+    } else {
+      return await addNodeOperation(this.db!);
+    }
     } catch (error) {
       throw error;
     }
   }
-  async updateNode(id: string, updates: Partial<GraphNode>): Promise<void> {
+  async updateNode(id: string, updates: Partial<GraphNode>,isTransaction:boolean = true): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
     // 创建更新操作的函数
@@ -271,8 +276,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     };
 
     try {
-      // 如果已经在事务中，直接执行操作
-      if (this.inTransaction) {
+      if (!isTransaction) {
         try {
           await updateOperation(this.db);
         } catch (error) {
@@ -301,7 +305,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     }
   }
 
-  async deleteNode(id: string, mode: DeleteMode = DeleteMode.KEEP_CONNECTED): Promise<void> {
+  async deleteNode(id: string, mode: DeleteMode = DeleteMode.KEEP_CONNECTED,isTransaction=true): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
     const deleteOperation = async (db: SQLiteEngine) => {
@@ -416,10 +420,14 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     };
 
     try {
-      await this.db.transaction(async () => {
-        // Pass this.db! which is the transactional db instance
-        await deleteOperation(this.db!); 
-      });
+      if (isTransaction) {
+        await this.db.transaction(async () => {
+          // Pass this.db! which is the transactional db instance
+          await deleteOperation(this.db!); 
+        });
+      } else {
+        await deleteOperation(this.db!);
+      }
     } catch (error) {
       if (error instanceof NodeNotFoundError) {
         throw error;
@@ -583,13 +591,12 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   }
 
   // 边操作
-  async addEdge(edge: Omit<GraphEdge, "created_at">): Promise<string> {
+  async addEdge(edge: Omit<GraphEdge, "created_at">,isTransaction=true): Promise<string> {
     if (!this.db) throw new DatabaseError("Database not initialized");
     
     const id = edge.id || uuidv4();
     const now = new Date().toISOString();
     
-    ;
 
     // 创建添加边的操作
     const addEdgeOperation = async (db: SQLiteEngine): Promise<string> => {
@@ -642,9 +649,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     };
 
     try {
-      // 如果已经在事务中，直接执行操作
-      if (this.inTransaction) {
-        ;
+        // 直接执行操作
+        if (!isTransaction) {
         try {
           return await addEdgeOperation(this.db);
         } catch (error) {
@@ -657,12 +663,10 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       }
 
       // 否则，使用事务执行操作
-      ;
       return await this.db.transaction(async () => {
         try {
           const result = await addEdgeOperation(this.db!);
           // 不需要调用persistData，因为withTransaction会自动处理
-          ;
           return result;
         } catch (error) {
           console.error("Error in addEdge transaction:", error);
@@ -678,7 +682,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     }
   }
 
-  async updateEdge(id: string, updates: Partial<GraphEdge>): Promise<void> {
+  async updateEdge(id: string, updates: Partial<GraphEdge>,isTransaction=true): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
     // 创建更新边的操作
@@ -767,8 +771,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     };
 
     try {
-      // 如果已经在事务中，直接执行操作
-      if (this.inTransaction) {
+      // 直接执行操作
+      if (!isTransaction) {
         try {
           await updateEdgeOperation(this.db);
         } catch (error) {
@@ -797,7 +801,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     }
   }
 
-  async deleteEdge(id: string): Promise<void> {
+  async deleteEdge(id: string,isTransaction=true): Promise<void> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
     // 创建删除边的操作
@@ -828,16 +832,20 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
 
     try {
       // 使用事务执行删除操作
-      await this.db.transaction(async () => {
-        try {
-          await deleteEdgeOperation(this.db!);
-        } catch (error) {
-          if (error instanceof EdgeNotFoundError) {
-            throw error;
+      if (isTransaction) {
+        await this.db.transaction(async () => {
+          try {
+            await deleteEdgeOperation(this.db!);
+          } catch (error) {
+            if (error instanceof EdgeNotFoundError) {
+              throw error;
+            }
+            throw new DatabaseError(`Failed to delete edge: ${error}`, error as Error);
           }
-          throw new DatabaseError(`Failed to delete edge: ${error}`, error as Error);
-        }
-      });
+        });
+      } else {
+        await deleteEdgeOperation(this.db!);
+      }
     } catch (error) {
       throw error;
     }
@@ -1468,184 +1476,186 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   }
 
   // 搜索节点
-  async searchNodes(criteria: NodeSearchCriteria): Promise<{ nodes: GraphNode[]; totalCount: number }> {
-    if (!this.db) throw new DatabaseError("Database not initialized");
-
-    try {
-      return await this.db.transaction(async () => {
+  async searchNodes(criteria: NodeSearchCriteria,isTransaction=true): Promise<{ nodes: GraphNode[]; totalCount: number }> {
+    const searchNodesOperation = async () => {
         // 构建基本查询
         let query = `
-          SELECT n.id, n.type, n.label, n.is_independent, n.created_at, n.updated_at -- Select is_independent
-          FROM nodes n
-          WHERE 1=1
-        `;
-        let countQuery = `SELECT COUNT(*) as count FROM nodes n WHERE 1=1`;
-        
-        const params: any[] = [];
-        const conditions: string[] = [];
-        
-        // 添加ID过滤
-        if (criteria.ids && criteria.ids.length > 0) {
-          conditions.push(`n.id IN (${criteria.ids.map(() => '?').join(', ')})`);
-          params.push(...criteria.ids);
-        }
-        
-        // 添加类型过滤
-        if (criteria.types && criteria.types.length > 0) {
-          conditions.push(`n.type IN (${criteria.types.map(() => '?').join(', ')})`);
-          params.push(...criteria.types);
-        }
-        
-        // 添加标签过滤
-        if (criteria.labels && criteria.labels.length > 0) {
-          conditions.push(`n.label IN (${criteria.labels.map(() => '?').join(', ')})`);
-          params.push(...criteria.labels);
-        }
-        
-        // 添加标签包含过滤
-        if (criteria.labelContains) {
-          conditions.push(`n.label LIKE ?`);
-          params.push(`%${criteria.labelContains}%`);
-        }
-        
-        // 添加时间范围过滤
-        if (criteria.createdAfter) {
-          conditions.push(`n.created_at >= ?`);
-          params.push(criteria.createdAfter.toISOString());
-        }
-        
-        if (criteria.createdBefore) {
-          conditions.push(`n.created_at <= ?`);
-          params.push(criteria.createdBefore.toISOString());
-        }
-        
-        if (criteria.updatedAfter) {
-          conditions.push(`n.updated_at >= ?`);
-          params.push(criteria.updatedAfter.toISOString());
-        }
-        
-        if (criteria.updatedBefore) {
-          conditions.push(`n.updated_at <= ?`);
-          params.push(criteria.updatedBefore.toISOString());
-        }
-        
-        // 添加属性过滤
-        if (criteria.properties && criteria.properties.length > 0) {
-          for (let i = 0; i < criteria.properties.length; i++) {
-            const prop = criteria.properties[i];
-            const propAlias = `p${i}`;
-            
-            // 根据操作符构建不同的条件
-            let propCondition: string;
-            switch (prop.operator) {
-              case FilterOperator.EXISTS:
-                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ?)`;
-                params.push(prop.key);
-                break;
-              case FilterOperator.NOT_EXISTS:
-                propCondition = `NOT EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ?)`;
-                params.push(prop.key);
-                break;
-              case FilterOperator.EQUALS:
-                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value = ?)`;
-                params.push(prop.key, JSON.stringify(prop.value));
-                break;
-              case FilterOperator.NOT_EQUALS:
-                propCondition = `NOT EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value = ?)`;
-                params.push(prop.key, JSON.stringify(prop.value));
-                break;
-              case FilterOperator.CONTAINS:
-                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
-                params.push(prop.key, `%${JSON.stringify(prop.value).slice(1, -1)}%`);
-                break;
-              case FilterOperator.STARTS_WITH:
-                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
-                params.push(prop.key, `${JSON.stringify(prop.value).slice(1, -1)}%`);
-                break;
-              case FilterOperator.ENDS_WITH:
-                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
-                params.push(prop.key, `%${JSON.stringify(prop.value).slice(1, -1)}`);
-                break;
-              // 其他数值比较操作符
-              case FilterOperator.GREATER_THAN:
-              case FilterOperator.GREATER_THAN_OR_EQUAL:
-              case FilterOperator.LESS_THAN:
-              case FilterOperator.LESS_THAN_OR_EQUAL:
-                const opMap: Record<string, string> = {
-                  [FilterOperator.GREATER_THAN]: '>',
-                  [FilterOperator.GREATER_THAN_OR_EQUAL]: '>=',
-                  [FilterOperator.LESS_THAN]: '<',
-                  [FilterOperator.LESS_THAN_OR_EQUAL]: '<='
-                };
-                propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND CAST(JSON_EXTRACT(${propAlias}.value, '$') AS NUMERIC) ${opMap[prop.operator]} ?)`;
-                params.push(prop.key, prop.value);
-                break;
-              default:
-                // 跳过不支持的操作符
-                continue;
-            }
-            conditions.push(propCondition);
-          }
-        }
-        
-        // 添加所有条件到查询
-        if (conditions.length > 0) {
-          const whereClause = conditions.join(' AND ');
-          query += ` AND ${whereClause}`;
-          countQuery += ` AND ${whereClause}`;
-        }
-        
-        // 添加排序
-        if (criteria.sortBy) {
-          query += ` ORDER BY n.${criteria.sortBy.field} ${criteria.sortBy.direction}`;
-        } else {
-          // 默认按创建时间排序
-          query += ` ORDER BY n.created_at DESC`;
-        }
-        
-        // 添加分页
-        if (criteria.limit) {
-          query += ` LIMIT ?`;
-          params.push(criteria.limit);
+        SELECT n.id, n.type, n.label, n.is_independent, n.created_at, n.updated_at -- Select is_independent
+        FROM nodes n
+        WHERE 1=1
+      `;
+      let countQuery = `SELECT COUNT(*) as count FROM nodes n WHERE 1=1`;
+      
+      const params: any[] = [];
+      const conditions: string[] = [];
+      
+      // 添加ID过滤
+      if (criteria.ids && criteria.ids.length > 0) {
+        conditions.push(`n.id IN (${criteria.ids.map(() => '?').join(', ')})`);
+        params.push(...criteria.ids);
+      }
+      
+      // 添加类型过滤
+      if (criteria.types && criteria.types.length > 0) {
+        conditions.push(`n.type IN (${criteria.types.map(() => '?').join(', ')})`);
+        params.push(...criteria.types);
+      }
+      
+      // 添加标签过滤
+      if (criteria.labels && criteria.labels.length > 0) {
+        conditions.push(`n.label IN (${criteria.labels.map(() => '?').join(', ')})`);
+        params.push(...criteria.labels);
+      }
+      
+      // 添加标签包含过滤
+      if (criteria.labelContains) {
+        conditions.push(`n.label LIKE ?`);
+        params.push(`%${criteria.labelContains}%`);
+      }
+      
+      // 添加时间范围过滤
+      if (criteria.createdAfter) {
+        conditions.push(`n.created_at >= ?`);
+        params.push(criteria.createdAfter.toISOString());
+      }
+      
+      if (criteria.createdBefore) {
+        conditions.push(`n.created_at <= ?`);
+        params.push(criteria.createdBefore.toISOString());
+      }
+      
+      if (criteria.updatedAfter) {
+        conditions.push(`n.updated_at >= ?`);
+        params.push(criteria.updatedAfter.toISOString());
+      }
+      
+      if (criteria.updatedBefore) {
+        conditions.push(`n.updated_at <= ?`);
+        params.push(criteria.updatedBefore.toISOString());
+      }
+      
+      // 添加属性过滤
+      if (criteria.properties && criteria.properties.length > 0) {
+        for (let i = 0; i < criteria.properties.length; i++) {
+          const prop = criteria.properties[i];
+          const propAlias = `p${i}`;
           
-          if (criteria.offset) {
-            query += ` OFFSET ?`;
-            params.push(criteria.offset);
+          // 根据操作符构建不同的条件
+          let propCondition: string;
+          switch (prop.operator) {
+            case FilterOperator.EXISTS:
+              propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ?)`;
+              params.push(prop.key);
+              break;
+            case FilterOperator.NOT_EXISTS:
+              propCondition = `NOT EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ?)`;
+              params.push(prop.key);
+              break;
+            case FilterOperator.EQUALS:
+              propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value = ?)`;
+              params.push(prop.key, JSON.stringify(prop.value));
+              break;
+            case FilterOperator.NOT_EQUALS:
+              propCondition = `NOT EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value = ?)`;
+              params.push(prop.key, JSON.stringify(prop.value));
+              break;
+            case FilterOperator.CONTAINS:
+              propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
+              params.push(prop.key, `%${JSON.stringify(prop.value).slice(1, -1)}%`);
+              break;
+            case FilterOperator.STARTS_WITH:
+              propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
+              params.push(prop.key, `${JSON.stringify(prop.value).slice(1, -1)}%`);
+              break;
+            case FilterOperator.ENDS_WITH:
+              propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND ${propAlias}.value LIKE ?)`;
+              params.push(prop.key, `%${JSON.stringify(prop.value).slice(1, -1)}`);
+              break;
+            // 其他数值比较操作符
+            case FilterOperator.GREATER_THAN:
+            case FilterOperator.GREATER_THAN_OR_EQUAL:
+            case FilterOperator.LESS_THAN:
+            case FilterOperator.LESS_THAN_OR_EQUAL:
+              const opMap: Record<string, string> = {
+                [FilterOperator.GREATER_THAN]: '>',
+                [FilterOperator.GREATER_THAN_OR_EQUAL]: '>=',
+                [FilterOperator.LESS_THAN]: '<',
+                [FilterOperator.LESS_THAN_OR_EQUAL]: '<='
+              };
+              propCondition = `EXISTS (SELECT 1 FROM node_properties ${propAlias} WHERE ${propAlias}.node_id = n.id AND ${propAlias}.key = ? AND CAST(JSON_EXTRACT(${propAlias}.value, '$') AS NUMERIC) ${opMap[prop.operator]} ?)`;
+              params.push(prop.key, prop.value);
+              break;
+            default:
+              // 跳过不支持的操作符
+              continue;
           }
+          conditions.push(propCondition);
         }
+      }
+      
+      // 添加所有条件到查询
+      if (conditions.length > 0) {
+        const whereClause = conditions.join(' AND ');
+        query += ` AND ${whereClause}`;
+        countQuery += ` AND ${whereClause}`;
+      }
+      
+      // 添加排序
+      if (criteria.sortBy) {
+        query += ` ORDER BY n.${criteria.sortBy.field} ${criteria.sortBy.direction}`;
+      } else {
+        // 默认按创建时间排序
+        query += ` ORDER BY n.created_at DESC`;
+      }
+      
+      // 添加分页
+      if (criteria.limit) {
+        query += ` LIMIT ?`;
+        params.push(criteria.limit);
         
-        // 执行查询
-        const result = await this.db!.query(query, params);
-        const nodes = result.values || [];
-        
-        // 查询总数
-        const countResult = await this.db!.query(countQuery, params.slice(0, params.length - (criteria.limit ? (criteria.offset ? 2 : 1) : 0)));
-        const totalCount = countResult.values?.[0]?.count || 0;
-        
-        // 获取节点属性
-        const nodeObjects: GraphNode[] = [];
-        for (const node of nodes) {
-          const properties = await this._getNodeProperties(node.id);
-          nodeObjects.push({
-            ...node,
-            is_independent: node.is_independent === 1,
-            properties
-          });
+        if (criteria.offset) {
+          query += ` OFFSET ?`;
+          params.push(criteria.offset);
         }
-        
-        return { nodes: nodeObjects, totalCount };
-      });
+      }
+      
+      // 执行查询
+      const result = await this.db!.query(query, params);
+      const nodes = result.values || [];
+      
+      // 查询总数
+      const countResult = await this.db!.query(countQuery, params.slice(0, params.length - (criteria.limit ? (criteria.offset ? 2 : 1) : 0)));
+      const totalCount = countResult.values?.[0]?.count || 0;
+      
+      // 获取节点属性
+      const nodeObjects: GraphNode[] = [];
+      for (const node of nodes) {
+        const properties = await this._getNodeProperties(node.id);
+        nodeObjects.push({
+          ...node,
+          is_independent: node.is_independent === 1,
+          properties
+        });
+      }
+      
+      return { nodes: nodeObjects, totalCount };
+      
+    }
+    try {
+      if (isTransaction) {
+        return await this.db!.transaction(searchNodesOperation);
+      } else {
+        return await searchNodesOperation();
+      }
     } catch (error) {
       throw new DatabaseError(`Failed to search nodes: ${error}`, error as Error);
     }
   }
 
   // 搜索关系
-  async searchEdges(criteria: EdgeSearchCriteria): Promise<{ edges: GraphEdge[]; totalCount: number }> {
+  async searchEdges(criteria: EdgeSearchCriteria,isTransaction=true): Promise<{ edges: GraphEdge[]; totalCount: number }> {
     if (!this.db) throw new DatabaseError("Database not initialized");
-    
-    try {
-      return await this.db.transaction(async () => {
+    const searchEdgesOperation = async () => {
         // 构建基本查询
         let query = `
           SELECT e.id, e.source_id, e.target_id, e.type, e.created_at
@@ -1851,14 +1861,20 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         }
         
         return { edges: edgeObjects, totalCount };
-      });
+      }
+    try {
+      if (isTransaction) {
+        return await this.db!.transaction(searchEdgesOperation);
+      } else {
+        return await searchEdgesOperation();
+      }
     } catch (error) {
       throw new DatabaseError(`Failed to search edges: ${error}`, error as Error);
     }
   }
 
   // 全文搜索
-  async fullTextSearch(query: string, options?: FullTextSearchOptions): Promise<{ 
+  async fullTextSearch(query: string, options?: FullTextSearchOptions,isTransaction=true): Promise<{ 
     nodes: GraphNode[];
     edges: GraphEdge[];
     totalNodeCount: number;
@@ -1874,9 +1890,7 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
       offset: 0,
       ...options
     };
-    
-    try {
-      return await this.db.transaction(async () => {
+    const fullTextSearchOperation = async () => {
         const searchPattern = opts.caseSensitive ? query : query.toLowerCase();
         const likePattern = `%${searchPattern}%`;
         
@@ -1963,7 +1977,13 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
           totalNodeCount,
           totalEdgeCount
         };
-      });
+      }
+    try {
+      if (isTransaction) {
+        return await this.db!.transaction(fullTextSearchOperation);
+      } else {
+        return await fullTextSearchOperation();
+      }
     } catch (error) {
       throw new DatabaseError(`Failed to perform full text search: ${error}`, error as Error);
     }
@@ -2326,7 +2346,8 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     sourceNodeId: string,
     targetNodeId: string,
     relationshipLabel: string,
-    properties?: Record<string, any>
+    properties?: Record<string, any>,
+    isTransaction=true
   ): Promise<string> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
@@ -2384,7 +2405,11 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
     // are acceptable within this larger conceptual operation.
     try {
       // Assuming this.db.transaction makes this.db transactional for the scope of the callback.
-      return await this.db.transaction(operation); 
+      if (isTransaction) {
+        return await this.db!.transaction(operation); 
+      } else {
+        return await operation();
+      }
     } catch (error) {
       console.error("Failed to create structured relationship:", error);
       if (error instanceof NodeNotFoundError || error instanceof DatabaseError) {
@@ -2397,11 +2422,12 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
   public async convertToStructuredRelationship(
     edgeId: string,
     relationshipLabel?: string,
-    properties?: Record<string, any>
+    properties?: Record<string, any>,
+    isTransaction=true
   ): Promise<string> {
     if (!this.db) throw new DatabaseError("Database not initialized");
 
-    return await this.db.transaction(async () => {
+    const operation = async () => {
       // 1. Get the existing edge
       let edgeToConvert: GraphEdge;
       try {
@@ -2439,26 +2465,31 @@ export abstract class BaseGraphDB implements GraphDatabaseInterface {
         type: GraphNodeType.RELATIONSHIP_TYPE,
         is_independent: true, // RELATIONSHIP_TYPE nodes are typically independent entities
         properties: newRelNodeProperties,
-      });
+      },false);
 
       // 5. Create the first relay edge (source -> RELATIONSHIP_TYPE_NODE)
       await this.addEdge({
         source_id: edgeToConvert.source_id,
         target_id: relationshipNodeId,
         type: RelayRelationshipType.RELAY,
-      });
+      },false);
 
       // 6. Create the second relay edge (RELATIONSHIP_TYPE_NODE -> target)
       await this.addEdge({
         source_id: relationshipNodeId,
         target_id: edgeToConvert.target_id,
         type: RelayRelationshipType.RELAY,
-      });
+      },false);
 
       // 7. Delete the original edge and its properties
-      await this.deleteEdge(edgeId); // deleteEdge handles properties and the edge itself in a transaction
+      await this.deleteEdge(edgeId,false); // deleteEdge handles properties and the edge itself in a transaction
 
       return relationshipNodeId;
-    });
+    }
+    if (isTransaction) {
+      return await this.db!.transaction(operation);
+    } else {
+      return await operation();
+    }
   }
 } 
