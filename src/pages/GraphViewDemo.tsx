@@ -339,33 +339,8 @@ const GraphViewDemo: React.FC = () => {
       if (newLabel.startsWith('MERGE:')) {
         const targetNodeId = newLabel.substring(6); // 提取目标节点ID
         
-        // 获取源节点的所有相关边
-        const relatedEdges = await db.getEdgesForNode(nodeId);
-        
-        // 先创建指向目标节点的新关系
-        for (const edge of relatedEdges) {
-          // 针对每个边创建一个新的连接到目标节点的边
-          // 如果源节点是当前节点，则修改源节点为目标节点
-          // 如果目标节点是当前节点，则修改目标节点为合并目标节点
-          const newEdge = {
-            source_id: edge.source_id === nodeId ? targetNodeId : edge.source_id,
-            target_id: edge.target_id === nodeId ? targetNodeId : edge.target_id,
-            type: edge.type,
-            properties: edge.properties || {}
-          };
-          
-          // 跳过自环（源和目标相同的边）
-          if (newEdge.source_id === newEdge.target_id) continue;
-          
-          // 检查是否已存在相同的边
-          const existingEdges = await db.getEdgesBetweenNodes(newEdge.source_id, newEdge.target_id);
-          const hasExistingEdge = existingEdges.some(e => e.type === newEdge.type);
-          
-          // 如果没有现有边，创建一个新边
-          if (!hasExistingEdge) {
-            await db.addEdge(newEdge);
-          }
-        }
+        // 使用新的 moveRelationships API 来正确处理结构化关系和普通关系
+        await db.moveRelationships(nodeId, targetNodeId);
         
         // 删除源节点
         await db.deleteNode(nodeId);

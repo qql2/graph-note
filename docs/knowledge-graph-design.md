@@ -4,15 +4,6 @@
     - 表示关系间的联系
   - 使用
 # 对原生知识图谱的拆解
-<!-- TODO (AI请勿擅自实现或修改,等我命令AI执行) 
-目前在执行阶段, 具体可看cursor对话记录
-ai已经实现了基本方法, 并且修改了已有方法(对普通节点的增删改查测试没有问题)
-但用户界面并没有实现
-需要测试:
-- [ ] deleteEdge
-- [ ] getEdgesForNode
-- [ ] getEdgesBetweenNodes
-- [ ] createStructuredRelationship
 -->
 - 关系可以被拆成节点, 这种称为结构化关系
   - 示例:  节点A --_relay--> 关系类型 --_relay--> 节点B

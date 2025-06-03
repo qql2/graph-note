@@ -95,6 +95,9 @@ const AppMenu: FC<AppMenuProps> = ({
               <IonItem onClick={closeMenu}>
                 <IonButton size="default" routerLink="/graph-demo" expand="full">Graph Database Demo</IonButton>
               </IonItem>
+              <IonItem onClick={closeMenu}>
+                <IonButton size="default" routerLink="/database-management" expand="full">Database Management</IonButton>
+              </IonItem>
             </>
           )}
           

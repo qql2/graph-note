@@ -1578,42 +1578,6 @@ const GraphView: React.FC<GraphViewProps> = memo(({
     };
   }, []);
 
-  // Memoize event handlers
-  const handleNodeClick = useCallback((nodeId: string) => {
-    if (onNodeClick) {
-      onNodeClick(nodeId);
-    }
-  }, [onNodeClick]);
-
-  const handleEditNode = useCallback((nodeId: string, label: string) => {
-    if (onEditNode) {
-      onEditNode(nodeId, label);
-    }
-  }, [onEditNode]);
-
-  const handleDeleteNode = useCallback((nodeId: string) => {
-    if (onDeleteNode) {
-      onDeleteNode(nodeId);
-    }
-  }, [onDeleteNode]);
-
-  const handleEditEdge = useCallback((edgeId: string, label: string, isSimpleLabel?: boolean) => {
-    if (onEditEdge) {
-      onEditEdge(edgeId, label, isSimpleLabel);
-    }
-  }, [onEditEdge]);
-
-  const handleDeleteEdge = useCallback((edgeId: string) => {
-    if (onDeleteEdge) {
-      onDeleteEdge(edgeId);
-    }
-  }, [onDeleteEdge]);
-
-  const handleCreateRelation = useCallback((sourceNodeId: string, relationType: string, targetNodeId?: string, nodeLabel?: string) => {
-    if (onCreateRelation) {
-      onCreateRelation(sourceNodeId, relationType, targetNodeId, nodeLabel);
-    }
-  }, [onCreateRelation]);
 
   return (
     <div className="graph-view-container">

@@ -15,6 +15,7 @@ import UsersPage from './pages/UsersPage/UsersPage';
 import GraphDBDemo from './pages/GraphDBDemo';
 import GraphViewDemo from './pages/GraphViewDemo';
 import SearchPage from './pages/SearchPage';
+import DatabaseManagement from './pages/DatabaseManagement';
 import AppMenu from './components/AppMenu/AppMenu';
 import { SearchModal } from './components/search';
 import { GraphNode, GraphEdge } from './models/GraphNode';
@@ -255,6 +256,7 @@ const App: React.FC = () => {
                   </Route>
                   <DeveloperRouteGuard path="/users" component={UsersPage} />
                   <DeveloperRouteGuard path="/graph-demo" component={GraphDBDemo} />
+                  <DeveloperRouteGuard path="/database-management" component={DatabaseManagement} />
                   <Route path="/graph-view-demo" component={GraphViewDemo} />
                   <Route path="/search" component={SearchPage} />
                 </IonRouterOutlet>
